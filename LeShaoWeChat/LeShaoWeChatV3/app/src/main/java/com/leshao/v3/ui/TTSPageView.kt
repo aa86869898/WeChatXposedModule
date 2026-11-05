@@ -77,6 +77,7 @@ class TTSPageView private constructor() {
 
     companion object {
         private var sTtsCubeDialog: Dialog? = null
+        private var sPreviewPlayer: android.media.MediaPlayer? = null
 
         private const val KEY_ANNOUNCE_TEXT = "ls_announce_text"
         private const val KEY_ANNOUNCE_IMAGE = "ls_announce_image"
@@ -105,7 +106,114 @@ class TTSPageView private constructor() {
         private const val KEY_TTS_COMMAND = "ls_tts_command"
 
         private const val PMF_BASE = "https://peiyinmofang.com"
+        private const val KEY_CUBE_VOICES_CACHE = "tts_cube_voices_cache"
+        private const val KEY_CUBE_VOICES_CACHE_TIME = "tts_cube_voices_cache_time"
+        private const val GATEWAY_DEFAULT_BASE = "http://127.0.0.1:8787/v1"
         private const val MAX_VOICE_ROWS = 300
+        /** 傻包音色库（免登录 ICL/内部音色 ID，100 个）：名字 → voiceId。 */
+        private val VOICE_LIBRARY: List<VoiceItem> = listOf(
+            VoiceItem("zh_female_wenroutaozi_uranus_bigtts", "傻包音色", "温柔桃子（升级版）", ""),
+            VoiceItem("zh_male_cixingjunyu_uranus_bigtts", "傻包音色", "磁性俊宇（升级版）", ""),
+            VoiceItem("zh_female_yangguangtianmei_uranus_bigtts", "傻包音色", "阳光甜妹（升级版）", ""),
+            VoiceItem("zh_female_wenroutaozi_v2_mars_bigtts", "傻包音色", "温柔桃子（经典版）", ""),
+            VoiceItem("zh_female_wenroutaozi_mars_bigtts", "傻包音色", "知性小棠", ""),
+            VoiceItem("zh_female_f261_conversation_wvae_bigtts", "傻包音色", "邻家女孩", ""),
+            VoiceItem("zh_female_sophie_conversation_wvae_bigtts", "傻包音色", "魅力苏菲", ""),
+            VoiceItem("zh_female_yuanqinvyou_wvae_bigtts", "傻包音色", "撒娇学妹", ""),
+            VoiceItem("zh_male_linjiananhai_moon_bigtts", "傻包音色", "邻家男孩", ""),
+            VoiceItem("zh_male_M100_conversation_wvae_bigtts", "傻包音色", "悠悠君子", ""),
+            VoiceItem("zh_male_ahu_conversation_wvae_bigtts", "傻包音色", "温暖阿虎", ""),
+            VoiceItem("zh_male_m286_conversation_wvae_bigtts", "傻包音色", "少年梓辛", ""),
+            VoiceItem("zh_male_qingyiyuxuan_mars_bigtts", "傻包音色", "阳光阿辰", ""),
+            VoiceItem("ICL_c021bc19bf92", "傻包音色", "腹黑霸总", ""),
+            VoiceItem("ICL_e0b9b93ee322", "傻包音色", "冷酷霸总", ""),
+            VoiceItem("zh_male_aojiaobazong_wvae_bigtts", "傻包音色", "傲娇霸总", ""),
+            VoiceItem("ICL_d4d40acd33dd", "傻包音色", "霸道总裁", ""),
+            VoiceItem("zh_male_cheng_mars_bigtts", "傻包音色", "温柔子言", ""),
+            VoiceItem("zh_male_litiebanzi_mars_bigtts", "傻包音色", "率性阿哲", ""),
+            VoiceItem("ICL_df4fc4d1ce4b", "傻包音色", "温柔陆辰", ""),
+            VoiceItem("zh_male_shenyeboke_wvae_bigtts", "傻包音色", "深夜播客", ""),
+            VoiceItem("ICL_6acf86286e24", "傻包音色", "甜美小雪", ""),
+            VoiceItem("ICL_16cd9a58768e", "傻包音色", "清冷阿梦", ""),
+            VoiceItem("zh_male_dongfanghaoran_moon_bigtts", "傻包音色", "东方浩然", ""),
+            VoiceItem("ICL_72afa6c5dc07", "傻包音色", "病娇少爷", ""),
+            VoiceItem("zh_male_junlangxize_mars_bigtts", "傻包音色", "清爽男大", ""),
+            VoiceItem("ICL_9b3bc6941076", "傻包音色", "清朗宇澄", ""),
+            VoiceItem("ICL_932b3f52bf3d", "傻包音色", "奶音俊少", ""),
+            VoiceItem("ICL_5a413fbc14fc", "傻包音色", "沉稳皓轩", ""),
+            VoiceItem("ICL_0ce6ef379e73", "傻包音色", "温柔俊彦", ""),
+            VoiceItem("ICL_afedffe4586c", "傻包音色", "青涩沐阳", ""),
+            VoiceItem("ICL_4ce34d3f60f4", "傻包音色", "睿语舟舟", ""),
+            VoiceItem("zh_male_gangpu_conversation_wvae_bigtts", "傻包音色", "湾区大叔", ""),
+            VoiceItem("ICL_b718c1050dd1", "傻包音色", "随性先生", ""),
+            VoiceItem("zh_male_m219_conversation_wvae_bigtts", "傻包音色", "渊博小叔", ""),
+            VoiceItem("ICL_1eed9233299f", "傻包音色", "俊朗男友", ""),
+            VoiceItem("BV154_streaming", "傻包音色", "磁性阿铭", ""),
+            VoiceItem("ICL_b22cd40ccd3e", "傻包音色", "奶酷小宇", ""),
+            VoiceItem("ICL_7a33516fe388", "傻包音色", "暖阳阿晨", ""),
+            VoiceItem("ICL_989e59f0082a", "傻包音色", "低音小北", ""),
+            VoiceItem("ICL_7ba54f5a883e", "傻包音色", "男闺蜜俊熙", ""),
+            VoiceItem("ICL_6e69deb80ce5", "傻包音色", "深情霸总", ""),
+            VoiceItem("zh_female_maomao_conversation_wvae_bigtts", "傻包音色", "文静毛毛", ""),
+            VoiceItem("zh_female_beijingdaniu_mars_bigtts", "傻包音色", "北京大妞", ""),
+            VoiceItem("zh_female_F466_mars_bigtts", "傻包音色", "清甜瑶瑶", ""),
+            VoiceItem("zh_female_F765_mars_bigtts", "傻包音色", "活泼可昕", ""),
+            VoiceItem("ICL_da6a164900d4", "傻包音色", "水刃公子", ""),
+            VoiceItem("ICL_eaf8dd4a3a0d", "傻包音色", "灵兔少女", ""),
+            VoiceItem("ICL_4fba48c6d3cc", "傻包音色", "蓝曜修士", ""),
+            VoiceItem("ICL_21c82f5cbb7b", "傻包音色", "咆哮小哥", ""),
+            VoiceItem("ICL_1289539b58cb", "傻包音色", "解家花少", ""),
+            VoiceItem("ICL_ffed9fc2fee7", "傻包音色", "闷油瓶小哥", ""),
+            VoiceItem("ICL_ba24ccf23bc7", "傻包音色", "墨镜黑哥", ""),
+            VoiceItem("ICL_4b1feb0ced67", "傻包音色", "安全哥", ""),
+            VoiceItem("zh_male_nezha", "傻包音色", "藕霸小童", ""),
+            VoiceItem("BV428_streaming", "傻包音色", "文艺阿房", ""),
+            VoiceItem("BV433_streaming", "傻包音色", "山哥播音", ""),
+            VoiceItem("zh_female_guli_stream_gpu", "傻包音色", "顾姐", ""),
+            VoiceItem("BV223_streaming", "傻包音色", "小品艺术家", ""),
+            VoiceItem("zh_male_wangye", "傻包音色", "王小也", ""),
+            VoiceItem("zh_female_leidian", "傻包音色", "雷霆女神", ""),
+            VoiceItem("BV427_streaming", "傻包音色", "奶芙波波", ""),
+            VoiceItem("zh_male_milaoshu", "傻包音色", "星鼠仔", ""),
+            VoiceItem("zh_male_tanglaoya", "傻包音色", "麦小鸭", ""),
+            VoiceItem("ICL_cd62e63dcdab", "傻包音色", "黯刃秦主", ""),
+            VoiceItem("ICL_19abc3128fbb", "傻包音色", "绯樱神巫", ""),
+            VoiceItem("ICL_8d858c1560ed", "傻包音色", "光头憨憨", ""),
+            VoiceItem("ICL_f35ff006eb05", "傻包音色", "智慧小羊", ""),
+            VoiceItem("ICL_be2856499af4", "傻包音色", "火舞魅娘", ""),
+            VoiceItem("ICL_7b76e4aafb6c", "傻包音色", "沪上傲女", ""),
+            VoiceItem("ICL_3bb18f934f4e", "傻包音色", "冷酷哥哥", ""),
+            VoiceItem("zh_female_leidian_conversation_wvae_bigtts", "傻包音色", "高冷御姐", ""),
+            VoiceItem("zh_male_xudong_conversation_wvae_bigtts", "傻包音色", "快乐小东", ""),
+            VoiceItem("zh_female_sajiaonvyou_wvae_bigtts", "傻包音色", "柔美女友", ""),
+            VoiceItem("zh_female_sinong_conversation_wvae_bigtts", "傻包音色", "爽快思思", ""),
+            VoiceItem("ICL_da05661f8c64", "傻包音色", "妩媚御姐", ""),
+            VoiceItem("ICL_11c6b3f0bd6d", "傻包音色", "活泼女孩", ""),
+            VoiceItem("ICL_bad46416a2b7", "傻包音色", "甜心小美", ""),
+            VoiceItem("zh_female_meilinvyou_wvae_bigtts", "傻包音色", "魅力女友", ""),
+            VoiceItem("ICL_49240bb7f5ac", "傻包音色", "可爱女生", ""),
+            VoiceItem("zh_male_sichuanskn", "傻包音色", "川渝小伙", ""),
+            VoiceItem("zh_male_nanchangygn", "傻包音色", "南音阳仔", ""),
+            VoiceItem("zh_male_changshakln", "傻包音色", "湘都朗少", ""),
+            VoiceItem("zh_female_guangxiwrn", "傻包音色", "桂乡甜妞", ""),
+            VoiceItem("zh_male_M392_conversation_wvae_bigtts", "傻包音色", "京腔侃爷", ""),
+            VoiceItem("zh_female_qingxin_clone2", "傻包音色", "清新女声", ""),
+            VoiceItem("zh_female_taozi_conversation_v4_wvae_bigtts", "傻包音色", "小甜妹", ""),
+            VoiceItem("zh_female_xiaonan_lv_clone2", "傻包音色", "温柔姐姐", ""),
+            VoiceItem("zh_male_renmao_mars_bigtts", "傻包音色", "桃花庵主", ""),
+            VoiceItem("ICL_1beb294a9e3e", "傻包音色", "精灵向导", ""),
+            VoiceItem("ICL_d8c94c04d627", "傻包音色", "清朗公子", ""),
+            VoiceItem("ICL_e991be511569", "傻包音色", "内敛才俊", ""),
+            VoiceItem("zh_female_qingchezizi_moon_bigtts", "傻包音色", "清澈梓梓", ""),
+            VoiceItem("ICL_205cc3ca1152", "傻包音色", "不羁雅痞", ""),
+            VoiceItem("ICL_4634ac0d9e82", "傻包音色", "媚娇俏娘", ""),
+            VoiceItem("zh_female_dongmanxiaoyang_moon_bigtts", "傻包音色", "动漫小羊", ""),
+            VoiceItem("ICL_fd7fd93fb7b8", "傻包音色", "成熟姐姐", ""),
+            VoiceItem("ICL_bf4e1d132b48", "傻包音色", "恶魔女仆", ""),
+            VoiceItem("ICL_c1cee47f0150", "傻包音色", "小丑", ""),
+            VoiceItem("ICL_24dff5266b30", "傻包音色", "蛇发女妖", ""),
+        )
+
 
         @JvmField
         val ALL_FEATURE_ANNOUNCE_KEYS: Array<String> = arrayOf(
@@ -139,30 +247,34 @@ class TTSPageView private constructor() {
             root.addView(buildTtsEngineCard(ctx, parentAct, d, prefs))
             root.addView(candyDivider(ctx, d))
 
-            val announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true)
-            val announceImage = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_IMAGE, true)
-            val announceVideo = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_VIDEO, true)
-            val announceLocation = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_LOCATION, true)
-            val announceCard = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_CARD, true)
-            val announceFile = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_FILE, true)
+            val announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, false)
+            val announceImage = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_IMAGE, false)
+            val announceVideo = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_VIDEO, false)
+            val announceLocation = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_LOCATION, false)
+            val announceCard = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_CARD, false)
+            val announceFile = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_FILE, false)
             val announceSticker = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_STICKER, false)
-            val announceCall = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_CALL, true)
-            val announceQuote = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_QUOTE, true)
-            val announceMiniProgram = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_MINIPROGRAM, true)
-            val announceVideoChannel = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_VIDEOCHANNEL, true)
-            val announceChatHistory = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_CHATHISTORY, true)
-            val announceNickname = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_NICKNAME, true)
+            val announceCall = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_CALL, false)
+            val announceQuote = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_QUOTE, false)
+            val announceMiniProgram = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_MINIPROGRAM, false)
+            val announceVideoChannel = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_VIDEOCHANNEL, false)
+            val announceChatHistory = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_CHATHISTORY, false)
+            val announceNickname = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_NICKNAME, false)
             val announceGroup = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_GROUP, false)
             val announcePat = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_PAT, false)
-            val announceAt = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_AT, true)
+            val announceAt = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_AT, false)
             val quietOn = prefs != null && prefs.getBoolean(KEY_QUIET_ON, false)
             val quietStart = prefs?.getString(KEY_QUIET_START, "23:00") ?: "23:00"
             val quietEnd = prefs?.getString(KEY_QUIET_END, "07:00") ?: "07:00"
             val whitelist = prefs?.getString(KEY_ANNOUNCE_WL, "") ?: ""
             val blacklist = prefs?.getString(KEY_ANNOUNCE_BL, "") ?: ""
-            val interval = if (prefs != null) Integer.parseInt(prefs.getString(KEY_ANNOUNCE_INTERVAL, "0")) else 0
+            val interval = try {
+                if (prefs != null) Integer.parseInt(prefs.getString(KEY_ANNOUNCE_INTERVAL, "0")) else 0
+            } catch (e: NumberFormatException) { 0 }
             val truncate = prefs != null && prefs.getBoolean(KEY_TEXT_TRUNCATE, true)
-            val cutoff = if (prefs != null) Integer.parseInt(prefs.getString(KEY_TEXT_CUTOFF, "150")) else 150
+            val cutoff = try {
+                if (prefs != null) Integer.parseInt(prefs.getString(KEY_TEXT_CUTOFF, "150")) else 150
+            } catch (e: NumberFormatException) { 150 }
             val speechRate = prefs?.getFloat("ls_speech_rate", 1.1f) ?: 1.1f
             val ttsCommand = prefs != null && prefs.getBoolean(KEY_TTS_COMMAND, false)
 
@@ -284,8 +396,8 @@ class TTSPageView private constructor() {
 
             root.addView(candyDivider(ctx, d))
             val card3 = makeCard(ctx, d)
-            val wlStrict = prefs != null && prefs.getBoolean("ls_tts_whitelist_strict", true)
-            card3.addView(switchRow(ctx, d, "播报白名单严格模式", "开: 白名单为空时不播报任何消息; 关: 白名单为空时全部播报", wlStrict) { _, on ->
+            val wlStrict = prefs != null && prefs.getBoolean("ls_tts_whitelist_strict", false)
+            card3.addView(switchRow(ctx, d, "播报白名单严格模式", "开: 白名单非空时仅播报白名单内会话; 关: 白名单非空时其他会话也播报; 白名单为空时均全部播报", wlStrict) { _, on ->
                 if (prefs != null) prefs.edit().putBoolean("ls_tts_whitelist_strict", on).apply()
             })
             card3.addView(itemDivider(ctx, d))
@@ -391,13 +503,14 @@ class TTSPageView private constructor() {
             etStart.setTextColor(AppColors.text1())
             etStart.setSingleLine(true)
             etStart.setInputType(InputType.TYPE_CLASS_TEXT)
-            etStart.setWidth((80 * d).toInt())
             etStart.setPadding((6 * d).toInt(), (6 * d).toInt(), (6 * d).toInt(), (6 * d).toInt())
             val startBg = GradientDrawable()
             startBg.setColor(AppColors.inputBg())
             startBg.setCornerRadius(AppColors.SHAPE_INPUT_DP * d)
             etStart.setBackground(startBg)
-            row.addView(etStart)
+            val etStartLp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            etStartLp.weight = 1f
+            row.addView(etStart, etStartLp)
 
             val sep = TextView(ctx)
             sep.text = " ~ "
@@ -411,13 +524,14 @@ class TTSPageView private constructor() {
             etEnd.setTextColor(AppColors.text1())
             etEnd.setSingleLine(true)
             etEnd.setInputType(InputType.TYPE_CLASS_TEXT)
-            etEnd.setWidth((80 * d).toInt())
             etEnd.setPadding((6 * d).toInt(), (6 * d).toInt(), (6 * d).toInt(), (6 * d).toInt())
             val endBg = GradientDrawable()
             endBg.setColor(AppColors.inputBg())
             endBg.setCornerRadius(AppColors.SHAPE_INPUT_DP * d)
             etEnd.setBackground(endBg)
-            row.addView(etEnd)
+            val etEndLp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            etEndLp.weight = 1f
+            row.addView(etEnd, etEndLp)
 
             val save = TextView(ctx)
             save.text = "确定"
@@ -764,91 +878,158 @@ class TTSPageView private constructor() {
             title.setPadding((12 * d).toInt(), (12 * d).toInt(), (12 * d).toInt(), (8 * d).toInt())
             card.addView(title)
 
-            // 单选按钮行
+            // 三选一单选按钮行：傻包TTS / 配音魔方TTS / 系统TTS
+            val engine = WmPrefs.getTtsEngine()
+            val isSilly = "silly" == engine
+            val isCube = "cube" == engine
+            val isSys = "system" == engine
+
             val radioRow = LinearLayout(ctx)
             radioRow.orientation = LinearLayout.HORIZONTAL
             radioRow.setPadding((12 * d).toInt(), (4 * d).toInt(), (12 * d).toInt(), (8 * d).toInt())
             radioRow.gravity = Gravity.CENTER_VERTICAL
 
-            val engine = if (WmPrefs.isTTSCube()) "cube" else "system"
-            val isCube = "cube" == engine
+            val btnSilly = makeEngineButton(ctx, d, "傻包TTS", isSilly)
+            val btnCube = makeEngineButton(ctx, d, "配音魔方TTS", isCube)
+            val btnSys = makeEngineButton(ctx, d, "系统TTS", isSys)
 
-            val btnCube = Button(ctx)
-            btnCube.text = "配音魔方TTS"
-            btnCube.setTextSize(13f)
-            btnCube.isAllCaps = false
-            btnCube.gravity = Gravity.CENTER
-            val cubeBg = GradientDrawable()
-            cubeBg.setColor(if (isCube) AppColors.accent() else AppColors.card())
-            cubeBg.setCornerRadius((AppColors.SHAPE_FULL_DP * d).toInt().toFloat())
-            cubeBg.setStroke(if (isCube) 0 else 1, AppColors.divider())
-            btnCube.setBackground(cubeBg)
-            btnCube.setTextColor(if (isCube) AppColors.WHITE_TEXT else AppColors.text1())
-            btnCube.setPadding((16 * d).toInt(), (10 * d).toInt(), (16 * d).toInt(), (10 * d).toInt())
+            val btnSillyLp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            btnSillyLp.setMargins(0, 0, (6 * d).toInt(), 0)
+            radioRow.addView(btnSilly, btnSillyLp)
+
             val btnCubeLp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            btnCubeLp.setMargins(0, 0, (6 * d).toInt(), 0)
+            btnCubeLp.setMargins((6 * d).toInt(), 0, (6 * d).toInt(), 0)
             radioRow.addView(btnCube, btnCubeLp)
 
-            val btnSys = Button(ctx)
-            btnSys.text = "手机系统TTS"
-            btnSys.setTextSize(13f)
-            btnSys.isAllCaps = false
-            btnSys.gravity = Gravity.CENTER
-            val sysBg = GradientDrawable()
-            sysBg.setColor(if (!isCube) AppColors.accent() else AppColors.card())
-            sysBg.setCornerRadius((AppColors.SHAPE_FULL_DP * d).toInt().toFloat())
-            sysBg.setStroke(if (!isCube) 0 else 1, AppColors.divider())
-            btnSys.setBackground(sysBg)
-            btnSys.setTextColor(if (!isCube) AppColors.WHITE_TEXT else AppColors.text1())
-            btnSys.setPadding((16 * d).toInt(), (10 * d).toInt(), (16 * d).toInt(), (10 * d).toInt())
             val btnSysLp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             btnSysLp.setMargins((6 * d).toInt(), 0, 0, 0)
             radioRow.addView(btnSys, btnSysLp)
+
             card.addView(radioRow)
 
+            CandyUi.ripple(btnSilly, AppColors.SHAPE_FULL_DP.toFloat())
+            btnSilly.setOnClickListener {
+                if (WmPrefs.getTtsEngine() != "silly") {
+                    WmPrefs.setTtsEngine("silly")
+                    Toast.makeText(parentAct, "已切换为傻包TTS（免登录豆包音色）", Toast.LENGTH_SHORT).show()
+                    SubPageActivity.refreshCurrent(parentAct)
+                }
+            }
             CandyUi.ripple(btnCube, AppColors.SHAPE_FULL_DP.toFloat())
             btnCube.setOnClickListener {
-                WmPrefs.set("tts_cube", true)
-                btnCube.setBackground(CandyUi.gradientBg(ctx, AppColors.SHAPE_FULL_DP.toFloat()))
-                btnCube.setTextColor(AppColors.WHITE_TEXT)
-                val gd2 = GradientDrawable()
-                gd2.setColor(AppColors.card())
-                gd2.setCornerRadius((AppColors.SHAPE_FULL_DP * d).toInt().toFloat())
-                gd2.setStroke(1, AppColors.divider())
-                btnSys.setBackground(gd2)
-                btnSys.setTextColor(AppColors.text1())
-                Toast.makeText(parentAct, "已切换为配音魔方TTS", Toast.LENGTH_SHORT).show()
+                if (WmPrefs.getTtsEngine() != "cube") {
+                    WmPrefs.setTtsEngine("cube")
+                    Toast.makeText(parentAct, "已切换为配音魔方TTS", Toast.LENGTH_SHORT).show()
+                    SubPageActivity.refreshCurrent(parentAct)
+                }
             }
             CandyUi.ripple(btnSys, AppColors.SHAPE_FULL_DP.toFloat())
             btnSys.setOnClickListener {
-                WmPrefs.set("tts_cube", false)
-                btnSys.setBackground(CandyUi.gradientBg(ctx, AppColors.SHAPE_FULL_DP.toFloat()))
-                btnSys.setTextColor(AppColors.WHITE_TEXT)
-                val gd2 = GradientDrawable()
-                gd2.setColor(AppColors.card())
-                gd2.setCornerRadius((AppColors.SHAPE_FULL_DP * d).toInt().toFloat())
-                gd2.setStroke(1, AppColors.divider())
-                btnCube.setBackground(gd2)
-                btnCube.setTextColor(AppColors.text1())
-                Toast.makeText(parentAct, "已切换为手机系统TTS", Toast.LENGTH_SHORT).show()
+                if (WmPrefs.getTtsEngine() != "system") {
+                    WmPrefs.setTtsEngine("system")
+                    Toast.makeText(parentAct, "已切换为系统TTS", Toast.LENGTH_SHORT).show()
+                    SubPageActivity.refreshCurrent(parentAct)
+                }
             }
 
-            // 配音魔方接口配置入口按钮
+            // 配音魔方接口配置入口：仅选择配音魔方TTS时显示
             val cfgBtn = Button(ctx)
             cfgBtn.text = "配音魔方接口配置"
             cfgBtn.setTextSize(14f)
             cfgBtn.isAllCaps = false
-            cfgBtn.setTextColor(AppColors.WHITE_TEXT)
+            cfgBtn.setTextColor(AppColors.onPrimary())
             cfgBtn.gravity = Gravity.CENTER
-            cfgBtn.setBackground(CandyUi.gradientBg(ctx, AppColors.SHAPE_FULL_DP.toFloat()))
+            cfgBtn.setBackground(CandyUi.gradientBg(ctx, AppColors.SHAPE_MD_DP.toFloat()))
             cfgBtn.setPadding(0, (8 * d).toInt(), 0, (8 * d).toInt())
+            cfgBtn.minimumHeight = (40 * d).toInt()
             val cfgLp = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
             cfgLp.setMargins((14 * d).toInt(), (8 * d).toInt(), (14 * d).toInt(), (12 * d).toInt())
+            cfgBtn.visibility = if (isCube) View.VISIBLE else View.GONE
             card.addView(cfgBtn, cfgLp)
 
-            CandyUi.ripple(cfgBtn, AppColors.SHAPE_SM_DP.toFloat())
+            CandyUi.ripple(cfgBtn, AppColors.SHAPE_FULL_DP.toFloat())
             cfgBtn.setOnClickListener { showTtsCubeDialog(ctx, parentAct, d) }
+
+            // v3.0.410: 登录态/免登录 手动切换（傻包TTS，实时生效）
+            val laneMode = WmPrefs.getStr("tts_lane_mode", "samantha")
+            val laneTitle = TextView(ctx)
+            laneTitle.text = "合成车道：" + if ("voicegenie" == laneMode) "免登录（voicegenie）" else "登录态（samantha 主车道）"
+            laneTitle.setTextSize(13f)
+            laneTitle.setTextColor(AppColors.text1())
+            laneTitle.setTypeface(null, Typeface.BOLD)
+            laneTitle.setPadding((14 * d).toInt(), (8 * d).toInt(), (14 * d).toInt(), (2 * d).toInt())
+            laneTitle.visibility = if (isSilly) View.VISIBLE else View.GONE
+            card.addView(laneTitle)
+
+            val laneRow = LinearLayout(ctx)
+            laneRow.orientation = LinearLayout.HORIZONTAL
+            laneRow.setPadding((14 * d).toInt(), (4 * d).toInt(), (14 * d).toInt(), (6 * d).toInt())
+            laneRow.visibility = if (isSilly) View.VISIBLE else View.GONE
+
+            val btnLaneLogin = makeEngineButton(ctx, d, "登录态(samantha)", "voicegenie" != laneMode)
+            val btnLaneFree = makeEngineButton(ctx, d, "免登录(voicegenie)", "voicegenie" == laneMode)
+            val laneLoginLp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            laneLoginLp.setMargins(0, 0, (6 * d).toInt(), 0)
+            laneRow.addView(btnLaneLogin, laneLoginLp)
+            val laneFreeLp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            laneFreeLp.setMargins((6 * d).toInt(), 0, 0, 0)
+            laneRow.addView(btnLaneFree, laneFreeLp)
+            card.addView(laneRow)
+
+            CandyUi.ripple(btnLaneLogin, AppColors.SHAPE_FULL_DP.toFloat())
+            btnLaneLogin.setOnClickListener {
+                if ("voicegenie" != WmPrefs.getStr("tts_lane_mode", "samantha")) return@setOnClickListener
+                WmPrefs.setStr("tts_lane_mode", "samantha")
+                Toast.makeText(parentAct, "已切换：登录态主车道（samantha）", Toast.LENGTH_SHORT).show()
+                try { SubPageActivity.refreshCurrent(parentAct) } catch (ignored: Throwable) {}
+            }
+            CandyUi.ripple(btnLaneFree, AppColors.SHAPE_FULL_DP.toFloat())
+            btnLaneFree.setOnClickListener {
+                if ("voicegenie" == WmPrefs.getStr("tts_lane_mode", "samantha")) return@setOnClickListener
+                WmPrefs.setStr("tts_lane_mode", "voicegenie")
+                Toast.makeText(parentAct, "已切换：免登录（voicegenie）", Toast.LENGTH_SHORT).show()
+                try { SubPageActivity.refreshCurrent(parentAct) } catch (ignored: Throwable) {}
+            }
+
+            // v3.0.407: 豆包TTS 网关/Cookie 配置（傻包TTS 双车道，仅傻包引擎时显示）
+            val samBtn = Button(ctx)
+            samBtn.text = "傻包音色库配置"
+            samBtn.setTextSize(14f)
+            samBtn.isAllCaps = false
+            samBtn.setTextColor(AppColors.onPrimary())
+            samBtn.gravity = Gravity.CENTER
+            samBtn.setBackground(CandyUi.gradientBg(ctx, AppColors.SHAPE_MD_DP.toFloat()))
+            samBtn.setPadding(0, (8 * d).toInt(), 0, (8 * d).toInt())
+            samBtn.minimumHeight = (40 * d).toInt()
+            val samLp = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            samLp.setMargins((14 * d).toInt(), (8 * d).toInt(), (14 * d).toInt(), (12 * d).toInt())
+            samBtn.visibility = if (isSilly) View.VISIBLE else View.GONE
+            card.addView(samBtn, samLp)
+
+            CandyUi.ripple(samBtn, AppColors.SHAPE_FULL_DP.toFloat())
+            samBtn.setOnClickListener { showSamanthaCookieDialog(ctx, parentAct, d) }
+
+            // 选择音色（多音色随机播报）：任意引擎下均可用，支持多选/全选
+            val poolBtn = Button(ctx)
+            poolBtn.text = "选择音色 · 多音色随机播报"
+            poolBtn.setTextSize(14f)
+            poolBtn.isAllCaps = false
+            poolBtn.setTextColor(AppColors.accent())
+            val poolBg = GradientDrawable()
+            poolBg.setColor(AppColors.surfaceContainerLow())
+            poolBg.setCornerRadius((AppColors.SHAPE_MD_DP * d).toInt().toFloat())
+            poolBg.setStroke(1, AppColors.accent())
+            poolBtn.setBackground(poolBg)
+            poolBtn.setPadding(0, (8 * d).toInt(), 0, (8 * d).toInt())
+            poolBtn.minimumHeight = (40 * d).toInt()
+            val poolLp = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            poolLp.setMargins((14 * d).toInt(), 0, (14 * d).toInt(), (12 * d).toInt())
+            card.addView(poolBtn, poolLp)
+            CandyUi.ripple(poolBtn, AppColors.SHAPE_FULL_DP.toFloat())
+            poolBtn.setOnClickListener { showVoicePoolPicker(ctx, parentAct, d) }
 
             // v1086: 配音魔方接口配置下方 —— 「一键开启所有功能」总开关
             card.addView(itemDivider(ctx, d))
@@ -862,6 +1043,30 @@ class TTSPageView private constructor() {
             })
 
             return card
+        }
+
+        /** 引擎三选一按钮（选中=渐变底白字，未选中=卡片底+边框）。 */
+        private fun makeEngineButton(ctx: Context, d: Float, text: String, selected: Boolean): Button {
+            val btn = Button(ctx)
+            btn.text = text
+            btn.setTextSize(13f)
+            btn.isAllCaps = false
+            btn.gravity = Gravity.CENTER
+            val bg = GradientDrawable()
+            if (selected) {
+                bg.setColor(AppColors.accent())
+                bg.setCornerRadius((AppColors.SHAPE_MD_DP * d).toInt().toFloat())
+                btn.setTextColor(AppColors.onPrimary())
+            } else {
+                bg.setColor(AppColors.card())
+                bg.setCornerRadius((AppColors.SHAPE_MD_DP * d).toInt().toFloat())
+                bg.setStroke(1, AppColors.divider())
+                btn.setTextColor(AppColors.text1())
+            }
+            btn.setBackground(bg)
+            btn.setPadding((10 * d).toInt(), (10 * d).toInt(), (10 * d).toInt(), (10 * d).toInt())
+            btn.minimumHeight = (40 * d).toInt()
+            return btn
         }
 
         /** v1086: 所有功能开关是否全部开启 */
@@ -887,6 +1092,341 @@ class TTSPageView private constructor() {
             WmPrefs.set("voice_enhance", on)
             WmPrefs.set("voice_bass_boost", on)
             WmPrefs.set("ls_tts_false_dur_on", on)
+        }
+
+// ===== 豆包TTS 网关/Cookie 配置对话框（v2.4-r1 双车道，与参考文档一致） =====
+
+        @JvmStatic
+        fun showSamanthaCookieDialog(ctx: Context, parentAct: Activity, d: Float) {
+            val defaultCookie = com.leshao.v3.service.DoubaoTtsV2Bridge.DEFAULT_SAMANTHA_COOKIE
+            val savedPrefsCookie = WmPrefs.getStr("tts_samantha_cookie", "")
+            val savedCookie = if (com.leshao.v3.service.DoubaoTtsV2Bridge.isCompleteCookie(savedPrefsCookie)) {
+                savedPrefsCookie
+            } else {
+                // 主/分身行为一致：未配置时统一显示内置默认 Cookie
+                defaultCookie
+            }
+
+            val outerLayout = LinearLayout(ctx)
+            outerLayout.orientation = LinearLayout.VERTICAL
+            outerLayout.setBackground(CandyUi.pageGradient())
+            outerLayout.setPadding((14 * d).toInt(), (12 * d).toInt(), (14 * d).toInt(), (10 * d).toInt())
+
+            val tipTv = TextView(ctx)
+            tipTv.text = "主车道=samantha 登录态（AAC，无需电脑/局域网）：内置默认傻包 Cookie，可直接使用，也可点击下方「登录傻包」自动获取完整 Cookie。" +
+                    "兜底车道=voicegenie（OGG）：免登录直连合成。"
+            tipTv.setTextSize(12f)
+            tipTv.setTextColor(AppColors.text2())
+            tipTv.setLineSpacing((2 * d).toInt().toFloat(), 1f)
+            tipTv.setPadding(0, 0, 0, (8 * d).toInt())
+            outerLayout.addView(tipTv)
+
+            // ── Cookie 当前状态显示 ──
+            val cookieStatusTv = TextView(ctx)
+            cookieStatusTv.setTextSize(13f)
+            cookieStatusTv.setPadding(0, (4 * d).toInt(), 0, (4 * d).toInt())
+            outerLayout.addView(cookieStatusTv)
+            fun refreshCookieStatus() {
+                val prefsCk = WmPrefs.getStr("tts_samantha_cookie", "")
+                val ck = if (com.leshao.v3.service.DoubaoTtsV2Bridge.isCompleteCookie(prefsCk)) prefsCk else defaultCookie
+                val fields = ck.split(";").count { it.contains("=") }
+                val ok = com.leshao.v3.service.DoubaoTtsV2Bridge.isCompleteCookie(ck)
+                cookieStatusTv.text = if (ok) {
+                    "✅ Cookie 状态：已配置（" + fields + " 个字段，含 sessionid/sid_guard）"
+                } else {
+                    "⚠️ Cookie 状态：不完整（" + fields + " 个字段，缺 sessionid 或 sid_guard）"
+                }
+                cookieStatusTv.setTextColor(if (ok) 0xFFF5B301.toInt() else 0xFFFB8C00.toInt())
+            }
+            refreshCookieStatus()
+
+            // ── 登录豆包按钮（WebView 自动获取完整 Cookie） ──
+            val loginBtn = Button(ctx)
+            loginBtn.text = "🌐 登录傻包自动获取完整 Cookie"
+            loginBtn.setTextSize(14f)
+            loginBtn.isAllCaps = false
+            loginBtn.setTextColor(AppColors.onPrimary())
+            loginBtn.setBackground(CandyUi.gradientBg(ctx, AppColors.SHAPE_MD_DP.toFloat()))
+            loginBtn.minimumHeight = (42 * d).toInt()
+            val loginLp = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            loginLp.setMargins(0, (6 * d).toInt(), 0, (8 * d).toInt())
+            outerLayout.addView(loginBtn, loginLp)
+            CandyUi.ripple(loginBtn, AppColors.SHAPE_FULL_DP.toFloat())
+            loginBtn.setOnClickListener {
+                openDoubaoLoginDialog(parentAct, d) { refreshCookieStatus() }
+            }
+
+            // Cookie（进程内直连方式）
+            val ckLabel = fieldLabel(ctx, d, "傻包网页版登录 Cookie（可修改，默认内置完整值）")
+            outerLayout.addView(ckLabel)
+            val edit = android.widget.EditText(ctx)
+            edit.setText(savedCookie)
+            edit.setHint("sessionid=...; sid_guard=...; ...")
+            edit.setTextSize(11f)
+            edit.setTextColor(AppColors.text1())
+            edit.setHintTextColor(AppColors.text3())
+            edit.setBackground(CandyUi.cardBg(ctx))
+            edit.setPadding((10 * d).toInt(), (10 * d).toInt(), (10 * d).toInt(), (10 * d).toInt())
+            edit.minimumHeight = (70 * d).toInt()
+            edit.gravity = Gravity.TOP or Gravity.START
+            edit.inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                    android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            outerLayout.addView(edit)
+
+            val howBtn = TextView(ctx)
+            howBtn.text = "❓ 手动获取 Cookie 步骤（点击查看）"
+            howBtn.setTextSize(12f)
+            howBtn.setTextColor(AppColors.accent())
+            howBtn.setPadding(0, (6 * d).toInt(), 0, (4 * d).toInt())
+            outerLayout.addView(howBtn)
+            howBtn.setOnClickListener {
+                android.app.AlertDialog.Builder(ctx)
+                        .setTitle("手动获取傻包登录 Cookie")
+                        .setMessage("1. 用电脑浏览器打开 https://www.doubao.com 并登录傻包账号\n" +
+                                "2. 按 F12 打开开发者工具 → Network（网络）面板\n" +
+                                "3. 刷新页面，点击任意请求\n" +
+                                "4. 在 Request Headers（请求标头）里找到 Cookie 整段\n" +
+                                "5. 复制整段粘贴到上方输入框并保存")
+                        .setPositiveButton("知道了", null)
+                        .show()
+            }
+
+            val btnRow = LinearLayout(ctx)
+            btnRow.orientation = LinearLayout.HORIZONTAL
+            btnRow.setPadding(0, (10 * d).toInt(), 0, 0)
+
+            val saveBtn = Button(ctx)
+            saveBtn.text = "保存"
+            saveBtn.setTextSize(14f)
+            saveBtn.isAllCaps = false
+            saveBtn.setTextColor(AppColors.onPrimary())
+            saveBtn.setBackground(CandyUi.gradientBg(ctx, AppColors.SHAPE_MD_DP.toFloat()))
+            saveBtn.minimumHeight = (40 * d).toInt()
+            val saveLp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            saveLp.setMargins(0, 0, (6 * d).toInt(), 0)
+            btnRow.addView(saveBtn, saveLp)
+
+            val clearCookieBtn = Button(ctx)
+            clearCookieBtn.text = "清除Cookie"
+            clearCookieBtn.setTextSize(14f)
+            clearCookieBtn.isAllCaps = false
+            clearCookieBtn.setTextColor(AppColors.onPrimary())
+            clearCookieBtn.setBackground(CandyUi.gradientBg(ctx, AppColors.SHAPE_MD_DP.toFloat()))
+            clearCookieBtn.minimumHeight = (40 * d).toInt()
+            val clearLp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            clearLp.setMargins((6 * d).toInt(), 0, 0, 0)
+            btnRow.addView(clearCookieBtn, clearLp)
+
+            outerLayout.addView(btnRow)
+
+            val statusTv = TextView(ctx)
+            statusTv.setTextSize(12f)
+            statusTv.setTextColor(AppColors.text3())
+            statusTv.text = "保存后立即生效；清除 Cookie 后回退到内置默认 Cookie。"
+            statusTv.setPadding(0, (8 * d).toInt(), 0, 0)
+            outerLayout.addView(statusTv)
+
+            val dialog = android.app.AlertDialog.Builder(ctx)
+                    .setTitle("傻包音色库配置")
+                    .setView(outerLayout)
+                    .create()
+            dialog.setCanceledOnTouchOutside(true)
+
+            saveBtn.setOnClickListener {
+                val c = edit.text.toString().trim()
+                WmPrefs.setStr("tts_samantha_cookie", c)
+                WmPrefs.setStr("doubao_chat_cookie", c)
+                Toast.makeText(parentAct, "已保存，傻包TTS 按配置车道合成", Toast.LENGTH_SHORT).show()
+                refreshCookieStatus()
+                dialog.dismiss()
+            }
+            clearCookieBtn.setOnClickListener {
+                WmPrefs.setStr("tts_samantha_cookie", "")
+                WmPrefs.setStr("doubao_chat_cookie", "")
+                edit.setText("")
+                refreshCookieStatus()
+                Toast.makeText(parentAct, "已清除 Cookie 配置（将使用内置默认 Cookie）", Toast.LENGTH_SHORT).show()
+            }
+
+            dialog.show()
+        }
+
+        /** 打开豆包网页版登录（WebView），登录后自动收集完整 Cookie 并持久化保存。 */
+        /** 打开傻包网页版登录：模块独立悬浮窗（新窗口），不干扰微信主页返回。
+         *  需要微信「显示悬浮窗」权限；登录成功自动收集完整 Cookie 保存并关闭窗口。
+         *  供 AI 助手面板等处调用。 */
+        @JvmStatic
+        fun openDoubaoLoginDialog(parentAct: Activity, d: Float, onSaved: () -> Unit) {
+            // 1. 检查悬浮窗权限
+            if (!android.provider.Settings.canDrawOverlays(parentAct)) {
+                Toast.makeText(parentAct, "请先允许微信「显示悬浮窗」权限，以打开独立登录窗口", Toast.LENGTH_LONG).show()
+                try {
+                    val permIntent = android.content.Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            android.net.Uri.parse("package:" + parentAct.packageName))
+                    parentAct.startActivity(permIntent)
+                } catch (t: Throwable) {
+                    com.leshao.v3.LogWriter.log("TTSPageView", "打开悬浮窗设置失败: " + t)
+                }
+                return
+            }
+
+            // 2. 创建 WebView
+            val webView: android.webkit.WebView
+            try {
+                android.webkit.CookieManager.getInstance().setAcceptCookie(true)
+                webView = android.webkit.WebView(parentAct)
+                webView.setLayerType(android.view.View.LAYER_TYPE_SOFTWARE, null)
+                webView.settings.javaScriptEnabled = true
+                webView.settings.domStorageEnabled = true
+                webView.settings.databaseEnabled = true
+                webView.settings.loadWithOverviewMode = true
+                webView.settings.useWideViewPort = true
+                webView.webViewClient = object : android.webkit.WebViewClient() {
+                    override fun shouldOverrideUrlLoading(
+                            view: android.webkit.WebView?,
+                            request: android.webkit.WebResourceRequest?
+                    ): Boolean {
+                        view?.loadUrl(request?.url?.toString() ?: return false)
+                        return true
+                    }
+                }
+            } catch (t: Throwable) {
+                com.leshao.v3.LogWriter.log("TTSPageView", "WebView 创建失败: " + t)
+                Toast.makeText(parentAct, "网页登录组件不可用（" + t.message + "），请使用「手动获取 Cookie」", Toast.LENGTH_LONG).show()
+                return
+            }
+
+            // 3. 悬浮窗内容：FrameLayout = 顶部标题栏(关闭按钮) + WebView
+            val overlay = android.widget.FrameLayout(parentAct)
+            overlay.setBackgroundColor(0xFFF5F5F5.toInt())
+            val titleBar = android.widget.LinearLayout(parentAct)
+            titleBar.orientation = android.widget.LinearLayout.HORIZONTAL
+            titleBar.gravity = Gravity.CENTER_VERTICAL
+            titleBar.setPadding((14 * d).toInt(), (10 * d).toInt(), (10 * d).toInt(), (10 * d).toInt())
+            titleBar.setBackgroundColor(0xFF2196F3.toInt())
+            val titleTv = android.widget.TextView(parentAct)
+            titleTv.text = "傻包网页版登录"
+            titleTv.setTextSize(16f)
+            titleTv.setTextColor(0xFFFFFFFF.toInt())
+            titleTv.setTypeface(null, Typeface.BOLD)
+            titleBar.addView(titleTv, android.widget.LinearLayout.LayoutParams(0,
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            val closeBtn = android.widget.TextView(parentAct)
+            closeBtn.text = "✕ 关闭"
+            closeBtn.setTextSize(14f)
+            closeBtn.setGravity(Gravity.CENTER)
+            closeBtn.setPadding((14 * d).toInt(), (6 * d).toInt(), (14 * d).toInt(), (6 * d).toInt())
+            closeBtn.setTextColor(0xFFFFFFFF.toInt())
+            titleBar.addView(closeBtn)
+            overlay.addView(titleBar, android.widget.FrameLayout.LayoutParams(
+                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
+                    Gravity.TOP or Gravity.START))
+            val webLp = android.widget.FrameLayout.LayoutParams(
+                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT)
+            webLp.topMargin = (52 * d).toInt()
+            overlay.addView(webView, webLp)
+
+            // 4. 添加到系统窗口（独立悬浮窗）
+            val wm = parentAct.getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager
+            val params = android.view.WindowManager.LayoutParams(
+                    android.view.WindowManager.LayoutParams.MATCH_PARENT,
+                    android.view.WindowManager.LayoutParams.MATCH_PARENT,
+                    android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                    android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                            or android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
+                    android.graphics.PixelFormat.TRANSLUCENT)
+            params.gravity = Gravity.TOP or Gravity.START
+            params.title = "傻包网页登录"
+
+            val handler = android.os.Handler(android.os.Looper.getMainLooper())
+            lateinit var poll: Runnable
+            fun removeOverlay() {
+                handler.removeCallbacks(poll)
+                try { wm.removeView(overlay) } catch (ignored: Throwable) {}
+                try { webView.destroy() } catch (ignored: Throwable) {}
+            }
+            closeBtn.setOnClickListener {
+                removeOverlay()
+                Toast.makeText(parentAct, "已关闭登录窗口", Toast.LENGTH_SHORT).show()
+            }
+
+            // 5. 轮询检测登录态 Cookie：多域合并收集（豆包/字节/飞书跨域登录态都要）
+            poll = object : Runnable {
+                override fun run() {
+                    try {
+                        val cm = android.webkit.CookieManager.getInstance()
+                        val domains = listOf(
+                                "https://www.doubao.com",
+                                "https://doubao.com",
+                                "https://www.doubao.com/chat/",
+                                "https://sso.doubao.com",
+                                "https://passport.doubao.com",
+                                "https://www.bytedance.com",
+                                "https://www.toutiao.com",
+                                "https://www.feishu.cn",
+                                "https://www.larksuite.com"
+                        )
+                        val merged = LinkedHashMap<String, String>()
+                        for (d in domains) {
+                            try {
+                                val c = cm.getCookie(d) ?: continue
+                                for (pair in c.split(";")) {
+                                    val idx = pair.indexOf("=")
+                                    if (idx > 0) {
+                                        val k = pair.substring(0, idx).trim()
+                                        val v = pair.substring(idx + 1).trim()
+                                        if (k.isNotEmpty()) merged[k] = v
+                                    }
+                                }
+                            } catch (ignored: Throwable) {}
+                        }
+                        val cookie = merged.entries.joinToString("; ") { "${it.key}=${it.value}" }
+                        val fields = merged.size
+                        val complete = cookie.contains("sessionid=") && cookie.contains("sessionid_ss=")
+                                && cookie.contains("sid_tt=") && cookie.contains("uid_tt=")
+                                && cookie.contains("sid_guard=")
+                        if (complete) {
+                            WmPrefs.setStr("tts_samantha_cookie", cookie)
+                            WmPrefs.setStr("doubao_chat_cookie", cookie)
+                            try { WmPrefs.setStr("doubao_webview_ua", webView.settings.userAgentString) } catch (ignored: Throwable) {}
+                            val names = merged.keys.joinToString(",")
+                            com.leshao.v3.LogWriter.log("TTSPageView", "✅ 已保存多域完整傻包登录 Cookie: len=" + cookie.length + " fields=" + fields + " keys=" + names)
+                            Toast.makeText(parentAct, "✅ 已获取完整傻包登录 Cookie 并持久化保存", Toast.LENGTH_SHORT).show()
+                            try { onSaved() } catch (ignored: Throwable) {}
+                            removeOverlay()
+                            return
+                        }
+                        if (cookie.contains("sessionid=") && cookie.contains("sid_guard=")) {
+                            com.leshao.v3.LogWriter.log("TTSPageView", "⚠️ Cookie 不完整，等待补全: len=" + cookie.length + " fields=" + fields + " keys=" + merged.keys.joinToString(","))
+                        }
+                    } catch (ignored: Throwable) {
+                    }
+                    handler.postDelayed(this, 2000)
+                }
+            }
+            handler.postDelayed(poll, 3000)
+
+            try {
+                wm.addView(overlay, params)
+                webView.loadUrl("https://www.doubao.com/chat/")
+            } catch (t: Throwable) {
+                com.leshao.v3.LogWriter.log("TTSPageView", "悬浮窗添加失败: " + t)
+                removeOverlay()
+                Toast.makeText(parentAct, "独立登录窗口打开失败（" + t.message + "），请使用「手动获取 Cookie」", Toast.LENGTH_LONG).show()
+            }
+        }
+
+        /** 配置对话框小标题。 */
+        private fun fieldLabel(ctx: Context, d: Float, text: String): TextView {
+            val tv = TextView(ctx)
+            tv.text = text
+            tv.setTextSize(12f)
+            tv.setTextColor(AppColors.text2())
+            tv.setPadding(0, (6 * d).toInt(), 0, (3 * d).toInt())
+            return tv
         }
 
         // ===== 配音魔方接口配置对话框 (peiyinmofang.com) =====
@@ -922,10 +1462,11 @@ class TTSPageView private constructor() {
             titleBar.layoutParams = titleLp
 
             val titleTv = TextView(ctx)
-            titleTv.text = "配音魔方接口配置"
+            titleTv.text = "乐少助手音色库"
             titleTv.setTextSize(16f)
             titleTv.setTextColor(AppColors.text1())
             titleTv.setTypeface(null, Typeface.BOLD)
+            titleTv.gravity = Gravity.CENTER
             val ttlp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             titleBar.addView(titleTv, ttlp)
 
@@ -941,23 +1482,87 @@ class TTSPageView private constructor() {
             outerLayout.addView(titleBar)
             outerLayout.addView(candyDivider(ctx, d))
 
-            // 音色库标题
+            // 音色库标题：竹节跳动 - 傻包音色 - 配音魔方（每个按钮带音色数量）
             val tabRow = LinearLayout(ctx)
             tabRow.orientation = LinearLayout.HORIZONTAL
             tabRow.gravity = Gravity.CENTER_VERTICAL
             tabRow.setPadding((12 * d).toInt(), (4 * d).toInt(), (12 * d).toInt(), (4 * d).toInt())
 
+            val tabJianying = TextView(ctx)
+tabJianying.text = "竹节跳动 " + com.leshao.v3.service.JianYingTtsClient.voices().size + "个"
+            tabJianying.setTextSize(11f)
+            tabJianying.gravity = Gravity.CENTER
+            tabJianying.setSingleLine(true)
+            tabJianying.setPadding((5 * d).toInt(), (6 * d).toInt(), (5 * d).toInt(), (6 * d).toInt())
+            tabJianying.setBackground(CandyUi.gradientBg(ctx, 16f))
+            tabJianying.setTextColor(AppColors.onPrimary())
+            val tabL0 = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            tabL0.setMargins(0, 0, (3 * d).toInt(), 0)
+            tabRow.addView(tabJianying, tabL0)
+
+            val tabGateway = TextView(ctx)
+            tabGateway.text = "傻包音色 " + VOICE_LIBRARY.size + "个"
+            tabGateway.setTextSize(11f)
+            tabGateway.gravity = Gravity.CENTER
+            tabGateway.setSingleLine(true)
+            tabGateway.setPadding((5 * d).toInt(), (6 * d).toInt(), (5 * d).toInt(), (6 * d).toInt())
+            tabGateway.setBackground(CandyUi.cardBg(ctx))
+            tabGateway.setTextColor(AppColors.text1())
+            val tabL1 = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            tabL1.setMargins((3 * d).toInt(), 0, (3 * d).toInt(), 0)
+            tabRow.addView(tabGateway, tabL1)
+
             val tabCube = TextView(ctx)
-            tabCube.text = "配音魔方音色库"
-            tabCube.setTextSize(13f)
+            tabCube.text = "配音魔方"
+            tabCube.setTextSize(11f)
             tabCube.gravity = Gravity.CENTER
-            tabCube.setPadding((12 * d).toInt(), (8 * d).toInt(), (12 * d).toInt(), (8 * d).toInt())
-            tabCube.setBackground(CandyUi.gradientBg(ctx, 16f))
-            tabCube.setTextColor(AppColors.WHITE_TEXT)
+            tabCube.setSingleLine(true)
+            tabCube.setPadding((5 * d).toInt(), (6 * d).toInt(), (5 * d).toInt(), (6 * d).toInt())
+            tabCube.setBackground(CandyUi.cardBg(ctx))
+            tabCube.setTextColor(AppColors.text1())
             val tabL2 = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            tabL2.setMargins((6 * d).toInt(), 0, 0, 0)
+            tabL2.setMargins((3 * d).toInt(), 0, 0, 0)
             tabRow.addView(tabCube, tabL2)
             outerLayout.addView(tabRow)
+
+            // 固定搜索框（不随分页重建，点击弹出输入法，实时过滤）
+            val searchEt = android.widget.EditText(ctx)
+            searchEt.hint = "搜索音色名称 / ID"
+            searchEt.setTextSize(14f)
+            searchEt.setTextColor(AppColors.text1())
+            searchEt.setHintTextColor(AppColors.text3())
+            searchEt.setSingleLine(true)
+            val searchBg2 = GradientDrawable()
+            searchBg2.setColor(AppColors.inputBg())
+            searchBg2.cornerRadius = (AppColors.SHAPE_INPUT_DP * d).toFloat()
+            searchEt.background = searchBg2
+            searchEt.setPadding((10 * d).toInt(), (8 * d).toInt(), (10 * d).toInt(), (8 * d).toInt())
+            val searchEtLp = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            searchEtLp.setMargins((4 * d).toInt(), 0, (4 * d).toInt(), (6 * d).toInt())
+            outerLayout.addView(searchEt, searchEtLp)
+            val searchQuery = arrayOf("")
+            val baseItems = arrayOf<MutableList<Array<String>>>(ArrayList())
+            val dlgSearchCallback = arrayOf<((String) -> Unit)?>(null)
+            searchEt.setOnClickListener { showIme(searchEt) }
+            searchEt.addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence, st: Int, cnt: Int, aft: Int) {}
+                override fun onTextChanged(s: CharSequence, st: Int, bef: Int, cnt: Int) {}
+                override fun afterTextChanged(s: Editable) {
+                    val cb = dlgSearchCallback[0]
+                    if (cb != null) cb(if (s == null) "" else s.toString())
+                }
+            })
+
+            // tab 选中样式切换（三态）
+            fun selectTab(tab: String) {
+                tabJianying.setBackground(if (tab == "jianying") CandyUi.gradientBg(ctx, 16f) else CandyUi.cardBg(ctx))
+                tabJianying.setTextColor(if (tab == "jianying") AppColors.onPrimary() else AppColors.text1())
+                tabGateway.setBackground(if (tab == "gateway") CandyUi.gradientBg(ctx, 16f) else CandyUi.cardBg(ctx))
+                tabGateway.setTextColor(if (tab == "gateway") AppColors.onPrimary() else AppColors.text1())
+                tabCube.setBackground(if (tab == "cube") CandyUi.gradientBg(ctx, 16f) else CandyUi.cardBg(ctx))
+                tabCube.setTextColor(if (tab == "cube") AppColors.onPrimary() else AppColors.text1())
+            }
 
             // 内容区卡片（可滚动，weight=1）
             val contentCard = LinearLayout(ctx)
@@ -980,91 +1585,368 @@ class TTSPageView private constructor() {
             sv.layoutParams = svLp
             outerLayout.addView(sv)
 
-            // 底部固定操作栏（不跟随滑动）
+            // 底部操作栏：全选 | 上一页 | 页数 | 下一页 | 保存（每页 50，支持多选音色池）
+            val PAGE_SIZE = 50
+            val currentPage = intArrayOf(0)
+            val currentItems = arrayOf<MutableList<Array<String>>>(ArrayList())
+            val pool = loadVoicePool()
+
             val bottomBar = LinearLayout(ctx)
             bottomBar.orientation = LinearLayout.HORIZONTAL
             bottomBar.gravity = Gravity.CENTER_VERTICAL
-            bottomBar.setPadding((12 * d).toInt(), (10 * d).toInt(), (12 * d).toInt(), 0)
+            bottomBar.setPadding((12 * d).toInt(), (10 * d).toInt(), (12 * d).toInt(), (10 * d).toInt())
 
-            val saveBtn = Button(ctx)
-            saveBtn.text = "保存"
-            saveBtn.setTextSize(14f)
-            saveBtn.isAllCaps = false
-            saveBtn.setTextColor(AppColors.WHITE_TEXT)
-            saveBtn.setBackground(CandyUi.gradientBg(ctx, AppColors.SHAPE_FULL_DP.toFloat()))
-            saveBtn.setPadding(0, (8 * d).toInt(), 0, (8 * d).toInt())
-            val saveLp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            saveLp.setMargins(0, 0, (8 * d).toInt(), 0)
-            bottomBar.addView(saveBtn, saveLp)
+            // 底部栏按钮统一模块风格主色（跟随 M3 动态取色/浅色暗色）
+            fun makeDlgBottomBtn(text: String): Button {
+                val b = Button(ctx)
+                b.text = text
+                b.setTextSize(13f)
+                b.isAllCaps = false
+                b.setTextColor(AppColors.onPrimary())
+                b.gravity = Gravity.CENTER
+                b.setBackground(CandyUi.gradientBg(ctx, AppColors.SHAPE_MD_DP.toFloat()))
+                b.setPadding(0, (8 * d).toInt(), 0, (8 * d).toInt())
+b.minimumHeight = (36 * d).toInt()
+                return b
+            }
 
-            val closeBtn = Button(ctx)
-            closeBtn.text = "关闭"
-            closeBtn.setTextSize(14f)
-            closeBtn.isAllCaps = false
-            closeBtn.setTextColor(AppColors.text1())
-            val closeBg = GradientDrawable()
-            closeBg.setColor(AppColors.card())
-            closeBg.setCornerRadius((AppColors.SHAPE_FULL_DP * d).toInt().toFloat())
-            closeBg.setStroke(1, AppColors.divider())
-            closeBtn.setBackground(closeBg)
-            closeBtn.setPadding(0, (8 * d).toInt(), 0, (8 * d).toInt())
-            val closeLp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            bottomBar.addView(closeBtn, closeLp)
+            val dlgSelectAll = makeDlgBottomBtn("全选")
+            val dlgPrev = makeDlgBottomBtn("上页")
+            val dlgPageTv = TextView(ctx)
+            dlgPageTv.text = "1/1"
+            dlgPageTv.setTextSize(13f)
+            dlgPageTv.setTextColor(AppColors.text1())
+            dlgPageTv.gravity = Gravity.CENTER
+            val dlgNext = makeDlgBottomBtn("下页")
+            val dlgSave = makeDlgBottomBtn("保存")
+
+            // 按钮等宽均分整行，间距一致，从左到右刚好铺满
+            fun dlgEqLp(left: Int, right: Int): LinearLayout.LayoutParams {
+                val lp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                lp.leftMargin = left
+                lp.rightMargin = right
+                return lp
+            }
+            val dlgGap = (4 * d).toInt()
+            bottomBar.addView(dlgSelectAll, dlgEqLp(0, dlgGap))
+            bottomBar.addView(dlgPrev, dlgEqLp(dlgGap, dlgGap))
+            bottomBar.addView(dlgPageTv, dlgEqLp(dlgGap, dlgGap))
+            bottomBar.addView(dlgNext, dlgEqLp(dlgGap, dlgGap))
+            bottomBar.addView(dlgSave, dlgEqLp(dlgGap, 0))
 
             outerLayout.addView(candyDivider(ctx, d))
             outerLayout.addView(bottomBar)
 
             val dialog = AlertDialog.Builder(parentAct).create()
             sTtsCubeDialog = dialog
-            // 窗口自适应：宽度 90% 屏，高度随内容 WRAP，上限 90% 屏（内容区 ScrollView 内部滚动）
             val host = InsetsUtil.windowAutoHeight(dialog, outerLayout, 0.9f)
             dialog.setView(host)
             dialog.show()
             WindowLayer.track(dialog.window)
+            try {
+                val w = dialog.window
+                w?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
+                w?.setSoftInputMode(
+                        android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+            } catch (ignored: Throwable) {}
 
             CandyUi.ripple(keyBtn, AppColors.SHAPE_FULL_DP.toFloat())
-            keyBtn.setOnClickListener { showKeyInputPopup(ctx, parentAct, d, keyBtn, voiceList, statusTv) }
+            val currentTab = java.util.concurrent.atomic.AtomicReference<String>("jianying")
+            keyBtn.setOnClickListener { showKeyInputPopup(ctx, parentAct, d, keyBtn, voiceList, statusTv, currentTab) }
 
-            closeBtn.setOnClickListener { dialog.dismiss() }
-            CandyUi.ripple(closeBtn, AppColors.SHAPE_SM_DP.toFloat())
-            saveBtn.setOnClickListener { dialog.dismiss() }
-            CandyUi.ripple(saveBtn, AppColors.SHAPE_SM_DP.toFloat())
+            fun dlgTotalPages(): Int {
+                val size = currentItems[0].size
+                return if (size == 0) 1 else (size + PAGE_SIZE - 1) / PAGE_SIZE
+            }
 
-            // 加载配音魔方音色库
+            fun dlgEngineOf(tab: String): String = when (tab) {
+                "gateway" -> "silly"
+                "cube" -> "cube"
+                else -> "jianying"
+            }
+
+            fun dlgRenderPage(tab: String) {
+                voiceList.removeAllViews()
+                val engine = dlgEngineOf(tab)
+                val base = baseItems[0]
+                val q = searchQuery[0].trim().lowercase()
+                // ★ 选中的音色靠前，再按搜索词过滤
+                val sorted = base.sortedByDescending { pool.contains(engine + "|" + it[0]) }
+                val items = if (q.isEmpty()) sorted else sorted.filter {
+                    ((it[1] ?: "").lowercase().contains(q)) || ((it[0] ?: "").lowercase().contains(q))
+                }
+                currentItems[0] = ArrayList(items)
+                val total = dlgTotalPages()
+                if (currentPage[0] >= total) currentPage[0] = total - 1
+                if (currentPage[0] < 0) currentPage[0] = 0
+                val start = currentPage[0] * PAGE_SIZE
+                val end = Math.min(start + PAGE_SIZE, items.size)
+                if (items.isEmpty()) {
+                    val emptyTv = TextView(ctx)
+                    emptyTv.text = if (q.isEmpty()) "暂无音色" else "未找到匹配音色"
+                    emptyTv.setTextSize(13f)
+                    emptyTv.setTextColor(AppColors.text2())
+                    emptyTv.setPadding((12 * d).toInt(), (10 * d).toInt(), (12 * d).toInt(), 0)
+                    voiceList.addView(emptyTv)
+                } else {
+                    for (i in start until end) {
+                        val it = items[i]
+                        voiceList.addView(makePoolCheckRow(ctx, d, pool, engine, it[0], it[1], it[2]) {
+                            previewVoice(ctx, parentAct, engine, it[0])
+                        })
+                    }
+                }
+                dlgPageTv.text = (currentPage[0] + 1).toString() + "/" + total
+                dlgPrev.isEnabled = currentPage[0] > 0
+                dlgNext.isEnabled = currentPage[0] < total - 1
+            }
+
+            // 搜索回调注册（dlgRenderPage 定义后）
+            dlgSearchCallback[0] = { q ->
+                searchQuery[0] = q
+                currentPage[0] = 0
+                dlgRenderPage(currentTab.get())
+            }
+
+            fun dlgRender(tab: String) {
+                voiceList.removeAllViews()
+                if (tab == "cube") {
+                    val k = WmPrefs.getStr("tts_cube_key", "")
+                    if (k.isEmpty()) {
+                        val hintTv = TextView(ctx)
+                        hintTv.text = "未配置配音魔方 API Key：请点击右上角六角图标设置"
+                        hintTv.setTextSize(13f)
+                        hintTv.setTextColor(AppColors.text2())
+                        hintTv.setPadding((12 * d).toInt(), (12 * d).toInt(), (12 * d).toInt(), 0)
+                        voiceList.addView(hintTv)
+                        baseItems[0] = ArrayList()
+                        currentItems[0] = ArrayList()
+                        currentPage[0] = 0
+                        dlgPageTv.text = "1/1"
+                        dlgPrev.isEnabled = false
+                        dlgNext.isEnabled = false
+                        return
+                    }
+                    // 启动已自动预载缓存 → 直接秒显，无需手动点击等待
+                    val cached = loadCachedCubeVoices()
+                    if (cached.isNotEmpty()) {
+                        val items = ArrayList<Array<String>>()
+                        for (vi in cached) {
+                            val id = vi.voiceId ?: continue
+                            items.add(arrayOf(id, vi.displayName ?: id, "配音魔方"))
+                        }
+                        baseItems[0] = items
+                        currentItems[0] = ArrayList(items)
+                        currentPage[0] = 0
+                        tabCube.text = "配音魔方 " + items.size + "个"
+                        dlgRenderPage(tab)
+                        return
+                    }
+                    voiceList.addView(TextView(ctx).apply {
+                        text = "加载配音魔方音色..."
+                        setTextSize(13f)
+                        setTextColor(AppColors.text2())
+                        setPadding((12 * d).toInt(), (10 * d).toInt(), (12 * d).toInt(), 0)
+                    })
+                    Thread {
+                        val all = refreshCubeVoiceCache(k)
+                        parentAct.runOnUiThread {
+                            val items = ArrayList<Array<String>>()
+                            for (vi in all) {
+                                val id = vi.voiceId ?: continue
+                                items.add(arrayOf(id, vi.displayName ?: id, "配音魔方"))
+                            }
+                            tabCube.text = "配音魔方 " + items.size + "个"
+                            baseItems[0] = items
+                            currentItems[0] = ArrayList(items)
+                            currentPage[0] = 0
+                            dlgRenderPage(tab)
+                        }
+                    }.start()
+                    return
+                }
+                val items = ArrayList<Array<String>>()
+                when (tab) {
+                    "jianying" -> {
+                        for (v in com.leshao.v3.service.JianYingTtsClient.voices()) {
+                            items.add(arrayOf(v.voiceType, v.title ?: v.voiceType, if (v.vip) "VIP音色" else ""))
+                        }
+                    }
+                    "gateway" -> {
+                        for (vi in VOICE_LIBRARY) {
+                            val id = vi.voiceId ?: continue
+                            items.add(arrayOf(id, vi.displayName ?: id, "傻包音色"))
+                        }
+                    }
+                }
+                baseItems[0] = items
+                currentItems[0] = ArrayList(items)
+                currentPage[0] = 0
+                dlgRenderPage(tab)
+            }
+
+            CandyUi.ripple(tabJianying, AppColors.SHAPE_FULL_DP.toFloat())
+            tabJianying.setOnClickListener {
+                currentTab.set("jianying")
+                selectTab("jianying")
+                dlgRender("jianying")
+            }
+            CandyUi.ripple(tabGateway, AppColors.SHAPE_FULL_DP.toFloat())
+            tabGateway.setOnClickListener {
+                currentTab.set("gateway")
+                selectTab("gateway")
+                dlgRender("gateway")
+            }
             CandyUi.ripple(tabCube, AppColors.SHAPE_FULL_DP.toFloat())
             tabCube.setOnClickListener {
-                val k = WmPrefs.getStr("tts_cube_key", "")
-                if (k.isEmpty()) {
-                    val hintTv = TextView(ctx)
-                    hintTv.text = "点击右上角六角图标设置 Key 后加载音色"
-                    hintTv.setTextSize(13f)
-                    hintTv.setTextColor(AppColors.text2())
-                    hintTv.setPadding((12 * d).toInt(), (12 * d).toInt(), (12 * d).toInt(), 0)
-                    voiceList.removeAllViews()
-                    voiceList.addView(hintTv)
-                } else {
-                    loadVoices(ctx, parentAct, d, voiceList, statusTv, k)
+                currentTab.set("cube")
+                selectTab("cube")
+                dlgRender("cube")
+            }
+
+            dlgPrev.setOnClickListener {
+                if (currentPage[0] > 0) {
+                    currentPage[0]--
+                    dlgRenderPage(currentTab.get())
                 }
             }
-
-            // 自动加载：已有 Key 时直接加载音色，无需点击六角图标
-            if (savedKey.isEmpty()) {
-                val hintTv = TextView(ctx)
-                hintTv.text = "点击右上角六角图标设置 Key 后加载音色"
-                hintTv.setTextSize(13f)
-                hintTv.setTextColor(AppColors.text2())
-                hintTv.setPadding((12 * d).toInt(), (12 * d).toInt(), (12 * d).toInt(), 0)
-                voiceList.addView(hintTv)
-            } else {
-                loadVoices(ctx, parentAct, d, voiceList, statusTv, savedKey)
+            dlgNext.setOnClickListener {
+                if (currentPage[0] < dlgTotalPages() - 1) {
+                    currentPage[0]++
+                    dlgRenderPage(currentTab.get())
+                }
             }
+            dlgSelectAll.setOnClickListener {
+                val tab = currentTab.get()
+                val engine = dlgEngineOf(tab)
+                val items = currentItems[0]
+                if (items.isEmpty()) return@setOnClickListener
+                val start = currentPage[0] * PAGE_SIZE
+                val end = Math.min(start + PAGE_SIZE, items.size)
+                for (i in start until end) {
+                    pool.add(engine + "|" + items[i][0])
+                }
+                dlgRenderPage(tab)
+                Toast.makeText(parentAct, "已全选本页 " + (end - start) + " 个音色", Toast.LENGTH_SHORT).show()
+            }
+            dlgSave.setOnClickListener {
+                saveVoicePool(pool)
+                Toast.makeText(parentAct, "已保存 " + pool.size + " 个音色，播报时将随机使用", Toast.LENGTH_SHORT).show()
+                dialog.dismiss()
+            }
+
+            // 自动加载：默认「竹节跳动」（剪映音色库）
+            currentTab.set("jianying")
+            selectTab("jianying")
+            dlgRender("jianying")
         }
 
-        /** 加载配音魔方音色列表到指定容器，public 以便跨类调用 */
+
+
+        /** 竹节跳动（剪映）音色行：勾选 + 音色名（左侧）+ 🎧 试听。 */
+        private fun buildJianYingVoiceRow(ctx: Context, parentAct: Activity, d: Float,
+                                          v: com.leshao.v3.service.JianYingTtsClient.JianYingVoice,
+                                          savedVoice: String, onSelected: () -> Unit,
+                                          onPreview: () -> Unit): View {
+            val container = LinearLayout(ctx)
+            container.orientation = LinearLayout.VERTICAL
+            container.setPadding((8 * d).toInt(), (8 * d).toInt(), (8 * d).toInt(), (8 * d).toInt())
+            container.isClickable = true
+            container.isFocusable = true
+            CandyUi.ripple(container, AppColors.SHAPE_SM_DP.toFloat())
+            container.setOnClickListener { onSelected() }
+
+            val isSelected = savedVoice == v.voiceType
+            val row = LinearLayout(ctx)
+            row.orientation = LinearLayout.HORIZONTAL
+            row.gravity = Gravity.CENTER_VERTICAL
+
+            // 左侧勾选（自绘圆形：选中=主题色底+白✓，未选中=透明底+outline描边）
+            val cb = TextView(ctx)
+            cb.text = if (isSelected) "✔" else ""
+            cb.setTextSize(14f)
+            cb.gravity = Gravity.CENTER
+            cb.setTextColor(if (isSelected) AppColors.onPrimary() else android.graphics.Color.TRANSPARENT)
+            cb.setTypeface(null, Typeface.BOLD)
+            val cbBg = GradientDrawable()
+            cbBg.setShape(GradientDrawable.OVAL)
+            cbBg.setColor(if (isSelected) AppColors.primary() else 0x00FFFFFF.toInt())
+            cbBg.setStroke((1.5f * d).toInt(), if (isSelected) AppColors.primary() else AppColors.outline())
+            cb.setBackground(cbBg)
+            val cbLp = LinearLayout.LayoutParams((28 * d).toInt(), (28 * d).toInt())
+            row.addView(cb, cbLp)
+
+            // 音色名（左侧对齐，不居中）
+            val titleTv = TextView(ctx)
+            titleTv.text = v.title ?: v.voiceType
+            titleTv.setTextSize(15f)
+            titleTv.setTypeface(null, Typeface.BOLD)
+            titleTv.setTextColor(AppColors.textPrimary())
+            titleTv.gravity = Gravity.LEFT
+            val titleLp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            titleLp.leftMargin = (4 * d).toInt()
+            row.addView(titleTv, titleLp)
+
+            // 试听按钮（独立点击，不触发选中；尺寸与勾选一致，耳机金色=竹节跳动音色系）
+            val earTv = TextView(ctx)
+            earTv.text = ""
+            earTv.gravity = Gravity.CENTER
+            earTv.isClickable = true
+            earTv.isFocusable = true
+            earTv.setBackground(HeadphoneIconDrawable(0xFFFFB300.toInt()))
+            val earLp = LinearLayout.LayoutParams((28 * d).toInt(), (28 * d).toInt())
+            earLp.leftMargin = (4 * d).toInt()
+            earTv.setOnClickListener { onPreview() }
+            row.addView(earTv, earLp)
+
+            // 勾选按钮点击 → 选中该音色
+            cb.setOnClickListener { onSelected() }
+
+            container.addView(row)
+            // 分割线
+            val divider = View(ctx)
+            divider.setBackgroundColor(AppColors.divider())
+            val divLp = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, 1)
+            divLp.topMargin = (6 * d).toInt()
+            container.addView(divider)
+            return container
+        }
+
+        /** 向上查找最近的 ScrollView 父容器。 */
+        @JvmStatic
+        private fun findScrollView(v: View): ScrollView? {
+            var p = v.parent
+            while (p != null) {
+                if (p is ScrollView) return p
+                p = p.parent
+            }
+            return null
+        }
+
+        /** 加载配音魔方音色列表到指定容器（启动已自动预载缓存，打开秒显，后台静默刷新）。 */
         @JvmStatic
         fun loadVoices(ctx: Context, parentAct: Activity, d: Float,
-                      voiceList: LinearLayout, statusTv: TextView, key: String) {
+                      voiceList: LinearLayout, statusTv: TextView, key: String,
+                      onCount: ((Int) -> Unit)? = null) {
             voiceList.removeAllViews()
+            // 启动已自动预载缓存 → 先展示缓存，后台静默刷新
+            val cached = loadCachedCubeVoices()
+            if (cached.isNotEmpty()) {
+                buildVoiceListUI(ctx, parentAct, d, voiceList, key, null, cached, ArrayList())
+                onCount?.invoke(cached.size)
+                Thread {
+                    val fresh = refreshCubeVoiceCache(key)
+                    if (fresh.isNotEmpty()) {
+                        parentAct.runOnUiThread {
+                            voiceList.removeAllViews()
+                            buildVoiceListUI(ctx, parentAct, d, voiceList, key, null, fresh, ArrayList())
+                            onCount?.invoke(fresh.size)
+                        }
+                    }
+                }.start()
+                return
+            }
             voiceList.addView(statusTv)
             statusTv.text = "校验Key中..."
             Thread {
@@ -1074,21 +1956,50 @@ class TTSPageView private constructor() {
                     if (!checkResult.startsWith("有效")) return@runOnUiThread
                     statusTv.text = "拉取内置音色列表..."
                 }
-                val builtin = fetchBuiltinVoices(key)
-                parentAct.runOnUiThread { statusTv.text = "拉取自定义音色列表..." }
-                val custom = fetchUserVoices(key)
-                // v986: 去重/过滤/截断等 CPU 重活在后台线程完成, 主线程只做必要的 View 构建,
-                // 防止音色数量很大时在主线程遍历构建造成卡顿/ANR。
-                val builtinFinal = compactVoices(builtin, MAX_VOICE_ROWS)
-                val customFinal = compactVoices(custom, Math.max(0, MAX_VOICE_ROWS - builtinFinal.size))
+                val all = refreshCubeVoiceCache(key)
                 parentAct.runOnUiThread {
                     voiceList.removeView(statusTv)
-                    buildVoiceListUI(ctx, parentAct, d, voiceList, key, builtinFinal, customFinal)
+                    onCount?.invoke(all.size)
+                    if (all.isEmpty()) {
+                        val hintTv = TextView(ctx)
+                        hintTv.text = "未获取到配音魔方音色，请检查 API Key 是否正确"
+                        hintTv.setTextSize(13f)
+                        hintTv.setTextColor(AppColors.text2())
+                        hintTv.setPadding((12 * d).toInt(), (12 * d).toInt(), (12 * d).toInt(), 0)
+                        voiceList.addView(hintTv)
+                    } else {
+                        buildVoiceListUI(ctx, parentAct, d, voiceList, key, null, all, ArrayList())
+                    }
                 }
             }.start()
         }
 
-        /** v986: 单次最多渲染的音色行数, 避免超长列表在主线程一次性构建。 */
+        /** 加载本地网关豆包音色列表到指定容器（配置弹窗保存后刷新用）。 */
+        @JvmStatic
+        fun loadGatewayVoices(ctx: Context, parentAct: Activity, d: Float,
+                              voiceList: LinearLayout, statusTv: TextView) {
+            voiceList.removeAllViews()
+            voiceList.addView(statusTv)
+            statusTv.text = "加载豆包音色..."
+            Thread {
+                com.leshao.v3.LogWriter.log("TTSPageView", "loadGatewayVoices: 加载内置傻包音色库 " + VOICE_LIBRARY.size + " 个")
+                val finalVoices = compactVoices(VOICE_LIBRARY, MAX_VOICE_ROWS)
+                parentAct.runOnUiThread {
+                    voiceList.removeView(statusTv)
+                    if (finalVoices.isEmpty()) {
+                        val hintTv = TextView(ctx)
+                        hintTv.text = "音色库为空"
+                        hintTv.setTextSize(13f)
+                        hintTv.setTextColor(AppColors.text2())
+                        hintTv.setPadding((12 * d).toInt(), (12 * d).toInt(), (12 * d).toInt(), 0)
+                        voiceList.addView(hintTv)
+                    } else {
+                        buildVoiceListUI(ctx, parentAct, d, voiceList, "", finalVoices, null, null)
+                    }
+                }
+            }.start()
+        }
+
         private fun compactVoices(src: List<VoiceItem?>?, max: Int): List<VoiceItem> {
             val out = ArrayList<VoiceItem>()
             if (src == null || max <= 0) return out
@@ -1104,21 +2015,571 @@ class TTSPageView private constructor() {
             return out
         }
 
-        private fun showKeyInputPopup(ctx: Context, parentAct: Activity, d: Float, keyBtn: Button,
-                                       voiceList: LinearLayout, statusTv: TextView) {
-            val root = M3Page.root(ctx)
-            root.addView(M3Page.section(ctx, "设置 API Key", "配置配音魔方接口密钥"))
+        // ===== TTS 播报多音色池（选择音色 · 随机播报） =====
 
-            val card = M3Page.card(ctx)
-            card.addView(M3Page.fieldLabel(ctx, "API Key"))
-            val keyEt = M3Page.input(ctx, "输入 API Key")
+        private const val KEY_VOICE_POOL = "tts_voice_pool"
+
+        /** 读取已选音色池，key 格式 "engine|voice"。 */
+        @JvmStatic
+        fun loadVoicePool(): MutableSet<String> {
+            val set = LinkedHashSet<String>()
+            try {
+                val arr = JSONArray(WmPrefs.getStr(KEY_VOICE_POOL, "[]"))
+                for (i in 0 until arr.length()) {
+                    val o = arr.getJSONObject(i)
+                    val e = o.optString("engine", "")
+                    val v = o.optString("voice", "")
+                    if (e.isNotEmpty() && v.isNotEmpty()) set.add(e + "|" + v)
+                }
+            } catch (ignored: Throwable) {}
+            return set
+        }
+
+        /** 保存音色池。 */
+        @JvmStatic
+        fun saveVoicePool(pool: Collection<String>) {
+            val arr = JSONArray()
+            for (key in pool) {
+                val idx = key.indexOf('|')
+                if (idx <= 0 || idx >= key.length - 1) continue
+                val o = JSONObject()
+                o.put("engine", key.substring(0, idx))
+                o.put("voice", key.substring(idx + 1))
+                arr.put(o)
+            }
+            WmPrefs.setStr(KEY_VOICE_POOL, arr.toString())
+        }
+
+        /** 从音色池随机取一个 key（engine|voice）；池为空返回 null。 */
+        @JvmStatic
+        fun randomVoiceFromPool(): String? {
+            val pool = loadVoicePool()
+            if (pool.isEmpty()) return null
+            val list = ArrayList(pool)
+            return list[java.util.concurrent.ThreadLocalRandom.current().nextInt(list.size)]
+        }
+
+        /** 统一音色试听：engine 支持 jianying（剪映）/ silly（豆包）/ cube（配音魔方）。 */
+        @JvmStatic
+        fun previewVoice(ctx: Context, parentAct: Activity, engine: String, voice: String) {
+            Toast.makeText(parentAct, "正在合成试听...", Toast.LENGTH_SHORT).show()
+            com.leshao.v3.LogWriter.log("TTSPageView", "previewVoice: engine=" + engine + " voice=" + voice)
+            Thread {
+                var result: String
+                try {
+                    when (engine) {
+                        "jianying" -> {
+                            // 每次试听独立发起（WS 已加 15s 握手超时，单个失败不影响其他）
+                            val pcm = com.leshao.v3.service.JianYingTtsClient.synthesize(
+                                    "欢迎使用乐少助手", voice, 25)
+                            val wavBytes = com.leshao.v3.service.JianYingTtsClient.pcmToWav(pcm, 24000)
+                            if (wavBytes == null) {
+                                result = "合成失败"
+                            } else {
+                                val wav = File(ctx.cacheDir,
+                                        "preview_" + System.currentTimeMillis() + ".wav")
+                                FileOutputStream(wav).use { it.write(wavBytes) }
+                                result = "OK:" + wav.absolutePath
+                            }
+                        }
+                        "silly" -> {
+                            val ogg = com.leshao.v3.service.DoubaoTtsV2Bridge.synthesize(
+                                    "欢迎使用乐少助手", voice, 30)
+                            val wav = File(ctx.cacheDir,
+                                    "preview_" + System.currentTimeMillis() + ".wav")
+                            result = if (com.leshao.v3.service.DoubaoTtsV2Bridge.writeWav(ogg, wav)) {
+                                "OK:" + wav.absolutePath
+                            } else {
+                                "解码失败"
+                            }
+                        }
+                        else -> {
+                            result = ttsPreviewVoice(WmPrefs.getStr("tts_cube_key", ""),
+                                    voice, "欢迎使用乐少助手")
+                        }
+                    }
+                } catch (t: Throwable) {
+                    result = "试听失败: " + t.message
+                }
+                val r = result
+                parentAct.runOnUiThread {
+                    if (r.startsWith("OK:")) {
+                        try {
+                            // 单例试听：先释放上一个播放器，避免快速点击累积
+                            try { sPreviewPlayer?.stop() } catch (ignored: Throwable) {}
+                            try { sPreviewPlayer?.release() } catch (ignored: Throwable) {}
+                            sPreviewPlayer = null
+                            val mp = android.media.MediaPlayer()
+                            sPreviewPlayer = mp
+                            mp.setDataSource(r.substring(3))
+                            mp.setOnErrorListener { _, _, _ ->
+                                try { mp.release() } catch (ignored: Throwable) {}
+                                if (sPreviewPlayer === mp) sPreviewPlayer = null
+                                true
+                            }
+                            mp.setOnCompletionListener {
+                                try { it.release() } catch (ignored: Throwable) {}
+                                if (sPreviewPlayer === it) sPreviewPlayer = null
+                            }
+                            mp.prepare()
+                            mp.start()
+                        } catch (t: Throwable) {
+                            Toast.makeText(parentAct, "播放失败: " + t.message,
+                                    Toast.LENGTH_SHORT).show()
+                        }
+                    } else {
+                        Toast.makeText(parentAct, r, Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }.start()
+        }
+
+        /** 音色系列「选择音色」多选对话框：支持全选、跨竹节跳动/傻包/配音魔方。 */
+        @JvmStatic
+        fun showVoicePoolPicker(ctx: Context, parentAct: Activity, d: Float) {
+            val pool = loadVoicePool()
+
+            val outerLayout = LinearLayout(ctx)
+            outerLayout.orientation = LinearLayout.VERTICAL
+            outerLayout.setBackground(CandyUi.pageGradient())
+            outerLayout.setPadding((14 * d).toInt(), (12 * d).toInt(), (14 * d).toInt(), (10 * d).toInt())
+            InsetsUtil.clipRounded(outerLayout)
+
+            val titleBar = LinearLayout(ctx)
+            titleBar.orientation = LinearLayout.HORIZONTAL
+            titleBar.gravity = Gravity.CENTER_VERTICAL
+            val titleTv = TextView(ctx)
+            titleTv.text = "选择音色（多音色随机播报）"
+            titleTv.setTextSize(16f)
+            titleTv.setTextColor(AppColors.textPrimary())
+            titleTv.setTypeface(null, Typeface.BOLD)
+            titleTv.gravity = Gravity.CENTER
+            val ttlp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            titleBar.addView(titleTv, ttlp)
+            outerLayout.addView(titleBar)
+            outerLayout.addView(candyDivider(ctx, d))
+
+            // 三个来源 tab
+            val tabRow = LinearLayout(ctx)
+            tabRow.orientation = LinearLayout.HORIZONTAL
+            tabRow.gravity = Gravity.CENTER_VERTICAL
+            tabRow.setPadding((4 * d).toInt(), (6 * d).toInt(), (4 * d).toInt(), (6 * d).toInt())
+
+            val tabJianying = TextView(ctx)
+tabJianying.text = "竹节跳动 " + com.leshao.v3.service.JianYingTtsClient.voices().size + "个"
+            tabJianying.setTextSize(11f)
+            tabJianying.gravity = Gravity.CENTER
+            tabJianying.setSingleLine(true)
+            tabJianying.setPadding((4 * d).toInt(), (6 * d).toInt(), (4 * d).toInt(), (6 * d).toInt())
+            tabJianying.setBackground(CandyUi.gradientBg(ctx, 16f))
+            tabJianying.setTextColor(AppColors.onPrimary())
+            val tabL0 = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            tabL0.setMargins(0, 0, (3 * d).toInt(), 0)
+            tabRow.addView(tabJianying, tabL0)
+
+            val tabGateway = TextView(ctx)
+            tabGateway.text = "傻包音色 " + VOICE_LIBRARY.size + "个"
+            tabGateway.setTextSize(11f)
+            tabGateway.gravity = Gravity.CENTER
+            tabGateway.setSingleLine(true)
+            tabGateway.setPadding((4 * d).toInt(), (6 * d).toInt(), (4 * d).toInt(), (6 * d).toInt())
+            tabGateway.setBackground(CandyUi.cardBg(ctx))
+            tabGateway.setTextColor(AppColors.text1())
+            val tabL1 = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            tabL1.setMargins((3 * d).toInt(), 0, (3 * d).toInt(), 0)
+            tabRow.addView(tabGateway, tabL1)
+
+            val tabCube = TextView(ctx)
+            tabCube.text = "配音魔方"
+            tabCube.setTextSize(11f)
+            tabCube.gravity = Gravity.CENTER
+            tabCube.setSingleLine(true)
+            tabCube.setPadding((4 * d).toInt(), (6 * d).toInt(), (4 * d).toInt(), (6 * d).toInt())
+            tabCube.setBackground(CandyUi.cardBg(ctx))
+            tabCube.setTextColor(AppColors.text1())
+            val tabL2 = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            tabL2.setMargins((3 * d).toInt(), 0, 0, 0)
+            tabRow.addView(tabCube, tabL2)
+            outerLayout.addView(tabRow)
+
+            // 固定搜索框（不随分页重建，点击弹出输入法，实时过滤）
+            val searchEt2 = android.widget.EditText(ctx)
+            searchEt2.hint = "搜索音色名称 / ID"
+            searchEt2.setTextSize(14f)
+            searchEt2.setTextColor(AppColors.text1())
+            searchEt2.setHintTextColor(AppColors.text3())
+            searchEt2.setSingleLine(true)
+            val searchBg3 = GradientDrawable()
+            searchBg3.setColor(AppColors.inputBg())
+            searchBg3.cornerRadius = (AppColors.SHAPE_INPUT_DP * d).toFloat()
+            searchEt2.background = searchBg3
+            searchEt2.setPadding((10 * d).toInt(), (8 * d).toInt(), (10 * d).toInt(), (8 * d).toInt())
+            val searchEt2Lp = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            searchEt2Lp.setMargins((4 * d).toInt(), 0, (4 * d).toInt(), (6 * d).toInt())
+            outerLayout.addView(searchEt2, searchEt2Lp)
+            val searchQuery2 = arrayOf("")
+            val baseItems2 = arrayOf<MutableList<Array<String>>>(ArrayList())
+            val searchCallback2 = arrayOf<((String) -> Unit)?>(null)
+            searchEt2.setOnClickListener { showIme(searchEt2) }
+            searchEt2.addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence, st: Int, cnt: Int, aft: Int) {}
+                override fun onTextChanged(s: CharSequence, st: Int, bef: Int, cnt: Int) {}
+                override fun afterTextChanged(s: Editable) {
+                    val cb = searchCallback2[0]
+                    if (cb != null) cb(if (s == null) "" else s.toString())
+                }
+            })
+
+            fun selectTab(tab: String) {
+                tabJianying.setBackground(if (tab == "jianying") CandyUi.gradientBg(ctx, 16f) else CandyUi.cardBg(ctx))
+                tabJianying.setTextColor(if (tab == "jianying") AppColors.onPrimary() else AppColors.text1())
+                tabGateway.setBackground(if (tab == "gateway") CandyUi.gradientBg(ctx, 16f) else CandyUi.cardBg(ctx))
+                tabGateway.setTextColor(if (tab == "gateway") AppColors.onPrimary() else AppColors.text1())
+                tabCube.setBackground(if (tab == "cube") CandyUi.gradientBg(ctx, 16f) else CandyUi.cardBg(ctx))
+                tabCube.setTextColor(if (tab == "cube") AppColors.onPrimary() else AppColors.text1())
+            }
+
+            // 列表容器
+            val voiceList = LinearLayout(ctx)
+            voiceList.orientation = LinearLayout.VERTICAL
+            val sv = ScrollView(ctx)
+            sv.addView(voiceList)
+            val svLp = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
+            sv.layoutParams = svLp
+            outerLayout.addView(sv)
+
+            val currentTab = java.util.concurrent.atomic.AtomicReference<String>("jianying")
+
+            // 底部操作栏：全选 | 上一页 | 页数 | 下一页 | 保存（每页 50）
+            val PAGE_SIZE = 50
+            val currentPage = intArrayOf(0)
+            val currentItems = arrayOf<MutableList<Array<String>>>(ArrayList())
+
+            val bottomBar = LinearLayout(ctx)
+            bottomBar.orientation = LinearLayout.HORIZONTAL
+            bottomBar.gravity = Gravity.CENTER_VERTICAL
+            bottomBar.setPadding((12 * d).toInt(), (10 * d).toInt(), (12 * d).toInt(), (10 * d).toInt())
+
+            // 底部栏按钮统一模块风格主色（跟随 M3 动态取色/浅色暗色）
+            fun makeBottomBtn(text: String): Button {
+                val b = Button(ctx)
+                b.text = text
+                b.setTextSize(13f)
+                b.isAllCaps = false
+                b.setTextColor(AppColors.onPrimary())
+                b.gravity = Gravity.CENTER
+                b.setBackground(CandyUi.gradientBg(ctx, AppColors.SHAPE_MD_DP.toFloat()))
+                b.setPadding(0, (8 * d).toInt(), 0, (8 * d).toInt())
+                b.minimumHeight = (36 * d).toInt()
+                return b
+            }
+            val selectAllBtn = makeBottomBtn("全选")
+            val prevBtn = makeBottomBtn("上页")
+            val pageTv = TextView(ctx)
+            pageTv.text = "1/1"
+            pageTv.setTextSize(13f)
+            pageTv.setTextColor(AppColors.text1())
+            pageTv.gravity = Gravity.CENTER
+            val nextBtn = makeBottomBtn("下页")
+            val saveBtn = makeBottomBtn("保存")
+
+            // 按钮等宽均分整行，间距一致，从左到右刚好铺满
+            fun poolEqLp(left: Int, right: Int): LinearLayout.LayoutParams {
+                val lp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                lp.leftMargin = left
+                lp.rightMargin = right
+                return lp
+            }
+            val poolGap = (4 * d).toInt()
+            bottomBar.addView(selectAllBtn, poolEqLp(0, poolGap))
+            bottomBar.addView(prevBtn, poolEqLp(poolGap, poolGap))
+            bottomBar.addView(pageTv, poolEqLp(poolGap, poolGap))
+            bottomBar.addView(nextBtn, poolEqLp(poolGap, poolGap))
+            bottomBar.addView(saveBtn, poolEqLp(poolGap, 0))
+            outerLayout.addView(bottomBar)
+
+            val dialog = AlertDialog.Builder(parentAct).create()
+
+            fun totalPages(): Int {
+                val size = currentItems[0].size
+                return if (size == 0) 1 else (size + PAGE_SIZE - 1) / PAGE_SIZE
+            }
+
+            fun engineOf(tab: String): String = when (tab) {
+                "gateway" -> "silly"
+                "cube" -> "cube"
+                else -> "jianying"
+            }
+
+            fun renderPage(tab: String) {
+                voiceList.removeAllViews()
+                val engine = engineOf(tab)
+                val base = baseItems2[0]
+                val q = searchQuery2[0].trim().lowercase()
+                // ★ 选中的音色靠前，再按搜索词过滤
+                val sorted = base.sortedByDescending { pool.contains(engine + "|" + it[0]) }
+                val items = if (q.isEmpty()) sorted else sorted.filter {
+                    ((it[1] ?: "").lowercase().contains(q)) || ((it[0] ?: "").lowercase().contains(q))
+                }
+                currentItems[0] = ArrayList(items)
+                val total = totalPages()
+                if (currentPage[0] >= total) currentPage[0] = total - 1
+                if (currentPage[0] < 0) currentPage[0] = 0
+                val start = currentPage[0] * PAGE_SIZE
+                val end = Math.min(start + PAGE_SIZE, items.size)
+                if (items.isEmpty()) {
+                    val emptyTv = TextView(ctx)
+                    emptyTv.text = if (q.isEmpty()) "暂无音色" else "未找到匹配音色"
+                    emptyTv.setTextSize(13f)
+                    emptyTv.setTextColor(AppColors.text2())
+                    emptyTv.setPadding((12 * d).toInt(), (10 * d).toInt(), (12 * d).toInt(), 0)
+                    voiceList.addView(emptyTv)
+                } else {
+                    for (i in start until end) {
+                        val it = items[i]
+                        voiceList.addView(makePoolCheckRow(ctx, d, pool, engine, it[0], it[1], it[2]) {
+                            previewVoice(ctx, parentAct, engine, it[0])
+                        })
+                    }
+                }
+                pageTv.text = (currentPage[0] + 1).toString() + "/" + total
+                prevBtn.isEnabled = currentPage[0] > 0
+                nextBtn.isEnabled = currentPage[0] < total - 1
+            }
+
+            // 搜索回调注册（renderPage 定义后）
+            searchCallback2[0] = { q ->
+                searchQuery2[0] = q
+                currentPage[0] = 0
+                renderPage(currentTab.get())
+            }
+
+            fun render(tab: String) {
+                voiceList.removeAllViews()
+                if (tab == "cube") {
+                    val k = WmPrefs.getStr("tts_cube_key", "")
+                    if (k.isEmpty()) {
+                        val hintTv = TextView(ctx)
+                        hintTv.text = "未配置配音魔方 API Key，请先在「配音魔方接口配置」中设置"
+                        hintTv.setTextSize(13f)
+                        hintTv.setTextColor(AppColors.text2())
+                        hintTv.setPadding((12 * d).toInt(), (10 * d).toInt(), (12 * d).toInt(), 0)
+                        voiceList.addView(hintTv)
+                        baseItems2[0] = ArrayList()
+                        currentItems[0] = ArrayList()
+                        currentPage[0] = 0
+                        pageTv.text = "1/1"
+                        prevBtn.isEnabled = false
+                        nextBtn.isEnabled = false
+                        return
+                    }
+                    // 启动已自动预载缓存 → 直接秒显，无需手动点击等待
+                    val cached = loadCachedCubeVoices()
+                    if (cached.isNotEmpty()) {
+                        val items = ArrayList<Array<String>>()
+                        for (vi in cached) {
+                            val id = vi.voiceId ?: continue
+                            items.add(arrayOf(id, vi.displayName ?: id, "配音魔方"))
+                        }
+                        baseItems2[0] = items
+                        currentItems[0] = ArrayList(items)
+                        currentPage[0] = 0
+                        tabCube.text = "配音魔方 " + items.size + "个"
+                        renderPage(tab)
+                        return
+                    }
+                    voiceList.addView(TextView(ctx).apply {
+                        text = "加载配音魔方音色..."
+                        setTextSize(13f)
+                        setTextColor(AppColors.text2())
+                        setPadding((12 * d).toInt(), (10 * d).toInt(), (12 * d).toInt(), 0)
+                    })
+                    Thread {
+                        val all = refreshCubeVoiceCache(k)
+                        parentAct.runOnUiThread {
+                            val items = ArrayList<Array<String>>()
+                            for (vi in all) {
+                                val id = vi.voiceId ?: continue
+                                items.add(arrayOf(id, vi.displayName ?: id, "配音魔方"))
+                            }
+                            tabCube.text = "配音魔方 " + items.size + "个"
+                            baseItems2[0] = items
+                            currentItems[0] = ArrayList(items)
+                            currentPage[0] = 0
+                            renderPage(tab)
+                        }
+                    }.start()
+                    return
+                }
+                val items = ArrayList<Array<String>>()
+                when (tab) {
+                    "jianying" -> {
+                        for (v in com.leshao.v3.service.JianYingTtsClient.voices()) {
+                            items.add(arrayOf(v.voiceType, v.title ?: v.voiceType, if (v.vip) "VIP音色" else ""))
+                        }
+                    }
+                    "gateway" -> {
+                        for (vi in VOICE_LIBRARY) {
+                            val id = vi.voiceId ?: continue
+                            items.add(arrayOf(id, vi.displayName ?: id, "傻包音色"))
+                        }
+                    }
+                }
+                baseItems2[0] = items
+                currentItems[0] = ArrayList(items)
+                currentPage[0] = 0
+                renderPage(tab)
+            }
+
+            tabJianying.setOnClickListener { currentTab.set("jianying"); selectTab("jianying"); render("jianying") }
+            tabGateway.setOnClickListener { currentTab.set("gateway"); selectTab("gateway"); render("gateway") }
+            tabCube.setOnClickListener { currentTab.set("cube"); selectTab("cube"); render("cube") }
+
+            prevBtn.setOnClickListener {
+                if (currentPage[0] > 0) {
+                    currentPage[0]--
+                    renderPage(currentTab.get())
+                }
+            }
+            nextBtn.setOnClickListener {
+                if (currentPage[0] < totalPages() - 1) {
+                    currentPage[0]++
+                    renderPage(currentTab.get())
+                }
+            }
+
+            selectAllBtn.setOnClickListener {
+                val tab = currentTab.get()
+                val engine = engineOf(tab)
+                val items = currentItems[0]
+                if (items.isEmpty()) return@setOnClickListener
+                val start = currentPage[0] * PAGE_SIZE
+                val end = Math.min(start + PAGE_SIZE, items.size)
+                for (i in start until end) {
+                    pool.add(engine + "|" + items[i][0])
+                }
+                renderPage(tab)
+                Toast.makeText(parentAct, "已全选本页 " + (end - start) + " 个音色", Toast.LENGTH_SHORT).show()
+            }
+
+            saveBtn.setOnClickListener {
+                saveVoicePool(pool)
+                Toast.makeText(parentAct, "已保存 " + pool.size + " 个音色，播报时将随机使用", Toast.LENGTH_SHORT).show()
+                dialog.dismiss()
+            }
+
+
+            selectTab("jianying")
+            render("jianying")
+
+            // 设置视图并显示对话框（此前遗漏 show 导致点击无窗口）
+            val host = InsetsUtil.windowAutoHeight(dialog, outerLayout, 0.9f)
+            dialog.setView(host)
+            dialog.show()
+            WindowLayer.track(dialog.window)
+            try {
+                val w = dialog.window
+                w?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
+                w?.setSoftInputMode(
+                        android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+            } catch (ignored: Throwable) {}
+        }
+
+        /** 多选音色行：CheckBox + 名称 + 来源小标签 + 🎧 试听。 */
+        private fun makePoolCheckRow(ctx: Context, d: Float, pool: MutableSet<String>,
+                                  engine: String, voice: String, title: String, tag: String,
+                                  preview: () -> Unit): View {
+            val row = LinearLayout(ctx)
+            row.orientation = LinearLayout.HORIZONTAL
+            row.gravity = Gravity.CENTER_VERTICAL
+            row.setPadding((8 * d).toInt(), (6 * d).toInt(), (8 * d).toInt(), (6 * d).toInt())
+            row.isClickable = true
+            row.isFocusable = true
+            val key = engine + "|" + voice
+            val checked = arrayOf(key in pool)
+            // 自绘圆形勾选：选中=主题色底+白✓，未选中=透明底+outline描边
+            val cb = TextView(ctx)
+            cb.setTextSize(14f)
+            cb.gravity = Gravity.CENTER
+            cb.setTypeface(null, Typeface.BOLD)
+            fun refreshCb() {
+                cb.text = if (checked[0]) "✔" else ""
+                cb.setTextColor(if (checked[0]) AppColors.onPrimary() else android.graphics.Color.TRANSPARENT)
+                val bg = GradientDrawable()
+                bg.setShape(GradientDrawable.OVAL)
+                bg.setColor(if (checked[0]) AppColors.primary() else 0x00FFFFFF.toInt())
+                bg.setStroke((1.5f * d).toInt(), if (checked[0]) AppColors.primary() else AppColors.outline())
+                cb.setBackground(bg)
+            }
+            refreshCb()
+            val cbLp = LinearLayout.LayoutParams((28 * d).toInt(), (28 * d).toInt())
+            row.addView(cb, cbLp)
+
+            val nameTv = TextView(ctx)
+            nameTv.text = title
+            nameTv.setTextSize(15f)
+            nameTv.setTextColor(AppColors.textPrimary())
+            val nameLp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            nameLp.leftMargin = (4 * d).toInt()
+            row.addView(nameTv, nameLp)
+
+            // 来源标签颜色跟随音色系：VIP音色=金色 / 傻包音色=蓝色 / 配音魔方=绿色；非 VIP 留空
+            val tagColor = when (tag) {
+                "VIP音色" -> 0xFFFFB300.toInt()
+                "傻包音色" -> 0xFF2196F3.toInt()
+                "配音魔方" -> 0xFFF5B301.toInt()
+                else -> AppColors.text2()
+            }
+            val tagTv = TextView(ctx)
+            tagTv.text = tag
+            tagTv.setTextSize(10f)
+            tagTv.setTextColor(tagColor)
+            tagTv.setTypeface(null, Typeface.BOLD)
+            tagTv.visibility = if (tag.isEmpty()) View.GONE else View.VISIBLE
+            val tagLp = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            tagLp.leftMargin = (4 * d).toInt()
+            row.addView(tagTv, tagLp)
+
+            // 试听按钮（独立点击，不触发勾选；尺寸与勾选一致，耳机颜色跟随音色系）
+            val earTv = TextView(ctx)
+            earTv.text = ""
+            earTv.gravity = Gravity.CENTER
+            earTv.isClickable = true
+            earTv.isFocusable = true
+            earTv.setBackground(HeadphoneIconDrawable(tagColor))
+            val earLp = LinearLayout.LayoutParams((28 * d).toInt(), (28 * d).toInt())
+            earLp.leftMargin = (4 * d).toInt()
+            earTv.setOnClickListener { preview() }
+            row.addView(earTv, earLp)
+
+            CandyUi.ripple(row, AppColors.SHAPE_SM_DP.toFloat())
+            row.setOnClickListener {
+                checked[0] = !checked[0]
+                if (checked[0]) pool.add(key) else pool.remove(key)
+                refreshCb()
+            }
+            return row
+        }
+
+        private fun showKeyInputPopup(ctx: Context, parentAct: Activity, d: Float, keyBtn: Button,
+                                       voiceList: LinearLayout, statusTv: TextView,
+                                       currentTab: java.util.concurrent.atomic.AtomicReference<String>) {
+            val root = M3Page.root(ctx)
+            root.addView(M3Page.section(ctx, "接口配置",
+                    "配音魔方 API Key 配置；豆包音色为免登录默认音色，无需任何 Key/网关"))
+
+            // 配音魔方
+            root.addView(M3Page.fieldLabel(ctx, "配音魔方 API Key"))
+            val keyEt = M3Page.input(ctx, "输入配音魔方 API Key（可留空）")
             keyEt.setText(WmPrefs.getStr("tts_cube_key", ""))
             M3Page.trimEdgesOnInput(keyEt)
-            card.addView(keyEt)
-            root.addView(card)
+            root.addView(keyEt)
 
             val b = AlertDialog.Builder(parentAct)
-            b.setView(InsetsUtil.window(null, root, 0.9f, 0.5f))
+            b.setView(InsetsUtil.window(null, root, 0.9f, 0.45f))
             b.setCancelable(true)
             val dlg = b.create()
             InsetsUtil.centerAutoHeight(dlg, 0.9f)
@@ -1129,13 +2590,9 @@ class TTSPageView private constructor() {
 
             val saveBtn = M3Page.button(ctx, "保存") {
                 val key = keyEt.text.toString().trim()
-                if (key.isEmpty()) {
-                    Toast.makeText(parentAct, "请输入Key", Toast.LENGTH_SHORT).show()
-                    return@button
-                }
                 WmPrefs.setStr("tts_cube_key", key)
-                Toast.makeText(parentAct, "Key已保存", Toast.LENGTH_SHORT).show()
-                loadVoices(ctx, parentAct, d, voiceList, statusTv, key)
+                Toast.makeText(parentAct, "配置已保存，请重新点击「配音魔方」标签刷新",
+                        Toast.LENGTH_SHORT).show()
                 dlg.dismiss()
             }
             val cancelBtn = M3Page.ghostButton(ctx, "取消") { dlg.dismiss() }
@@ -1151,30 +2608,27 @@ class TTSPageView private constructor() {
 
         private fun buildVoiceListUI(ctx: Context, parentAct: Activity, d: Float,
                                      voiceList: LinearLayout, key: String,
-                                     builtin: List<VoiceItem>?, custom: List<VoiceItem>?) {
-            buildVoiceListUI(ctx, parentAct, d, voiceList, key, builtin, custom, "")
+                                     gateway: List<VoiceItem>?, builtin: List<VoiceItem>?, custom: List<VoiceItem>?) {
+            buildVoiceListUI(ctx, parentAct, d, voiceList, key, gateway, builtin, custom, "")
         }
 
         private fun buildVoiceListUI(ctx: Context, parentAct: Activity, d: Float,
                                      voiceList: LinearLayout, key: String,
-                                     builtin: List<VoiceItem>?, custom: List<VoiceItem>?,
+                                     gateway: List<VoiceItem>?, builtin: List<VoiceItem>?, custom: List<VoiceItem>?,
                                      searchHint: String?) {
             val savedVoice = WmPrefs.getStr("tts_cube_voice", "")
-
-            // 标题栏
-            val listTitle = TextView(ctx)
-            listTitle.text = "选择默认音色"
-            listTitle.setTextSize(14f)
-            listTitle.setTextColor(AppColors.text1())
-            listTitle.setTypeface(null, Typeface.BOLD)
-            listTitle.setPadding(0, (8 * d).toInt(), 0, (8 * d).toInt())
-            voiceList.addView(listTitle)
+            val savedGatewayVoice = WmPrefs.getStr("tts_gateway_voice", "")
 
             // 搜索框
             val searchEt = EditText(ctx)
-            searchEt.setHint("搜索音色名称/影视剧...")
+            searchEt.setHint("搜索音色名称...")
             searchEt.setTextSize(13f)
             searchEt.setSingleLine(true)
+            searchEt.isFocusable = true
+            searchEt.isFocusableInTouchMode = true
+            searchEt.isClickable = true
+            searchEt.inputType = android.text.InputType.TYPE_CLASS_TEXT
+            searchEt.imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
             searchEt.setPadding((8 * d).toInt(), (8 * d).toInt(), (8 * d).toInt(), (8 * d).toInt())
             searchEt.setHintTextColor(AppColors.text3())
             if (searchHint != null && searchHint.isNotEmpty()) {
@@ -1185,6 +2639,17 @@ class TTSPageView private constructor() {
             sBg.setCornerRadius((AppColors.SHAPE_INPUT_DP * d).toInt().toFloat())
             sBg.setStroke((1.5f * d).toInt(), AppColors.stroke())
             searchEt.setBackground(sBg)
+            // 确保点击可聚焦并弹出输入法
+            searchEt.setOnTouchListener { _, event ->
+                searchEt.requestFocus()
+                if (event.action == android.view.MotionEvent.ACTION_UP) {
+                    showIme(searchEt)
+                }
+                false
+            }
+            searchEt.setOnClickListener {
+                showIme(searchEt)
+            }
             voiceList.addView(searchEt)
 
             // 刷新回调：重新构建列表并保留搜索关键词
@@ -1192,7 +2657,7 @@ class TTSPageView private constructor() {
             refreshUi[0] = Runnable {
                 val q = searchEt.text.toString()
                 voiceList.removeAllViews()
-                buildVoiceListUI(ctx, parentAct, d, voiceList, key, builtin, custom, q)
+                buildVoiceListUI(ctx, parentAct, d, voiceList, key, gateway, builtin, custom, q)
             }
 
             // 收集所有voice rows用于搜索
@@ -1200,16 +2665,18 @@ class TTSPageView private constructor() {
             val allVoiceSearchText = ArrayList<String>()
             val groupHeaders = ArrayList<View>()
 
-            // 内置音色 (按影视剧分组)
-            if (builtin != null && builtin.isNotEmpty()) {
-                val secTitle = TextView(ctx)
-                secTitle.text = "内置音色 (按影视剧分组):"
-                secTitle.setTextSize(13f)
-                secTitle.setTextColor(AppColors.text1())
-                secTitle.setTypeface(null, Typeface.BOLD)
-                secTitle.setPadding(0, (12 * d).toInt(), 0, (6 * d).toInt())
-                voiceList.addView(secTitle)
+            // ★ 傻包音色（免登录）—— 列表顶部，无小标题
+            if (gateway != null && gateway.isNotEmpty()) {
+                for (vi in gateway) {
+                    val row = buildVoiceRow(ctx, parentAct, d, key, vi, savedGatewayVoice, refreshUi[0], true)
+                    voiceList.addView(row)
+                    allVoiceRows.add(row)
+                    allVoiceSearchText.add((vi.displayName ?: vi.voiceId) + "|" + (vi.group ?: ""))
+                }
+            }
 
+            // 内置音色（无外层小标题，保留分组标题）
+            if (builtin != null && builtin.isNotEmpty()) {
                 // 按 group 分组
                 var currentGroup: String? = null
                 for (vi in builtin) {
@@ -1224,7 +2691,7 @@ class TTSPageView private constructor() {
                         voiceList.addView(gTitle)
                         groupHeaders.add(gTitle)
                     }
-                    val row = buildVoiceRow(ctx, parentAct, d, key, vi, savedVoice, refreshUi[0])
+                    val row = buildVoiceRow(ctx, parentAct, d, key, vi, savedVoice, refreshUi[0], false)
                     voiceList.addView(row)
                     allVoiceRows.add(row)
                     allVoiceSearchText.add((vi.displayName ?: vi.voiceId) + "|" + vi.group + "|" + (vi.actor ?: ""))
@@ -1241,7 +2708,7 @@ class TTSPageView private constructor() {
                 secTitle.setPadding(0, (12 * d).toInt(), 0, (6 * d).toInt())
                 voiceList.addView(secTitle)
                 for (vi in custom) {
-                    val row = buildVoiceRow(ctx, parentAct, d, key, vi, savedVoice, refreshUi[0])
+                    val row = buildVoiceRow(ctx, parentAct, d, key, vi, savedVoice, refreshUi[0], false)
                     voiceList.addView(row)
                     allVoiceRows.add(row)
                     allVoiceSearchText.add(vi.displayName ?: vi.voiceId ?: "")
@@ -1286,69 +2753,100 @@ class TTSPageView private constructor() {
         }
 
         private fun buildVoiceRow(ctx: Context, parentAct: Activity, d: Float,
-                                  key: String, vi: VoiceItem, savedVoice: String, onSelected: Runnable?): View {
+                                  key: String, vi: VoiceItem, savedVoice: String, onSelected: Runnable?,
+                                  isGateway: Boolean): View {
+            // ★ 免登录多音色方案（doubao-tts-icl-voicepack）：豆包音色 tab 全部免登录，选中状态看 tts_freelogin_voice
+            val isFreeLogin = isGateway
+            val isSelected = if (isFreeLogin) {
+                vi.voiceId == WmPrefs.getStr("tts_freelogin_voice", "")
+            } else {
+                vi.voiceId == savedVoice
+            }
+
+            // 外层垂直容器：内容行 + 小分割线（M3 主题风格，列表不再紧凑）
+            val container = LinearLayout(ctx)
+            container.orientation = LinearLayout.VERTICAL
+            container.setPadding((8 * d).toInt(), (6 * d).toInt(), (8 * d).toInt(), (6 * d).toInt())
+
             val vRow = LinearLayout(ctx)
             vRow.orientation = LinearLayout.HORIZONTAL
             vRow.gravity = Gravity.CENTER_VERTICAL
-            vRow.setPadding(0, (4 * d).toInt(), 0, (4 * d).toInt())
 
-            val isSelected = vi.voiceId == savedVoice
-
-            // 选择按钮（左侧）
+            // 选择按钮（左侧，加大 3dp）
             val selBtn = TextView(ctx)
             selBtn.text = if (isSelected) "✔" else ""
-            selBtn.setTextSize(13f)
+            selBtn.setTextSize(15f)
             selBtn.gravity = Gravity.CENTER
             selBtn.setTextColor(if (isSelected) AppColors.accent() else AppColors.text3())
             selBtn.setTypeface(null, Typeface.BOLD)
             val selBg = GradientDrawable()
             selBg.setShape(GradientDrawable.OVAL)
-            selBg.setColor(if (isSelected) 0x332196F3.toInt() else 0x00FFFFFF.toInt())
+            selBg.setColor(if (isSelected)
+                    ((AppColors.primary() and 0x00FFFFFF) or (0x33 shl 24)) else 0x00FFFFFF.toInt())
             selBg.setStroke((1.5f * d).toInt(), if (isSelected) AppColors.accent() else AppColors.text3())
             selBtn.setBackground(selBg)
-            val selSize = (22 * d).toInt()
+            val selSize = (25 * d).toInt()
             selBtn.layoutParams = LinearLayout.LayoutParams(selSize, selSize)
             vRow.addView(selBtn)
 
-            vRow.addView(spacerH(ctx, d, 8))
+            vRow.addView(spacerH(ctx, d, 10))
 
-            // 名称 + 演员（流体渐变霓虹糖果色 + 加粗）
+            // 名称 + 演员（加大 3dp）
             val displayName = vi.displayName ?: vi.voiceId
             val actor = vi.actor
             val subtitle = if (actor != null && actor.isNotEmpty()) " (" + actor + ")" else ""
             val vName = TextView(ctx)
             vName.text = displayName + subtitle
-            vName.setTextSize(13f)
+            vName.setTextSize(16f)
             vName.setTextColor(AppColors.text1())
             vName.setTypeface(null, Typeface.BOLD)
             val vnlp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             vRow.addView(vName, vnlp)
 
-            // 试听按钮
+            // 试听按钮（主题色耳机图标，尺寸与左侧勾选一致）
             val listenBtn = TextView(ctx)
-            listenBtn.text = "试听"
-            listenBtn.setTextSize(12f)
-            listenBtn.setTextColor(AppColors.accent())
+            listenBtn.text = ""
             listenBtn.gravity = Gravity.CENTER
-            listenBtn.setPadding((8 * d).toInt(), (4 * d).toInt(), (8 * d).toInt(), (4 * d).toInt())
-            listenBtn.paint.flags = Paint.UNDERLINE_TEXT_FLAG
+            listenBtn.setBackground(HeadphoneIconDrawable(AppColors.primary()))
+            val iconSize = (28 * d).toInt()
+            listenBtn.layoutParams = LinearLayout.LayoutParams(iconSize, iconSize)
             vRow.addView(listenBtn)
 
             CandyUi.ripple(listenBtn, AppColors.SHAPE_FULL_DP.toFloat())
             listenBtn.setOnClickListener {
                 Thread {
-                    val result = ttsPreviewVoice(key, vi.voiceId ?: "", "欢迎使用配音魔方")
+                    val result = if (isGateway) {
+                        // 免登录豆包音色：直接用选中 voiceId 合成试听
+                        freeLoginPreview(vi.voiceId ?: "", "欢迎使用乐少助手")
+                    } else {
+                        ttsPreviewVoice(key, vi.voiceId ?: "", "欢迎使用乐少助手")
+                    }
                     if (result.startsWith("OK:")) {
+                        // 单例试听：先释放上一个播放器
+                        try { sPreviewPlayer?.stop() } catch (ignored: Throwable) {}
+                        try { sPreviewPlayer?.release() } catch (ignored: Throwable) {}
+                        sPreviewPlayer = null
                         val mp = MediaPlayer()
+                        sPreviewPlayer = mp
                         try {
                             mp.setDataSource(result.substring(3))
+                            mp.setOnErrorListener { _, _, _ ->
+                                try { mp.release() } catch (ignored: Throwable) {}
+                                if (sPreviewPlayer === mp) sPreviewPlayer = null
+                                true
+                            }
+                            mp.setOnCompletionListener {
+                                try { it.release() } catch (ignored: Throwable) {}
+                                if (sPreviewPlayer === it) sPreviewPlayer = null
+                            }
                             mp.prepare()
                             mp.start()
-                            mp.setOnCompletionListener { it.release() }
                             parentAct.runOnUiThread {
                                 Toast.makeText(parentAct, "试听: " + displayName, Toast.LENGTH_SHORT).show()
                             }
                         } catch (e: Exception) {
+                            try { mp.release() } catch (ignored: Throwable) {}
+                            if (sPreviewPlayer === mp) sPreviewPlayer = null
                             parentAct.runOnUiThread {
                                 Toast.makeText(parentAct, "播放失败: " + e.message, Toast.LENGTH_SHORT).show()
                             }
@@ -1363,24 +2861,168 @@ class TTSPageView private constructor() {
 
             CandyUi.ripple(selBtn, AppColors.SHAPE_FULL_DP.toFloat())
             selBtn.setOnClickListener {
-                WmPrefs.setStr("tts_cube_voice", vi.voiceId ?: "")
+                if (isGateway) {
+                    // 豆包音色（免登录）：保存 voiceId，与其他来源互斥
+                    WmPrefs.setStr("tts_freelogin_voice", vi.voiceId ?: "")
+                    WmPrefs.setStr("tts_gateway_voice", "")
+                    WmPrefs.setStr("tts_cube_voice", "")
+                } else {
+                    // 配音魔方音色
+                    WmPrefs.setStr("tts_cube_voice", vi.voiceId ?: "")
+                    WmPrefs.setStr("tts_gateway_voice", "")
+                    WmPrefs.setStr("tts_freelogin_voice", "")
+                }
                 Toast.makeText(parentAct, "已选择默认音色: " + displayName, Toast.LENGTH_SHORT).show()
                 if (onSelected != null) onSelected.run()
             }
 
-            return vRow
+            container.addView(vRow)
+
+            // 每个音色小分割线
+            val divider = View(ctx)
+            divider.setBackgroundColor(AppColors.divider())
+            val dlp = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, Math.max(1, (0.8f * d).toInt()))
+            dlp.topMargin = (6 * d).toInt()
+            dlp.bottomMargin = (2 * d).toInt()
+            container.addView(divider, dlp)
+
+            return container
+        }
+
+        /** 显式弹出输入法（修复搜索框点击无反应）。 */
+        private fun showIme(et: EditText) {
+            try {
+                val imm = et.context.getSystemService(Context.INPUT_METHOD_SERVICE)
+                        as android.view.inputmethod.InputMethodManager
+                imm.showSoftInput(et, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+            } catch (ignored: Throwable) {}
+        }
+
+        /** 免登录豆包 TTS 试听：按 voiceId 合成 OGG → 解码 WAV → 返回 "OK:路径"。 */
+        private fun freeLoginPreview(voiceId: String, text: String): String {
+            return try {
+                com.leshao.v3.LogWriter.log("TTSPageView", "freelogin preview start voice=" + voiceId + " text=" + text)
+                val bytes = com.leshao.v3.service.DoubaoTtsV2Bridge.synthesize(text, voiceId, 30)
+                com.leshao.v3.LogWriter.log("TTSPageView", "freelogin preview synth bytes=" + bytes.size)
+                val appCtx = ContextManager.getAppContext()
+                val cacheDir = appCtx?.cacheDir ?: File(Environment.getExternalStorageDirectory(), "leshao_v3_cache")
+                val ttsDir = File(cacheDir, "tts_preview")
+                ttsDir.mkdirs()
+                val outFile = File(ttsDir, "freelogin_" + System.currentTimeMillis() + ".wav")
+                if (com.leshao.v3.service.DoubaoTtsV2Bridge.writeWav(bytes, outFile)) {
+                    com.leshao.v3.LogWriter.log("TTSPageView", "freelogin preview OK=" + outFile.absolutePath)
+                    "OK:" + outFile.absolutePath
+                } else {
+                    "解码失败"
+                }
+            } catch (e: Exception) {
+                com.leshao.v3.LogWriter.log("TTSPageView", "freelogin preview err: " + e)
+                "合成失败: " + e.message
+            }
         }
 
         // ===== 音色数据模型 =====
 
-        /** v985: 供 AI 助手会话/模板配置复用: 拉取配音魔方全部音色(内置 + 我的)。 */
+        /** v985: 供 AI 助手会话/模板配置复用: 拉取全部音色（傻包音色库 + 配音魔方内置/我的）。 */
         @JvmStatic
         fun fetchAllVoices(key: String?): List<VoiceItem> {
             val all = ArrayList<VoiceItem>()
-            if (key == null || key.trim().isEmpty()) return all
-            all.addAll(fetchBuiltinVoices(key))
-            all.addAll(fetchUserVoices(key))
+            // 竹节跳动（剪映 797 个，免网关直连合成）——仅 VIP 音色显示「VIP音色」来源，非 VIP 留空
+            for (v in com.leshao.v3.service.JianYingTtsClient.voices()) {
+                all.add(VoiceItem(v.voiceType, if (v.vip) "VIP音色" else "", v.title,
+                        ""))
+            }
+            // 傻包音色库（内置 100 个，免登录）
+            all.addAll(VOICE_LIBRARY)
+            // 配音魔方（若配置了 key）：优先本地缓存，无缓存则网络拉取并写缓存
+            if (key != null && key.trim().isNotEmpty()) {
+                val cached = loadCachedCubeVoices()
+                if (cached.isNotEmpty()) {
+                    all.addAll(cached)
+                } else {
+                    all.addAll(refreshCubeVoiceCache(key))
+                }
+            }
             return all
+        }
+
+        /** 是否为傻包内置音色（属于 VOICE_LIBRARY）。 */
+        @JvmStatic
+        fun isBuiltinVoice(voiceId: String?): Boolean {
+            if (voiceId == null || voiceId.isEmpty()) return false
+            return VOICE_LIBRARY.any { it.voiceId == voiceId }
+        }
+
+        // ===== 配音魔方音色缓存（微信启动后自动预载，打开列表秒显） =====
+
+        /** 读取配音魔方音色本地缓存（无/损坏返回空列表）。 */
+        @JvmStatic
+        fun loadCachedCubeVoices(): List<VoiceItem> {
+            val out = ArrayList<VoiceItem>()
+            try {
+                val raw = WmPrefs.getStr(KEY_CUBE_VOICES_CACHE, "")
+                if (raw.isEmpty()) return out
+                val arr = JSONArray(raw)
+                for (i in 0 until arr.length()) {
+                    val o = arr.getJSONObject(i)
+                    val id = o.optString("voiceId", "")
+                    if (id.isEmpty()) continue
+                    out.add(VoiceItem(id,
+                            o.optString("group", ""),
+                            o.optString("displayName", id),
+                            o.optString("actor", "")))
+                }
+            } catch (ignored: Throwable) {}
+            return out
+        }
+
+        /** 将配音魔方音色列表写入本地缓存。 */
+        @JvmStatic
+        fun saveCubeVoicesCache(voices: List<VoiceItem>) {
+            try {
+                val arr = JSONArray()
+                for (vi in voices) {
+                    val id = vi.voiceId ?: continue
+                    if (id.isEmpty()) continue
+                    val o = JSONObject()
+                    o.put("voiceId", id)
+                    o.put("group", vi.group ?: "")
+                    o.put("displayName", vi.displayName ?: "")
+                    o.put("actor", vi.actor ?: "")
+                    arr.put(o)
+                }
+                WmPrefs.setStr(KEY_CUBE_VOICES_CACHE, arr.toString())
+                WmPrefs.setStr(KEY_CUBE_VOICES_CACHE_TIME, System.currentTimeMillis().toString())
+            } catch (ignored: Throwable) {}
+        }
+
+        /** 微信启动后自动刷新配音魔方音色缓存（未配置 key 直接返回空；网络失败不覆盖已有缓存）。 */
+        @JvmStatic
+        fun refreshCubeVoiceCache(key: String?): List<VoiceItem> {
+            if (key == null || key.trim().isEmpty()) return ArrayList()
+            val all = ArrayList<VoiceItem>()
+            try {
+                val builtin = fetchBuiltinVoices(key.trim())
+                val custom = fetchUserVoices(key.trim())
+                all.addAll(compactVoices(builtin, MAX_VOICE_ROWS))
+                all.addAll(compactVoices(custom, 50))
+                // 网络失败/无数据时不写缓存，避免用空列表覆盖已预载的有效音色
+                if (all.isNotEmpty()) {
+                    saveCubeVoicesCache(all)
+                }
+            } catch (t: Throwable) {
+                com.leshao.v3.LogWriter.log("TTSPageView", "refreshCubeVoiceCache err: " + t)
+            }
+            return all
+        }
+
+        /** 获取配音魔方音色：优先返回本地缓存，缓存为空时网络拉取并写缓存。 */
+        @JvmStatic
+        fun getCubeVoicesWithCache(key: String?): List<VoiceItem> {
+            val cached = loadCachedCubeVoices()
+            if (cached.isNotEmpty()) return cached
+            return refreshCubeVoiceCache(key)
         }
 
         // ===== API 调用 =====
@@ -1507,6 +3149,94 @@ class TTSPageView private constructor() {
                 // 静默失败
             }
             return list
+        }
+
+        /** 本地网关音色列表：GET {base}/voices，Authorization: Bearer key。
+         *  兼容 {"data":[...]} 与裸数组两种响应；voiceId 兼容 voiceId/voice_id/id 字段。 */
+        private fun fetchGatewayVoices(base: String, key: String): List<VoiceItem> {
+            // 音色列表固定 GET /v1/voices（展示 name，选中保存 id doubao:voice_xxx 作为 voiceId）。
+            // 设置里已选模型时，优先带模型参数请求。
+            val model = WmPrefs.getStr("tts_gateway_model", "").trim()
+            if (model.isNotEmpty()) {
+                val withModel = fetchGatewayList(base, key, "voices?model=" + model, "傻包音色")
+                if (withModel.isNotEmpty()) return withModel
+            }
+            return fetchGatewayList(base, key, "voices", "傻包音色")
+        }
+
+        /** 拉取网关列表：GET {base}/{path}，兼容 voiceId/voice_id/id 字段与 {"data":[...]} / 裸数组。 */
+        private fun fetchGatewayList(base: String, key: String, path: String, group: String): List<VoiceItem> {
+            val list = ArrayList<VoiceItem>()
+            try {
+                val url = base.trimEnd('/') + "/" + path
+                com.leshao.v3.LogWriter.log("TTSPageView", "gateway GET " + url + " key=" + maskGatewayKey(key))
+                val resp = com.leshao.v3.service.GatewayHttpClient.get(url, key)
+                val body = resp.bodyString()
+                com.leshao.v3.LogWriter.log("TTSPageView", "gateway " + path + " resp code=" + resp.code
+                        + " body=" + (if (body.length > 300) body.substring(0, 300) + "..." else body))
+                if (resp.code != 200) return list
+                val trimmed = body.trim()
+                val arr: org.json.JSONArray
+                if (trimmed.startsWith("[")) {
+                    arr = JSONArray(trimmed)
+                } else {
+                    val jo = safeJsonObject(trimmed)
+                    arr = jo.optJSONArray("data") ?: jo.optJSONArray("voices") ?: jo.optJSONArray("models") ?: return list
+                }
+                for (i in 0 until arr.length()) {
+                    val o = arr.getJSONObject(i)
+                    val voiceId = o.optString("voiceId", "")
+                        .ifEmpty { o.optString("voice_id", "") }
+                        .ifEmpty { o.optString("id", "") }
+                    if (voiceId.isEmpty()) continue
+                    val name = o.optString("name", voiceId)
+                        .ifEmpty { o.optString("voiceName", voiceId) }
+                        .ifEmpty { o.optString("display_name", voiceId) }
+                    list.add(VoiceItem(voiceId, group, name, ""))
+                }
+                com.leshao.v3.LogWriter.log("TTSPageView", "gateway " + path + " parsed count=" + list.size)
+            } catch (e: Exception) {
+                com.leshao.v3.LogWriter.log("TTSPageView", "gateway " + path + " err: " + e)
+            }
+            return list
+        }
+
+        /** 日志脱敏：网关密钥只保留首尾各 2 位。 */
+        private fun maskGatewayKey(key: String): String {
+            if (key.isEmpty()) return "<empty>"
+            if (key.length <= 4) return "****"
+            return key.substring(0, 2) + "****" + key.substring(key.length - 2)
+        }
+
+        /** 本地网关合成（OpenAI /audio/speech 标准）：POST {base}/audio/speech，
+         *  body {model:"doubao", input:text, voice:voiceId}，响应 mp3 二进制 → 缓存文件，返回 "OK:绝对路径" 或错误文本。 */
+        @JvmStatic
+        fun gatewayPreviewVoice(base: String, key: String, voiceId: String, text: String): String {
+            if (base.isEmpty() || key.isEmpty()) return "未配置本地网关地址或密钥"
+            return try {
+                val req = JSONObject()
+                    .put("model", "doubao")
+                    .put("input", text)
+                    .put("voice", voiceId)
+                val resp = com.leshao.v3.service.GatewayHttpClient.postJson(
+                    base.trimEnd('/') + "/audio/speech", key, req.toString())
+                if (resp.code != 200) {
+                    return "合成失败: HTTP " + resp.code + (if (resp.bodyString().isEmpty()) "" else " - " + resp.bodyString())
+                }
+                val appCtx = ContextManager.getAppContext()
+                val cacheDir = appCtx?.cacheDir ?: File(Environment.getExternalStorageDirectory(), "leshao_v3_cache")
+                val ttsDir = File(cacheDir, "tts_preview")
+                ttsDir.mkdirs()
+                val outFile = File(ttsDir, "gateway_" + System.currentTimeMillis() + ".mp3")
+                val bytes = resp.body ?: ByteArray(0)
+                FileOutputStream(outFile).use { it.write(bytes) }
+                if (outFile.length() < 100L) {
+                    return "下载失败: 音频文件过小(" + outFile.length() + "字节)"
+                }
+                "OK:" + outFile.absolutePath
+            } catch (e: Exception) {
+                "合成失败: " + e.message
+            }
         }
 
         /** 配音魔方下载合成音频到缓存 WAV，返回 "OK:绝对路径" 或错误文本 */
@@ -1636,8 +3366,10 @@ class TTSPageView private constructor() {
         }
 
         private fun safeJsonObject(raw: String?): JSONObject {
-            if (raw == null || raw.isEmpty()) throw Exception("响应为空")
-            val first = raw.trim()[0]
+            if (raw == null) throw Exception("响应为空")
+            val trimmed = raw.trim()
+            if (trimmed.isEmpty()) throw Exception("响应为空")
+            val first = trimmed[0]
             if (first != '{' && first != '[') throw Exception("接口返回非JSON数据")
             return JSONObject(raw)
         }
@@ -1647,6 +3379,63 @@ class TTSPageView private constructor() {
         }
 
         /** 设置图标: Material 3「推子/滑块」(tune) 空心描边样式, 逻辑坐标系 24x24。 */
+        /** 创建指定颜色的耳机试听图标（供 Java/Kotlin 复用）。 */
+        @JvmStatic
+        fun headphoneIcon(color: Int): android.graphics.drawable.Drawable {
+            return HeadphoneIconDrawable(color)
+        }
+
+        /** 实心耳机图标：实心耳罩 + 粗头梁，用于音色行「试听」按钮，颜色可跟随音色来源。 */
+        class HeadphoneIconDrawable(color: Int) : android.graphics.drawable.Drawable() {
+            private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+            private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG)
+
+            init {
+                fillPaint.color = color
+                fillPaint.style = Paint.Style.FILL
+                strokePaint.color = color
+                strokePaint.style = Paint.Style.STROKE
+                strokePaint.strokeWidth = 2.6f
+                strokePaint.strokeCap = Paint.Cap.ROUND
+            }
+
+            override fun draw(canvas: android.graphics.Canvas) {
+                val b = bounds
+                val size = Math.min(b.width(), b.height())
+                val u = size / 24f
+                val ox = b.exactCenterX() - 12f * u
+                val oy = b.exactCenterY() - 12f * u
+
+                // 实心耳罩
+                canvas.drawRoundRect(android.graphics.RectF(ox + 3f * u, oy + 10f * u,
+                        ox + 7.5f * u, oy + 17f * u), 2f * u, 2f * u, fillPaint)
+                canvas.drawRoundRect(android.graphics.RectF(ox + 16.5f * u, oy + 10f * u,
+                        ox + 21f * u, oy + 17f * u), 2f * u, 2f * u, fillPaint)
+
+                // 粗头梁（实心弧线）
+                val path = android.graphics.Path()
+                path.moveTo(ox + 5.5f * u, oy + 10f * u)
+                path.addArc(android.graphics.RectF(ox + 5.5f * u, oy + 3f * u,
+                        ox + 18.5f * u, oy + 17f * u), 180f, 180f)
+                strokePaint.strokeWidth = 2.6f * u
+                canvas.drawPath(path, strokePaint)
+            }
+
+            override fun setAlpha(alpha: Int) {
+                fillPaint.alpha = alpha
+                strokePaint.alpha = alpha
+            }
+
+            override fun setColorFilter(cf: android.graphics.ColorFilter?) {
+                fillPaint.colorFilter = cf
+                strokePaint.colorFilter = cf
+            }
+
+            override fun getOpacity(): Int {
+                return android.graphics.PixelFormat.TRANSLUCENT
+            }
+        }
+
         private class TuneIconDrawable(color: Int) : android.graphics.drawable.Drawable() {
             private val paint: Paint
             private val path = android.graphics.Path()

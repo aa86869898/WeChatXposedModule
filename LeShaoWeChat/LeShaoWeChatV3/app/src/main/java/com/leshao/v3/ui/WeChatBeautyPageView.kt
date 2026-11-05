@@ -14,22 +14,15 @@ import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 import com.leshao.v3.ContextManager
-import com.leshao.v3.hook.ChatBubbleHook
 import com.leshao.v3.hook.GroupTitleTagHook
 import com.leshao.v3.ui.widgets.ColorPickerDialog
 import com.leshao.v3.ui.widgets.M3Page
 
 /**
- * 微信美化页（主页「微信美化」卡片入口，v3.0.165）。
+ * 微信美化页（主页「微信美化」卡片入口）。
  *
- * <p>聚合聊天界面的外观定制能力：</p>
- * <ul>
- *   <li>自定义气泡：分别选择收到/发出消息的气泡图片（进入 [BubblePageView]）。</li>
- *   <li>聊天时间线颜色：聊天记录内时间分隔条文字颜色。</li>
- *   <li>群聊成员昵称颜色：群聊中成员昵称文字颜色。</li>
- *   <li>显示群成员头衔标签：群主/管理员/成员三角色独立配色（背景色+文字色）。</li>
- * </ul>
- * <p>均由原「联系人和群聊 → UI美化」分类迁移而来（v3.0.165 菜单重组）。</p>
+ * <p>仅保留「群聊成员头衔标签」：群主/管理员/成员三角色独立配色（背景色+文字色）。</p>
+ * <p>自定义气泡 / 聊天时间修改 / 昵称颜色等聊天窗口美化功能已移除（死代码）。</p>
  */
 class WeChatBeautyPageView private constructor() {
 
@@ -47,50 +40,6 @@ class WeChatBeautyPageView private constructor() {
             InsetsUtil.clipRounded(root)
             root.setPadding((AppColors.SPACE_MD_DP * d).toInt(), (6 * d).toInt(),
                     (AppColors.SPACE_MD_DP * d).toInt(), (8 * d).toInt())
-
-            // ==================== 自定义气泡 ====================
-            val cardBubble = makeCard(ctx, d)
-            val bubbleOn = prefs != null && prefs.getBoolean(ChatBubbleHook.K_ENABLED, false)
-            cardBubble.addView(switchRow(ctx, d, "自定义气泡",
-                    "分别选择收到/发出消息的气泡图片", bubbleOn,
-                    { _, on ->
-                        if (prefs != null) prefs.edit().putBoolean(ChatBubbleHook.K_ENABLED, on).apply()
-                        ChatBubbleHook.setEnabled(on)
-                        Toast.makeText(ctx, "自定义气泡已" + (if (on) "开启" else "关闭") +
-                                "（重启微信后完全生效）", Toast.LENGTH_SHORT).show()
-                    },
-                    { SubPageActivity.open(act, "自定义气泡", 27) }))
-            root.addView(cardBubble)
-
-            root.addView(candyDivider(ctx, d))
-
-            // ==================== 聊天时间修改（v3.0.208：原「聊天时间线颜色」迁移至此，含自定义格式+浅/暗双套颜色） ====================
-            val cardTimeMod = makeCard(ctx, d)
-            cardTimeMod.addView(switchRow(ctx, d, "聊天时间修改",
-                    "自定义时间线内容 + 时间线颜色（浅色/暗色独立配置）",
-                    ChatBubbleHook.isTimeModifyEnabled(),
-                    { _, on ->
-                        ChatBubbleHook.setTimeModifyEnabled(on)
-                        Toast.makeText(ctx, "聊天时间修改已" + (if (on) "开启" else "关闭") +
-                                (if (on) "（重新进入聊天后生效）" else ""), Toast.LENGTH_SHORT).show()
-                    },
-                    { SubPageActivity.open(act, "聊天时间修改", 35) }))
-            root.addView(cardTimeMod)
-
-            root.addView(candyDivider(ctx, d))
-
-            // ==================== 群聊成员昵称颜色 ====================
-            val cardNickColor = makeCard(ctx, d)
-            cardNickColor.addView(colorRow(ctx, d, "群聊成员昵称颜色",
-                    "修改群聊中成员昵称文字颜色",
-                    ChatBubbleHook.getNickTextColor(), object : ColorPickerDialog.OnPick {
-                        override fun onPick(color: Int) {
-                            ChatBubbleHook.setNickTextColor(color)
-                            Toast.makeText(ctx, if (color == 0) "已恢复默认昵称颜色"
-                                    else "昵称颜色已设置，重新进入聊天后生效", Toast.LENGTH_SHORT).show()
-                        }
-                    }))
-            root.addView(cardNickColor)
 
             root.addView(candyDivider(ctx, d))
 

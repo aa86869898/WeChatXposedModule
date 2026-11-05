@@ -4,6 +4,8 @@ import android.content.Context
 import android.graphics.Typeface
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.MotionEvent
+import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.leshao.v3.ui.AppColors
@@ -38,6 +40,18 @@ class ModernButton(ctx: Context, text: String?, style: Int) : LinearLayout(ctx) 
                 mAction!!.run()
             } catch (ignored: Throwable) {}
         }
+
+        // v3.0.456 液态按压：触点落下时轻微收缩（0.97），取消时弹回，
+        // 与液态渐变底共同构成"液滴"手感。返回 false 不吞点击事件。
+        setOnTouchListener { v, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN ->
+                    v.animate().scaleX(0.97f).scaleY(0.97f).setDuration(90).start()
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL ->
+                    v.animate().scaleX(1f).scaleY(1f).setDuration(120).start()
+            }
+            false
+        }
     }
 
     private fun applyStyle(style: Int) {
@@ -48,7 +62,7 @@ class ModernButton(ctx: Context, text: String?, style: Int) : LinearLayout(ctx) 
             }
             STYLE_DANGER -> {
                 background = CandyUi.buttonDangerBg(context)
-                mLabel.setTextColor(AppColors.whiteTextOnAccent())
+                mLabel.setTextColor(AppColors.onError())
             }
             STYLE_GHOST -> {
                 background = CandyUi.buttonGhostBg(context)

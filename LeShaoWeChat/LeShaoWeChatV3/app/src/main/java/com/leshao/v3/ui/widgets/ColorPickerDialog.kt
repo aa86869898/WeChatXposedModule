@@ -139,10 +139,7 @@ class ColorPickerDialog private constructor() {
             hexInput.setInputType(InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS)
             hexInput.setTextColor(AppColors.text1())
             hexInput.setPadding((12 * d).toInt(), (10 * d).toInt(), (12 * d).toInt(), (10 * d).toInt())
-            val inputBg = GradientDrawable()
-            inputBg.setColor(AppColors.inputBg())
-            inputBg.cornerRadius = (AppColors.SHAPE_INPUT_DP * d).toInt().toFloat()
-            inputBg.setStroke((1.5f * d).toInt(), AppColors.outlineVariant())
+            val inputBg = com.leshao.v3.ui.CandyUi.inputBg(ctx)
             hexInput.background = inputBg
             root.addView(hexInput)
 

@@ -12,7 +12,7 @@ import java.util.concurrent.TimeUnit
 object LogWriter {
 
     private const val LOG_FILE = "leshao_v3_log.txt"
-    private const val MAX_SIZE = 512 * 1024
+    private const val MAX_SIZE = 1024 * 1024
     private const val FLUSH_INTERVAL_MS = 2000L
 
     @Volatile

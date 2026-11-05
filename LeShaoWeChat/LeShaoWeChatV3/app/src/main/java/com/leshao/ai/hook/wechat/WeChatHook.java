@@ -199,6 +199,24 @@ public final class WeChatHook implements IXposedHookLoadPackage {
             } catch (Throwable t) {
                 Log.w(TAG, "会话转储失败: " + t);
             }
+
+            // 5) 配音魔方音色自动预载（有 key 时后台拉取缓存，避免首次选音色时卡顿）
+            try {
+                String cubeKey = com.leshao.v3.wm.utils.WmPrefs.getStr("tts_cube_key", "");
+                if (cubeKey != null && !cubeKey.trim().isEmpty()) {
+                    final String k = cubeKey;
+                    Thread cubeThread = new Thread(() -> {
+                        try {
+                            int n = com.leshao.v3.ui.TTSPageView.refreshCubeVoiceCache(k).size();
+                            LogWriter.log(TAG, "配音魔方音色自动预载完成: " + n + " 个");
+                        } catch (Throwable th) {
+                            LogWriter.log(TAG, "配音魔方音色自动预载失败: " + th);
+                        }
+                    }, "leshao-cube-prefetch");
+                    cubeThread.setDaemon(true);
+                    cubeThread.start();
+                }
+            } catch (Throwable ignored) {}
         } catch (Throwable t) {
             Log.w(TAG, "installCore 异常: " + t);
         }

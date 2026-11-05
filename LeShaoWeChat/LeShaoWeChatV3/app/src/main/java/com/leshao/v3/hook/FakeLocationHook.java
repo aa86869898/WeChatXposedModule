@@ -102,7 +102,17 @@ public final class FakeLocationHook {
 
     public static void hook(final ClassLoader cl) {
         sCl = cl;
-        safe("LocationShare", () -> hookOnlyLocationShare(cl));
+        boolean ok = safe("LocationShare", () -> hookOnlyLocationShare(cl));
+        // v3.0.469: 启动早期 DexKit 字符串反查可能 MISS（full scan 未完成），扫描完成后重试
+        if (!ok) {
+            try {
+                com.leshao.v3.hook.DexKitHelper.addPostScanCallback(() -> {
+                    try {
+                        safe("LocationShare-retry", () -> hookOnlyLocationShare(cl));
+                    } catch (Throwable ignored) {}
+                });
+            } catch (Throwable ignored) {}
+        }
         safe("PickerResult", () -> hookActivityResult(cl));
     }
 
@@ -110,11 +120,13 @@ public final class FakeLocationHook {
         void run() throws Throwable;
     }
 
-    private static void safe(String name, Hook h) {
+    private static boolean safe(String name, Hook h) {
         try {
             h.run();
+            return true;
         } catch (Throwable t) {
             LogWriter.log(TAG, "hook " + name + " err: " + t);
+            return false;
         }
     }
 
@@ -130,18 +142,50 @@ public final class FakeLocationHook {
      * </pre>
      * {@code hh3.w0} 走 {@code startGcj02}，因此坐标必须是 GCJ02。
      */
-    private static void hookOnlyLocationShare(ClassLoader cl) throws Throwable {
-        Class<?> cls = loadClass(cl, "hh3.s0");
+    private static boolean hookOnlyLocationShare(ClassLoader cl) throws Throwable {
+        // v3.0.529: 8.0.79 实时位置共享监听者由 hh3.s0 迁移到 di3.s0（同样实现 r51.c 接口，
+        // onGetLocation(boolean,float,float,int,double,double,double) 签名不变）。
+        Class<?> cls = loadClass(cl, WeChatVersion.isNew() ? "di3.s0" : "hh3.s0");
+        // v3.0.470：实时位置共享监听者实现 r51.c 接口，混淆类分散在 cy/di3 等包。
+        // 从 findMethodDeclClassByString("onGetLocation") 候选中筛选含 7 参 onGetLocation 的类。
+        if (cls == null) {
+            try {
+                java.util.List<String> decls = DexKitHelper.findMethodDeclClassByString(cl, "onGetLocation");
+                if (decls != null) {
+                    for (String d : decls) {
+                        if (d == null || !d.startsWith("com.tencent.mm.")) continue;
+                        Class<?> cand = loadClass(cl, d);
+                        if (cand == null) continue;
+                        boolean hasSig = false;
+                        for (Method mm : cand.getDeclaredMethods()) {
+                            if (!"onGetLocation".equals(mm.getName())) continue;
+                            Class<?>[] pts = mm.getParameterTypes();
+                            if (pts.length == 7 && pts[0] == boolean.class
+                                    && pts[1] == float.class && pts[2] == float.class
+                                    && pts[3] == int.class && pts[6] == double.class) {
+                                hasSig = true;
+                                break;
+                            }
+                        }
+                        if (hasSig) {
+                            cls = cand;
+                            LogWriter.log(TAG, "location-share class via onGetLocation sig: " + d);
+                            break;
+                        }
+                    }
+                }
+            } catch (Throwable ignored) {}
+        }
         if (cls == null) {
             LogWriter.log(TAG, "[WARN] hh3.s0 not found, location-share hook off");
-            return;
+            return false;
         }
         Method m = findMethod(cls, "onGetLocation",
                 boolean.class, float.class, float.class, int.class,
                 double.class, double.class, double.class);
         if (m == null) {
             LogWriter.log(TAG, "hh3.s0.onGetLocation signature not found");
-            return;
+            return false;
         }
         XposedBridge.hookMethod(m, new XC_MethodHook() {
             @Override
@@ -159,6 +203,7 @@ public final class FakeLocationHook {
             }
         });
         LogWriter.log(TAG, "hooked hh3.s0.onGetLocation (location-share only)");
+        return true;
     }
 
     /**
@@ -238,6 +283,8 @@ public final class FakeLocationHook {
 
     private static Class<?> loadClass(ClassLoader cl, String name) {
         if (name == null || cl == null) return null;
+        Class<?> c = WxResolver.resolve(cl, name);
+        if (c != null) return c;
         for (ClassLoader l : HookUtil.candidateLoaders(cl)) {
             try { return l.loadClass(name); } catch (Throwable ignored) {}
         }

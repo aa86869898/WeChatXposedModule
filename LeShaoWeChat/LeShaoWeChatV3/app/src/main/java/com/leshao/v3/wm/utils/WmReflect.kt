@@ -1,5 +1,6 @@
 package com.leshao.v3.wm.utils
 
+import com.leshao.v3.hook.WxResolver
 import android.content.Intent
 import android.database.Cursor
 import android.graphics.Bitmap
@@ -37,13 +38,37 @@ class WmReflect {
         @JvmStatic
         fun getSendMsgMgr(cl: ClassLoader): Any? {
             try {
-                // 8.0.78(3180): 发送管理器 = qs5.v5 (kl5.s5 已失效)。服务定位优先 ph5.n0.c(qs5.v5)
-                // v955: 定位器首位改用 DexKit 动态检索结果(特征字符串 "MicroMsg.ServiceManager"),
-                // 严禁硬编码类名作主查找; 下列候选仅作历史版本兜底。
+                // v3.0.479: 新版 SendMsgMgr = rt5.i5（implements no3.c1），
+                // 获取方式 = ni5.n0.c(no3.c1.class)（等价微信封装 no3.w1.a()）。
+                // 旧 qs5.v5/kl5.s5 已删除，必须走服务接口。
+                try {
+                    val no3c1 = XposedHelpers.findClass("no3.c1", cl)
+                    if (no3c1 != null) {
+                        val n0 = XposedHelpers.findClass("ni5.n0", cl)
+                        val svc = XposedHelpers.callStaticMethod(n0, "c", no3c1)
+                        if (svc != null) {
+                            LogWriter.log(TAG, "getSendMsgMgr OK: ni5.n0.c(no3.c1) -> " + svc.javaClass.name)
+                            return svc
+                        }
+                    }
+                } catch (ignored: Throwable) {}
+                try {
+                    val w1 = XposedHelpers.findClass("no3.w1", cl)
+                    val svc = XposedHelpers.callStaticMethod(w1, "a")
+                    if (svc != null) {
+                        LogWriter.log(TAG, "getSendMsgMgr OK: no3.w1.a() -> " + svc.javaClass.name)
+                        return svc
+                    }
+                } catch (ignored: Throwable) {}
+            } catch (t: Throwable) {
+                LogWriter.log(TAG, "getSendMsgMgr err: " + t.message)
+            }
+            // 旧版兜底（保留历史版本兼容）
+            try {
                 val locatorList = java.util.ArrayList<String>()
                 val dkLoc = com.leshao.v3.hook.DexKitHelper.getServiceLocatorClass()
                 if (dkLoc != null && !dkLoc.isEmpty()) locatorList.add(dkLoc)
-                for (l in arrayOf("ph5.n0", "pa5.n0", "hm0.j1", "gp0.j1.j", "gp0.j1")) {
+                for (l in arrayOf("ni5.n0", "ph5.n0", "pa5.n0", "hm0.j1", "gp0.j1.j", "gp0.j1")) {
                     if (!locatorList.contains(l)) locatorList.add(l)
                 }
                 val locators = locatorList.toTypedArray()
@@ -55,7 +80,7 @@ class WmReflect {
                             val mgrCls = XposedHelpers.findClass(mgrName, cl)
                             val inst = XposedHelpers.callStaticMethod(locCls, "c", mgrCls)
                             if (inst != null) {
-                                LogWriter.log(TAG, "getSendMsgMgr OK: " + loc + ".c(" + mgrName + ") -> " + inst.javaClass.name)
+                                LogWriter.log(TAG, "getSendMsgMgr OK(legacy): " + loc + ".c(" + mgrName + ") -> " + inst.javaClass.name)
                                 return inst
                             }
                         } catch (ignored: Throwable) {}
@@ -117,8 +142,9 @@ class WmReflect {
             if (sChatroomSvcIface == null) return null
             for (retry in 0 until 3) {
                 try {
+                    // v3.0.565: 8.0.79 服务定位器由 hm0.j1.s 迁移到 pp0.i1.v（反编译实证 pp0.i1.v(Class)->up0.a）
                     val svc = XposedHelpers.callStaticMethod(
-                        XposedHelpers.findClass("hm0.j1", cl), "s", sChatroomSvcIface)
+                        XposedHelpers.findClass("pp0.i1", cl), "v", sChatroomSvcIface)
                     if (svc == null) {
                         if (retry < 2) {
                             try { Thread.sleep(500) } catch (ignored: InterruptedException) {}
@@ -174,18 +200,25 @@ class WmReflect {
          */
         @JvmStatic
         fun sendTextMsg(cl: ClassLoader, content: String, toUser: String, type: Int, flag: Int): Boolean {
+            // v3.0.581: 模块外发文本统一打零宽水印（跨分身/多设备可识别），
+            // 再登记进「模块自发消息」账本后发送。
+            // 否则消息落库后会以接收形态回到所有接收侧 hook（自动转发/AI/进群），
+            // 造成把模块自己的提示语群发到全部目标的事故（真实日志：545 个群）。
+            val marked = try { com.leshao.v3.hook.SelfMsgGuard.watermark(content) } catch (ignored: Throwable) { content }
+            try { com.leshao.v3.hook.SelfMsgGuard.mark(toUser, type, marked) } catch (ignored: Throwable) {}
             val m = getSendMsgMgr(cl)
             if (m == null) {
                 LogWriter.log(TAG, "sendTextMsg FAILED: sendMsgMgr null")
                 return false
             }
-            // 旧 qj(content,toUser) 为相册名片, 不再用于文本。
-            val textMethods = arrayOf("oj", "nj", "mj", "pj")
+            // v3.0.479: 新版 SendMsgMgr(rt5.i5) 文本发送 = Jj(toUser,content,type,flag)
+            // 旧版 qs5.v5 为 oj/nj/mj/pj。
+            val textMethods = arrayOf("Jj", "Kj", "oj", "nj", "mj", "pj")
             var lastErr: Throwable? = null
             for (mn in textMethods) {
                 try {
                     // 尝试 (String,String,int,int) 签名
-                    XposedHelpers.callMethod(m, mn, toUser, content, type, flag)
+                    XposedHelpers.callMethod(m, mn, toUser, marked, type, flag)
                     LogWriter.log(TAG, "sendTextMsg ok via " + mn +
                             "(toUser,content," + type + "," + flag + ")")
                     return true
@@ -194,7 +227,7 @@ class WmReflect {
                 }
                 try {
                     // 尝试 (String,String,int,int,int) 等变体
-                    XposedHelpers.callMethod(m, mn, toUser, content, type, flag, 0)
+                    XposedHelpers.callMethod(m, mn, toUser, marked, type, flag, 0)
                     LogWriter.log(TAG, "sendTextMsg ok via " + mn +
                             "(toUser,content," + type + "," + flag + ",0)")
                     return true
@@ -325,7 +358,7 @@ class WmReflect {
         @JvmStatic
         fun loadAvatarInto(cl: ClassLoader, iv: ImageView, wxid: String) {
             try {
-                val a = XposedHelpers.findClass("com.tencent.mm.pluginsdk.ui.a", cl)
+                val a = WxResolver.get("pluginsdk_ui_a", cl)
                 XposedHelpers.callStaticMethod(a, "b", iv, wxid)
                 return
             } catch (ignored: Exception) {}

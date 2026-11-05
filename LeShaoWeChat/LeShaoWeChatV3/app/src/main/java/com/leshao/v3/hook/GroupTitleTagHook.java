@@ -5,9 +5,15 @@ import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.text.SpannableString;
+import android.text.SpannableStringBuilder;
+import android.text.TextUtils;
+import android.text.style.BackgroundColorSpan;
+import android.text.style.ForegroundColorSpan;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -15,6 +21,7 @@ import com.leshao.ai.hook.wechat.GroupMemberNames;
 import com.leshao.ai.hook.wechat.GroupMsgParser;
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
+import com.leshao.v3.ui.AppColors;
 import com.leshao.v3.wm.utils.WmReflect;
 
 import java.lang.reflect.Method;
@@ -55,14 +62,20 @@ public final class GroupTitleTagHook {
     // 成员
     public static final String K_MEMBER_BG = "ls_group_title_member_bg";
     public static final String K_MEMBER_TEXT = "ls_group_title_member_text";
+    /** 真机自校准：已知群主 wxid（非空时打印群信息字段，用于定位群主/管理员字段） */
+    public static final String K_CALIB_WXID = "ls_group_title_calib_wxid";
 
     private static final String TAG_KEY = "leshao_group_title_tag";
+    /** 已内嵌标签的 userTV → role（防重复插入，WeakHashMap 防泄漏） */
+    private static final java.util.Map<TextView, String> sAppliedRole =
+            java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
 
     /** 群聊昵称行 h0.userTV id（ChatBubbleHook ID_NICK_TV 同源实证）。 */
     private static final int ID_NICK_TV = 2131366078;
 
     private static volatile boolean sEnabled = false;
     private static volatile int sOwnerBg = 0, sOwnerText = 0;
+    private static volatile String sCalibWxid = "";
     private static volatile int sAdminBg = 0, sAdminText = 0;
     private static volatile int sMemberBg = 0, sMemberText = 0;
     private static volatile boolean sHooked = false;
@@ -176,10 +189,94 @@ public final class GroupTitleTagHook {
             sOwnerBg = sp.getInt(K_OWNER_BG, 0); sOwnerText = sp.getInt(K_OWNER_TEXT, 0);
             sAdminBg = sp.getInt(K_ADMIN_BG, 0); sAdminText = sp.getInt(K_ADMIN_TEXT, 0);
             sMemberBg = sp.getInt(K_MEMBER_BG, 0); sMemberText = sp.getInt(K_MEMBER_TEXT, 0);
+            sCalibWxid = sp.getString(K_CALIB_WXID, "");
         }
         installItemHook(cl);
+        GroupTitleTagFix.INSTANCE.hook(cl);   // ★ 权威文档第九节：统一 setText hook
         sHooked = true;
         LogWriter.log(TAG, "hook installed enabled=" + sEnabled);
+    }
+
+    /** ★ 权威文档第八节：统一 hook userTV.setText，覆盖所有消息类型 + RecyclerView 复用换绑。
+     *  每次 setText 都先清洗旧标签再插入新标签 → 初始/复用/大图返回/重复 setText 都不消失不重复。 */
+    private static final ThreadLocal<Boolean> sApplyingLabel =
+            new ThreadLocal<Boolean>() { @Override protected Boolean initialValue() { return false; } };
+
+    private static void installNickSetTextHook(ClassLoader cl) {
+        XposedBridge.hookAllMethods(TextView.class, "setText", new XC_MethodHook() {
+            @Override
+            protected void afterHookedMethod(MethodHookParam p) {
+                try {
+                    if (!sEnabled) return;
+                    if (sApplyingLabel.get()) return;                    // 防递归（我们 setText 触发）
+                    TextView tv = (TextView) p.thisObject;
+                    if (tv == null || tv.getId() != ID_NICK_TV) return;  // 只处理群成员昵称 view
+                    String[] rs = extractRoomSender(tv);
+                    if (rs == null) return;
+                    if (!isChatroom(rs[0])) return;                      // 仅群聊
+                    if (isSelfMsg(rs[1], null)) return;                  // 自己的消息跳过
+                    String role = resolveRole(rs[0], rs[1]);
+                    if (role == null) return;
+                    // ★ 第九节：文本已以 " $role " 开头则跳过（防重复）
+                    String prefix = " " + role + " ";
+                    String cur = tv.getText() == null ? "" : tv.getText().toString();
+                    if (cur.startsWith(prefix)) return;
+                    // ★ 清洗掉可能残留的旧标签（角色变化时也能纠正）
+                    String clean = cur.replaceFirst("^\\s*(群主|管理员|成员)\\s*", "").trim();
+                    int bg;
+                    if ("群主".equals(role)) { bg = sOwnerBg != 0 ? sOwnerBg : 0xFFE64340; }
+                    else if ("管理员".equals(role)) { bg = sAdminBg != 0 ? sAdminBg : 0xFF07C160; }
+                    else { bg = sMemberBg != 0 ? sMemberBg : AppColors.outline(); }
+                    SpannableStringBuilder sp = new SpannableStringBuilder();
+                    SpannableString label = new SpannableString(" " + role + " ");
+                    if (bg != 0) {
+                        label.setSpan(new BackgroundColorSpan(bg), 0, label.length(), 0);
+                        label.setSpan(new ForegroundColorSpan(AppColors.whiteTextOnAccent()), 0, label.length(), 0);
+                    }
+                    sp.append(label).append(" ").append(clean);
+                    sApplyingLabel.set(true);
+                    try {
+                        tv.setText(sp);
+                    } finally {
+                        sApplyingLabel.set(false);
+                    }
+                    tv.setSingleLine(true);
+                    tv.setEllipsize(TextUtils.TruncateAt.END);
+                    tv.setGravity(Gravity.CENTER_VERTICAL);
+                } catch (Throwable ignored) {}
+            }
+        });
+    }
+
+    /** 从 userTV 沿父链找 itemView → holder → 消息实体 e9 → [room, sender]。 */
+    public static String[] extractRoomSender(View tv) {
+        try {
+            View cur = tv;
+            ViewParent vg = tv.getParent();
+            int d = 0;
+            while (vg instanceof ViewGroup && d++ < 12) {
+                ViewGroup g = (ViewGroup) vg;
+                String n = g.getClass().getName();
+                if (n.contains("RecyclerView") || n.contains("ListView")) break;
+                cur = g;
+                vg = g.getParent();
+            }
+            Object holder = cur.getTag();
+            if (holder == null) return null;
+            Object msg = holder;
+            try { msg = XposedHelpers.getObjectField(msg, "i"); } catch (Throwable t) {}
+            if (msg != null) { try { msg = XposedHelpers.getObjectField(msg, "d"); } catch (Throwable t) {} }
+            if (msg != null) { try { msg = XposedHelpers.getObjectField(msg, "b"); } catch (Throwable t) {} }
+            if (msg == null) return null;
+            String room = null, sender = null;
+            try { room = (String) XposedHelpers.callMethod(msg, "N0"); } catch (Throwable t) {}
+            if (room == null) { try { Object o = XposedHelpers.getObjectField(msg, "field_talker"); if (o instanceof String) room = (String) o; } catch (Throwable t) {} }
+            try { sender = (String) XposedHelpers.callMethod(msg, "G0"); } catch (Throwable t) {}
+            if (sender == null || sender.isEmpty()) { try { sender = (String) XposedHelpers.callMethod(msg, "j"); } catch (Throwable t) {} }
+            if (room == null || sender == null || sender.isEmpty()) return null;
+            return new String[]{room, sender};
+        } catch (Throwable ignored) {}
+        return null;
     }
 
     /**
@@ -314,38 +411,21 @@ public final class GroupTitleTagHook {
             removeTagIfAny(nick);
             return;
         }
-        // 注入/更新标签（幂等：已有 tag 则更新配色，不重复创建）
-        ViewGroup row = findNickRow(nick);
-        TextView tag = findTagInRow(row);
-        if (tag == null) {
-            tag = new TextView(root.getContext());
-            tag.setTag(TAG_KEY);
-            tag.setTextSize(10);
-            tag.setTypeface(null, Typeface.BOLD);
-            tag.setPadding(dp(root, 5), dp(root, 1), dp(root, 5), dp(root, 1));
-            tag.setGravity(Gravity.CENTER);
-            GradientDrawable gd = new GradientDrawable();
-            gd.setShape(GradientDrawable.RECTANGLE);
-            gd.setCornerRadius(dp(root, 4));
-            tag.setBackground(gd);
-            if (row == null) return;
-            tag.setLayoutParams(buildTagParams(row, dp(root, 3)));
+        // ★ 第15章：停用旧绑定内 setText 插标签（避免双标签），
+        //   但把可靠解析出的角色写入缓存，并调用统一插入入口 refreshLabel 立即纠正误插。
+        if (nick instanceof TextView) {
+            GroupTitleTagFix.INSTANCE.cacheRole((TextView) nick, role);
+            GroupTitleTagFix.INSTANCE.refreshLabel((TextView) nick, role);
         }
-        // 文档 §5-3：标签放在昵称右侧（idx = indexOfChild(nick)，插到 idx+1）。
-        // 注意：addView 已存在 parent 的 view 时会先 detach 再插入，因此复用 item 时
-        // 该 addView 也能把旧标签归位到昵称右侧，避免串位/全宽。
-        int idx = row.indexOfChild(nick);
-        if (idx < 0) idx = 0;
-        row.addView(tag, idx + 1);
-        applyRoleStyle(tag, role);
         if (android.os.SystemClock.uptimeMillis() - start > 8) {
-            LogWriter.log(TAG, "apply title role=" + role + " sender=" + sender);
+            LogWriter.log(TAG, "bind hook cached role=" + role + " sender=" + sender + " (唯一插入=refreshLabel)");
         }
     }
 
     /** 文档 §8-3 复用防串位：本 item 不应显示头衔时，移除昵称行中残留的旧标签。 */
     private static void removeTagIfAny(View nick) {
         if (nick == null) return;
+        if (nick instanceof TextView) sAppliedRole.remove(nick);
         try {
             ViewGroup row = findNickRow(nick);
             if (row == null) return;
@@ -355,7 +435,7 @@ public final class GroupTitleTagHook {
     }
 
     /** 是否自己的消息（文档 §8-5）：e9.z0()==1 为自己发出；或 sender 等于当前登录 wxid。 */
-    private static boolean isSelfMsg(String sender, Object msg) {
+    public static boolean isSelfMsg(String sender, Object msg) {
         if (msg != null) {
             try {
                 Object z = XposedHelpers.callMethod(msg, "z0");
@@ -425,23 +505,47 @@ public final class GroupTitleTagHook {
     }
 
     /** 按容器类型生成适合的 WRAP_CONTENT 标签 LayoutParams（margin 在标签左侧，与昵称分隔）。 */
-    private static ViewGroup.LayoutParams buildTagParams(ViewGroup row, int marginStartPx) {
+    private static ViewGroup.LayoutParams buildTagParams(ViewGroup row, int marginEndPx) {
         if (row instanceof LinearLayout) {
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
             lp.gravity = Gravity.CENTER_VERTICAL;
-            lp.setMarginStart(marginStartPx);
+            // 标签在昵称左侧，右侧（与昵称之间）留间距
+            lp.setMarginEnd(marginEndPx);
             return lp;
         } else if (row instanceof android.widget.RelativeLayout) {
             android.widget.RelativeLayout.LayoutParams lp = new android.widget.RelativeLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            lp.setMarginStart(marginStartPx);
+            lp.setMarginEnd(marginEndPx);
             lp.addRule(android.widget.RelativeLayout.CENTER_VERTICAL);
             return lp;
         } else {
             return new ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         }
+    }
+
+    /** 防换行：在 userTV 文本开头内嵌紧凑标签（" $role " 带背景色），并强制 singleLine + 末尾省略。 */
+    private static void applyRoleInline(View nick, String role) {
+        if (!(nick instanceof TextView)) return;
+        TextView userTV = (TextView) nick;
+        if (role.equals(sAppliedRole.get(userTV))) return;   // 幂等：已插入同角色则跳过
+        int bg;
+        if ("群主".equals(role)) { bg = sOwnerBg; }
+        else if ("管理员".equals(role)) { bg = sAdminBg; }
+        else { bg = sMemberBg; }
+        SpannableStringBuilder sp = new SpannableStringBuilder();
+        SpannableString label = new SpannableString(" " + role + " ");
+        if (bg != 0) {
+            label.setSpan(new BackgroundColorSpan(bg), 0, label.length(), 0);
+            label.setSpan(new ForegroundColorSpan(0xFFFFFFFF), 0, label.length(), 0);
+        }
+        sp.append(label).append(" ").append(userTV.getText());
+        userTV.setText(sp);
+        userTV.setSingleLine(true);                          // ★ 防换行关键
+        userTV.setEllipsize(TextUtils.TruncateAt.END);      // ★ 昵称过长末尾省略
+        userTV.setGravity(Gravity.CENTER_VERTICAL);
+        sAppliedRole.put(userTV, role);
     }
 
     /** 按角色应用配色（0 = 恢复微信原生：仅保留文本、清背景）。 */
@@ -473,10 +577,10 @@ public final class GroupTitleTagHook {
     }
 
     /** 判定角色：优先文档 API（z2.L0 群主 / z2.E0 管理员），失败再反射兜底。 */
-    private static String resolveRole(String room, String sender) {
+    public static String resolveRole(String room, String sender) {
         // 文档 §3：j1.v(f).a().t1(room) 拿 z2，L0()=群主、E0()=管理员（roomFlag & 2048）
         try {
-            String role = GroupMemberNames.roleOf(room, sender);
+            String role = GroupMemberNames.roleOf(sender, room);
             if (role != null) return role;
         } catch (Throwable ignored) {}
         // 兜底：反射读群主/管理员字段（旧版类名差异）
@@ -548,7 +652,59 @@ public final class GroupTitleTagHook {
         return (room != null || sender != null) ? new String[]{room, sender} : null;
     }
 
-    private static boolean isChatroom(String room) {
+    /** 真机自校准：已知群主 wxid（非空才打印）。 */
+    public static String getCalibWxid() { return sCalibWxid; }
+
+    /** 自动校准（无需填 wxid）：打印该群成员对象所有值为 true 的 boolean 字段。 */
+    public static void dumpMemberFields(String room, String sender) {
+        try {
+            Object info = WmReflect.getChatroomInfo(sCl, room);
+            if (info == null) return;
+            // 在群信息对象字段中找成员列表（List），定位 sender 对应的成员对象
+            for (java.lang.reflect.Field f : info.getClass().getDeclaredFields()) {
+                try {
+                    f.setAccessible(true);
+                    Object v = f.get(info);
+                    if (v instanceof List) {
+                        for (Object item : (List<?>) v) {
+                            if (item == null) continue;
+                            if (sender.equals(readMemberUsername(item))) {
+                                dumpMemberBoolFields(item, sender);
+                                return;
+                            }
+                        }
+                    }
+                } catch (Throwable ignored) {}
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    /** 读取成员对象 username（候选：P0() / 字段 W / username）。 */
+    private static Object readMemberUsername(Object member) {
+        try { Object o = XposedHelpers.callMethod(member, "P0"); if (o != null) return o; } catch (Throwable ignored) {}
+        try { Object o = XposedHelpers.getObjectField(member, "W"); if (o != null) return o; } catch (Throwable ignored) {}
+        try { Object o = XposedHelpers.getObjectField(member, "username"); if (o != null) return o; } catch (Throwable ignored) {}
+        return null;
+    }
+
+    /** 只打印值为 true 的 boolean 字段：CALIB sender=... BOOL field=true。 */
+    private static void dumpMemberBoolFields(Object member, String sender) {
+        LogWriter.log(TAG, "CALIB sender=" + sender + " cls=" + member.getClass().getName());
+        java.lang.reflect.Field[] fs = member.getClass().getDeclaredFields();
+        for (java.lang.reflect.Field f : fs) {
+            try {
+                f.setAccessible(true);
+                if (f.getType() == Boolean.TYPE) {
+                    Object val = f.get(member);
+                    if (Boolean.TRUE.equals(val)) {
+                        LogWriter.log(TAG, "CALIB sender=" + sender + " BOOL " + f.getName() + "=true");
+                    }
+                }
+            } catch (Throwable ignored) {}
+        }
+    }
+
+    public static boolean isChatroom(String room) {
         return room != null && (room.endsWith("@chatroom") || room.endsWith("@im.chatroom"));
     }
 

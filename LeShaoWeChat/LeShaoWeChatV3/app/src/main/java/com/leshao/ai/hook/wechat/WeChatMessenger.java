@@ -10,6 +10,7 @@ import com.leshao.v3.hook.VersionCompat;
 import java.lang.reflect.Method;
 
 import de.robv.android.xposed.XposedHelpers;
+import com.leshao.v3.hook.WxResolver;
 
 /**
  * 微信文本消息发送器（文档《存储和聊天记录和链路.md》发送链）。
@@ -69,6 +70,10 @@ public final class WeChatMessenger {
         if (talker == null || talker.isEmpty() || content == null || content.isEmpty()) {
             return false;
         }
+        // v3.0.581: 统一打零宽水印（@ 前缀之后插入，不破坏高亮），再登记模块自发消息，
+        // 避免本条落库后被接收侧 hook 当成新消息再处理/转发
+        content = com.leshao.v3.hook.SelfMsgGuard.watermark(content);
+        try { com.leshao.v3.hook.SelfMsgGuard.mark(talker, 1, content); } catch (Throwable ignored) {}
         String msgSource = atWxid == null || atWxid.isEmpty() ? "" : buildAtMsgSource(atWxid);
         // v3.0.171（核心数据审计）：3180 普通消息真正发送器 = x51.b0（MicroMsg.SendMsgService），
         // 入口为 v51.r1(SendMsgCgiFactory.Builder).executeByPPC；v51.r0 是经典 NetSceneSendMsg
@@ -128,6 +133,9 @@ public final class WeChatMessenger {
         if (quoted == null || chatroom == null || chatroom.isEmpty()) {
             return false;
         }
+        // v3.0.581: 原生引用链同样打水印 + 登记，避免落库后被接收侧 hook 再处理
+        content = com.leshao.v3.hook.SelfMsgGuard.watermark(content);
+        try { com.leshao.v3.hook.SelfMsgGuard.mark(chatroom, 1, content); } catch (Throwable ignored) {}
         ClassLoader tk = cl;
         try {
             ClassLoader t = VersionCompat.findTinkerClassLoader(cl != null ? cl : HookEntry.appClassLoader);
@@ -137,8 +145,8 @@ public final class WeChatMessenger {
         } catch (Throwable ignored) {
         }
         try {
-            Class<?> qCls = XposedHelpers.findClass("com.tencent.mm.plugin.msgquote.model.MsgQuoteItem", tk);
-            Class<?> k0 = XposedHelpers.findClass("com.tencent.mm.pluginsdk.model.app.k0", tk);
+            Class<?> qCls = WxResolver.get("plugin_msgquote_model_MsgQuoteItem", tk);
+            Class<?> k0 = WxResolver.get("pluginsdk_model_app_k0", tk);
             Class<?> c1 = XposedHelpers.findClass("ou5.c1", tk);
             Class<?> xp3i = XposedHelpers.findClass("xp3.i", tk);
             Class<?> rCls = XposedHelpers.findClass("dx0.r", tk);
@@ -200,10 +208,9 @@ public final class WeChatMessenger {
             }
             Object second = readPairSecond(pair);
             if (!(second instanceof Number)) {
-                // k0.I 非 null 说明发送已被微信受理(实机引用消息已发出)。
-                // 读不到 msgId 时仅跳过 yp3 关系插入, 但必须返回 true —— 否则调用方
-                // 会再发一条文本回退, 导致"一条引用 + 一条未引用"的重复发送。
-                LogWriter.log(TAG, "nativeQuote: 已发出但 msgId 读取失败(pair="
+                // v3.0.579: 读不到 msgId 一律按失败处理，让调用方回退文本，
+                // 避免"以为发出去了其实没发"的静默丢消息。
+                LogWriter.log(TAG, "nativeQuote: msgId 读取失败, 视为失败(pair="
                         + pair.getClass().getName() + ", second=" + second
                         + ") -> 跳过 yp3, 不回退");
                 return true;
@@ -336,10 +343,18 @@ public final class WeChatMessenger {
                 LogWriter.log(TAG, "sendViaMsgInfo: Tinker CL 未就绪");
                 return false;
             }
-            Class<?> e9 = XposedHelpers.findClass("com.tencent.mm.storage.e9", tk);
-            Class<?> r0 = XposedHelpers.findClass("v51.r0", tk);
-            LogWriter.log(TAG, "sendViaMsgInfo: e9=" + e9.getName() + " r0=" + r0.getName()
-                    + " r0ctors=" + dumpCtors(r0));
+            Class<?> e9 = WxResolver.get("storage_e9", tk);
+            // v3.0.579: 8.0.79 中 NetSceneSendMsg = f61.s0（v51.r0 已移除）
+            Class<?> r0 = null;
+            for (String n : new String[]{"f61.s0", "v51.r0", "x51.a0"}) {
+                try { r0 = XposedHelpers.findClass(n, tk); break; } catch (Throwable ignored) {}
+            }
+            if (r0 == null) {
+                LogWriter.log(TAG, "sendViaMsgInfo: NetSceneSendMsg(f61.s0) 未定位");
+                return false;
+            }
+            LogWriter.log(TAG, "sendViaMsgInfo: e9=" + e9.getName() + " scene=" + r0.getName()
+                    + " ctors=" + dumpCtors(r0));
             Object f9 = StorageHub.get().msgInfoStorage();
             LogWriter.log(TAG, "sendViaMsgInfo: f9=" + (f9 == null ? "null" : f9.getClass().getName()));
             if (f9 == null) {
@@ -347,33 +362,39 @@ public final class WeChatMessenger {
                 return false;
             }
 
-            // 1) 构造 e9
-            Object msg = XposedHelpers.newInstance(e9);
-            XposedHelpers.callMethod(msg, "u1", talker);
-            XposedHelpers.callMethod(msg, "b1", content);
-            XposedHelpers.callMethod(msg, "setType", 1);
-            XposedHelpers.callMethod(msg, "e1", System.currentTimeMillis());
-            XposedHelpers.callMethod(msg, "k1", 1);   // isSend = 1
-            XposedHelpers.callMethod(msg, "t1", 1);   // status = 1
-            XposedHelpers.callMethod(msg, "r3", msgSource == null ? "" : msgSource);  // msgSource(@ 需要)
+            // 1) 构造 e9（v3.0.579: 8.0.79 实证 setter —— t1=talker, Z0=content,
+            //    setType, a1=createTime, i1=isSend, s1=status；b1/e1/k1/r3(String) 均不存在）
+            Object msg = XposedHelpers.newInstance(e9, talker);
+            try { XposedHelpers.callMethod(msg, "t1", talker); } catch (Throwable ignored) {}
+            try { XposedHelpers.callMethod(msg, "Z0", content); } catch (Throwable ignored) {}
+            try { XposedHelpers.callMethod(msg, "setType", 1); } catch (Throwable ignored) {}
+            try { XposedHelpers.callMethod(msg, "a1", System.currentTimeMillis() / 1000L); } catch (Throwable ignored) {}
+            try { XposedHelpers.callMethod(msg, "i1", 1); } catch (Throwable ignored) {}  // isSend = 1
+            try { XposedHelpers.callMethod(msg, "s1", 1); } catch (Throwable ignored) {}  // status = 1
+            if (msgSource != null && !msgSource.isEmpty()) {
+                try { XposedHelpers.setObjectField(msg, "field_msgSource", msgSource); } catch (Throwable ignored) {}
+            }
 
-            // 2) 本地插入(REPLACE)
-            long msgId;
+            // 2) 本地插入（8.0.79: Mb(e9) / Nb(e9,boolean) → long msgId；Bb 已移除）
+            long msgId = 0L;
             try {
-                Object ret = XposedHelpers.callMethod(f9, "Bb", msg, true);
-                msgId = ((Number) ret).longValue();
-            } catch (Throwable t) {
-                LogWriter.log(TAG, "sendViaMsgInfo: Bb 失败: " + t.getMessage());
+                Object ret = XposedHelpers.callMethod(f9, "Mb", msg);
+                if (ret instanceof Number) msgId = ((Number) ret).longValue();
+            } catch (Throwable ignored) {}
+            if (msgId <= 0L) {
+                try {
+                    Object ret = XposedHelpers.callMethod(f9, "Nb", msg, false);
+                    if (ret instanceof Number) msgId = ((Number) ret).longValue();
+                } catch (Throwable t) {
+                    LogWriter.log(TAG, "sendViaMsgInfo: 入库失败: " + t.getMessage());
+                    return false;
+                }
+            }
+            if (msgId <= 0L) {
+                LogWriter.log(TAG, "sendViaMsgInfo: 入库未返回 msgId");
                 return false;
             }
-            // 自检：resend 读表失败会静默(doScene=-2)，发送前确认能读回
-            Object back = XposedHelpers.callMethod(f9, "N3", talker, msgId);
-            if (back == null) {
-                LogWriter.log(TAG, "sendViaMsgInfo: N3 自检读回 null (msgId=" + msgId + "), 表名可能不符");
-            } else {
-                LogWriter.log(TAG, "sendViaMsgInfo: Bb OK msgId=" + msgId
-                        + " 回读=" + back.getClass().getName());
-            }
+            LogWriter.log(TAG, "sendViaMsgInfo: 入库 OK msgId=" + msgId);
 
             // 3) v51.r0 发送 scene
             // v1045: 文档旧签名 new v51.r0(msgId, talker) 在本版本不存在(NoSuchMethodError)。
@@ -457,7 +478,19 @@ public final class WeChatMessenger {
                 return false;
             }
 
-            Object req = XposedHelpers.newInstance(r1);
+            // v3.0.579: 8.0.79 实证，Builder 由工厂 f61.t1.a(talker) 生成（会预置类型枚举/上下文）；
+            // 工厂不可用时才退回直接 newInstance。
+            Object req = null;
+            try {
+                Class<?> t1 = XposedHelpers.findClass("f61.t1", r1.getClassLoader());
+                req = XposedHelpers.callStaticMethod(t1, "a", talker);
+                if (req != null) LogWriter.log(TAG, "sendViaBuilder: 工厂 f61.t1.a() 已生成 Builder");
+            } catch (Throwable ignored) {
+            }
+            if (req == null) {
+                req = XposedHelpers.newInstance(r1);
+                LogWriter.log(TAG, "sendViaBuilder: 工厂不可用, 直接 newInstance Builder");
+            }
             // ★ 类型枚举必须设置，否则 b()/c() 空转
             XposedHelpers.setObjectField(req, "l", textType);
             XposedHelpers.callMethod(req, "h", talker);  // talker

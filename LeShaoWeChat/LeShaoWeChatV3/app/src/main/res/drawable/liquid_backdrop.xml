@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  玻璃风格 · 窗口底帘（v3.0.459 闲鱼黄）
+  浅色模式：深暖黄棕实底衬托暖白玻璃浮层；暗色模式由 drawable-night 变体覆盖。
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#FF4A3B12" />
+</shape>

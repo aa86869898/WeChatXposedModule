@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>音色列表 UI 布局 · 10 版设计稿（浅色/暗色）</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Segoe UI", sans-serif;
+    background: linear-gradient(160deg,#0f1222 0%,#1b1e34 100%);
+    color:#e8eaf6; padding:40px 20px 80px;
+  }
+  h1 { text-align:center; font-size:26px; font-weight:700; letter-spacing:1px; margin-bottom:6px; }
+  .sub { text-align:center; color:#9aa0b5; font-size:14px; margin-bottom:40px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); gap:36px; max-width:1280px; margin:0 auto; }
+  .card { background:#171a2c; border-radius:20px; padding:20px 20px 24px; box-shadow:0 10px 40px rgba(0,0,0,.45); border:1px solid #2a2e4a; transition:transform .2s; }
+  .card:hover { transform:translateY(-4px); }
+  .card .meta { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+  .card .ver { font-size:12px; color:#ffd54f; background:rgba(255,213,79,.12); padding:3px 10px; border-radius:20px; font-weight:600; }
+  .card .name { font-size:15px; font-weight:700; color:#fff; }
+  .card .desc { font-size:12px; color:#9aa0b5; margin-bottom:14px; line-height:1.6; }
+  .toggle { font-size:12px; background:linear-gradient(135deg,#5b7cfa,#7a5cfa); color:#fff; border:0; border-radius:14px; padding:5px 12px; cursor:pointer; font-weight:600; }
+
+  /* ============ 手机框 ============ */
+  .phone { width:300px; margin:0 auto; background:#2b2f45; border-radius:36px; padding:12px 10px 14px; box-shadow:inset 0 0 0 3px #2b2f45, 0 14px 30px rgba(0,0,0,.5); }
+  .phone .status { display:flex; justify-content:space-between; padding:2px 12px 6px; color:#8a90aa; font-size:11px; font-weight:600; }
+
+  /* ============ 屏幕 + 主题变量（浅色/暗色） ============ */
+  .screen {
+    --bg:#f5f6fa; --card:#ffffff; --text:#23263a; --sub:#9aa0b5;
+    --divider:#f0f1f6; --search:#eceef5; --tabn:#eceef5; --tabnt:#5a5e75;
+    --border:#e7e9f2; --badge:#efeafe; --badget:#7a5cfa; --appbar:#f5f6fa;
+    background:var(--bg); border-radius:24px; overflow:hidden; height:560px;
+    display:flex; flex-direction:column; position:relative; color:var(--text);
+    transition:background .25s;
+  }
+  .screen.dark {
+    --bg:#141627; --card:#1d2036; --text:#eef0fa; --sub:#8a90aa;
+    --divider:#262a44; --search:#22253f; --tabn:#22253f; --tabnt:#9aa0b5;
+    --border:#2a2e4a; --badge:#2a2450; --badget:#a89bff; --appbar:#141627;
+  }
+
+  /* ============ 通用组件 ============ */
+  .appbar { padding:14px 14px 10px; }
+  .appbar .title { font-size:16px; font-weight:800; text-align:center; color:var(--text); }
+  .tabs { display:flex; gap:8px; padding:0 14px 10px; }
+  .tabs .tab { flex:1; text-align:center; padding:8px 0; border-radius:12px; font-size:13px; font-weight:700; }
+  .tab.active { background:linear-gradient(135deg,#5b7cfa,#7a5cfa); color:#fff; }
+  .tab.normal { background:var(--tabn); color:var(--tabnt); }
+  .search { margin:0 14px 10px; }
+  .search input { width:100%; border:none; background:var(--search); border-radius:12px; padding:10px 14px; font-size:13px; outline:none; color:var(--text); }
+  .search input::placeholder { color:var(--sub); }
+  .vlist { flex:1; overflow:hidden; padding:0 0 8px; }
+  .vrow { display:flex; align-items:center; padding:10px 14px; background:var(--card); transition:background .25s; }
+  .vrow .sel { width:20px; height:20px; border-radius:50%; border:2px solid #c3c8d8; margin-right:10px; flex:none; }
+  .vrow .sel.on { border-color:#5b7cfa; background:#5b7cfa; box-shadow:inset 0 0 0 3px var(--card); }
+  .vrow .name { flex:1; font-size:14px; font-weight:600; color:var(--text); }
+  .vrow .sub { font-size:11px; color:var(--sub); font-weight:400; }
+  .ear { width:24px; height:24px; flex:none; }
+  .divider { height:1px; background:var(--divider); margin-left:44px; }
+  .badge { font-size:11px; color:var(--badget); background:var(--badge); padding:2px 8px; border-radius:10px; font-weight:700; }
+
+  /* ============ 各版本独有 ============ */
+  .v2 .vrow { border-radius:14px; margin:6px 14px; padding:12px; box-shadow:0 2px 8px rgba(0,0,0,.06); border:1px solid var(--border); }
+  .v3 .vlist { display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:0 14px; overflow:auto; }
+  .v3 .vrow { flex-direction:column; align-items:flex-start; border-radius:14px; padding:12px; border:1px solid var(--border); }
+  .v3 .name { margin:6px 0 4px; }
+  .v5 .vrow .avatar { width:38px; height:38px; border-radius:50%; background:linear-gradient(135deg,#ffb86c,#ff6b6b); margin-right:10px; flex:none; }
+  .v6 .vrow { padding:7px 14px; }
+  .v6 .divider { margin-left:14px; }
+  .v8 .vrow { border-radius:0; border-bottom:1px solid var(--divider); }
+  .v8 .ear { margin-left:auto; margin-right:6px; }
+  .v8 .del { color:#ff6b6b; font-size:12px; font-weight:700; }
+  .v9 .bottom { display:flex; border-top:1px solid var(--divider); background:var(--card); padding:8px 0; }
+  .v9 .bottom div { flex:1; text-align:center; font-size:11px; color:var(--sub); }
+  .v9 .bottom .on { color:#5b7cfa; font-weight:700; }
+  .v10 .filters { display:flex; gap:6px; padding:0 14px 8px; overflow:hidden; }
+  .v10 .filters span { font-size:11px; background:var(--search); padding:4px 10px; border-radius:14px; color:var(--tabnt); }
+  .v10 .filters .on { background:#5b7cfa; color:#fff; }
+  .group { font-size:12px; font-weight:800; color:#7a5cfa; padding:8px 14px 4px; }
+  .footer { text-align:center; color:#6a6f8a; font-size:12px; margin-top:50px; }
+</style>
+</head>
+<body>
+  <h1>🎧 音色列表 UI 布局 · 10 版设计稿</h1>
+  <div class="sub">LeShaoWeChat 乐少助手 · 每版均适配浅色 / 暗色（点击「切换深浅色」预览）</div>
+
+  <div class="grid">
+
+    <!-- V1 -->
+    <div class="card">
+      <div class="meta"><span class="name">V1 · 经典分割线</span><span class="ver">浅色/暗色</span></div>
+      <div class="desc">左侧单选圈 + 音色名 + 实心耳机，每行细分割线，搜索栏置顶。</div>
+      <button class="toggle" onclick="toggleTheme('scr1')">切换深浅色</button>
+      <div style="height:12px"></div>
+      <div class="phone">
+        <div class="status"><span>9:41</span><span>🔋</span></div>
+        <div class="screen" id="scr1">
+          <div class="appbar"><div class="title">乐少助手音色库</div></div>
+          <div class="tabs"><div class="tab active">傻包音色库100个</div><div class="tab normal">配音魔方库xx个</div></div>
+          <div class="search"><input placeholder="🔍 搜索音色名称..."></div>
+          <div class="vlist">
+            <div class="vrow"><div class="sel on"></div><div class="name">温柔桃子（升级版）</div><div class="ear">🎧</div></div>
+            <div class="divider"></div>
+            <div class="vrow"><div class="sel"></div><div class="name">磁性俊宇（升级版）</div><div class="ear">🎧</div></div>
+            <div class="divider"></div>
+            <div class="vrow"><div class="sel"></div><div class="name">阳光甜妹（升级版）</div><div class="ear">🎧</div></div>
+            <div class="divider"></div>
+            <div class="vrow"><div class="sel"></div><div class="name">腹黑霸总</div><div class="ear">🎧</div></div>
+            <div class="divider"></div>
+            <div class="vrow"><div class="sel"></div><div class="name">妩媚御姐</div><div class="ear">🎧</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- V2 -->
+    <div class="card">
+      <div class="meta"><span class="name">V2 · 大卡片式</span><span class="ver">浅色/暗色</span></div>
+      <div class="desc">每个音色独立圆角卡片，自带阴影与边框，视觉更清晰。</div>
+      <button class="toggle" onclick="toggleTheme('scr2')">切换深浅色</button>
+      <div style="height:12px"></div>
+      <div class="phone">
+        <div class="status"><span>9:41</span><span>🔋</span></div>
+        <div class="screen v2" id="scr2">
+          <div class="appbar"><div class="title">乐少助手音色库</div></div>
+          <div class="tabs"><div class="tab active">傻包音色库100个</div><div class="tab normal">配音魔方库</div></div>
+          <div class="search"><input placeholder="🔍 搜索音色名称..."></div>
+          <div class="vlist">
+            <div class="vrow"><div class="sel on"></div><div class="name">温柔桃子（升级版）<div class="sub">默认推荐</div></div><div class="ear">🎧</div></div>
+            <div class="vrow"><div class="sel"></div><div class="name">磁性俊宇（升级版）</div><div class="ear">🎧</div></div>
+            <div class="vrow"><div class="sel"></div><div class="name">阳光甜妹（升级版）</div><div class="ear">🎧</div></div>
+            <div class="vrow"><div class="sel"></div><div class="name">腹黑霸总</div><div class="ear">🎧</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- V3 -->
+    <div class="card">
+      <div class="meta"><span class="name">V3 · 双列网格</span><span class="ver">浅色/暗色</span></div>
+      <div class="desc">两列网格布局，每格展示音色名+耳机按钮，一屏可见更多音色。</div>
+      <button class="toggle" onclick="toggleTheme('scr3')">切换深浅色</button>
+      <div style="height:12px"></div>
+      <div class="phone">
+        <div class="status"><span>9:41</span><span>🔋</span></div>
+        <div class="screen v3" id="scr3">
+          <div class="appbar"><div class="title">乐少助手音色库</div></div>
+          <div class="tabs"><div class="tab active">傻包音色库100个</div><div class="tab normal">配音魔方库</div></div>
+          <div class="search"><input placeholder="🔍 搜索音色名称..."></div>
+          <div class="vlist">
+            <div class="vrow"><div class="sel on"></div><div class="name">温柔桃子</div><div class="ear">🎧</div></div>
+            <div class="vrow"><div class="sel"></div><div class="name">磁性俊宇</div><div class="ear">🎧</div></div>
+            <div class="vrow"><div class="sel"></div><div class="name">阳光甜妹</div><div class="ear">🎧</div></div>
+            <div class="vrow"><div class="sel"></div><div class="name">腹黑霸总</div><div class="ear">🎧</div></div>
+            <div class="vrow"><div class="sel"></div><div class="name">妩媚御姐</div><div class="ear">🎧</div></div>
+            <div class="vrow"><div class="sel"></div><div class="name">清朗公子</div><div class="ear">🎧</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- V4 -->
+    <div class="card">
+      <div class="meta"><span class="name">V4 · 大行预览</span><span class="ver">浅色/暗色</span></div>
+      <div class="desc">行高加大，右侧耳机 + 「试听」标签，强调试听操作。</div>
+      <button class="toggle" onclick="toggleTheme('scr4')">切换深浅色</button>
+      <div style="height:12px"></div>
+      <div class="phone">
+        <div class="status"><span>9:41</span><span>🔋</span></div>
+        <div class="screen" id="scr4">
+          <div class="appbar"><div class="title">乐少助手音色库</div></div>
+          <div class="tabs"><div class="tab active">傻包音色库100个</div><div class="tab normal">配音魔方库</div></div>
+          <div class="search"><input placeholder="🔍 搜索音色名称..."></div>
+          <div class="vlist">
+            <div class="vrow"><div class="sel on"></div><div class="name">温柔桃子（升级版）</div><div class="badge" style="margin-right:6px;">试听</div><div class="ear">🎧</div></div>
+            <div class="divider"></div>
+            <div class="vrow"><div class="sel"></div><div class="name">磁性俊宇（升级版）</div><div class="badge" style="margin-right:6px;">试听</div><div class="ear">🎧</div></div>
+            <div class="divider"></div>
+            <div class="vrow"><div class="sel"></div><div class="name">阳光甜妹（升级版）</div><div class="badge" style="margin-right:6px;">试听</div><div class="ear">🎧</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- V5 -->
+    <div class="card">
+      <div class="meta"><span class="name">V5 · 头像式</span><span class="ver">浅色/暗色</span></div>
+      <div class="desc">每行彩色圆形头像 + 名称/副标题，角色感强。</div>
+      <button class="toggle" onclick="toggleTheme('scr5')">切换深浅色</button>
+      <div style="height:12px"></div>
+      <div class="phone">
+        <div class="status"><span>9:41</span><span>🔋</span></div>
+        <div class="screen v5" id="scr5">
+          <div class="appbar"><div class="title">乐少助手音色库</div></div>
+          <div class="tabs"><div class="tab active">傻包音色库100个</div><div class="tab normal">配音魔方库</div></div>
+          <div class="search"><input placeholder="🔍 搜索音色名称..."></div>
+          <div class="vlist">
+            <div class="vrow"><div class="avatar"></div><div class="name">温柔桃子<div class="sub">温柔 · 女声</div></div><div class="ear">🎧</div></div>
+            <div class="divider"></div>
+            <div class="vrow"><div class="avatar" style="background:linear-gradient(135deg,#4facfe,#00f2fe)"></div><div class="name">磁性俊宇<div class="sub">磁性 · 男声</div></div><div class="ear">🎧</div></div>
+            <div class="divider"></div>
+            <div class="vrow"><div class="avatar" style="background:linear-gradient(135deg,#f6d365,#fda085)"></div><div class="name">阳光甜妹<div class="sub">甜美 · 女声</div></div><div class="ear">🎧</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- V6 -->
+    <div class="card">
+      <div class="meta"><span class="name">V6 · 紧凑极简</span><span class="ver">浅色/暗色</span></div>
+      <div class="desc">高密度列表，无左侧选择圈，点击整行选中，小屏友好。</div>
+      <button class="toggle" onclick="toggleTheme('scr6')">切换深浅色</button>
+      <div style="height:12px"></div>
+      <div class="phone">
+        <div class="status"><span>9:41</span><span>🔋</span></div>
+        <div class="screen v6" id="scr6">
+          <div class="appbar"><div class="title">乐少助手音色库</div></div>
+          <div class="tabs"><div class="tab active">傻包音色库100个</div><div class="tab normal">配音魔方库</div></div>
+          <div class="search"><input placeholder="🔍 搜索音色名称..."></div>
+          <div class="vlist">
+            <div class="vrow" style="background:var(--badge)"><div class="name" style="color:#5b7cfa;">✓ 温柔桃子（升级版）</div><div class="ear">🎧</div></div>
+            <div class="divider"></div>
+            <div class="vrow"><div class="name">磁性俊宇（升级版）</div><div class="ear">🎧</div></div>
+            <div class="divider"></div>
+            <div class="vrow"><div class="name">阳光甜妹（升级版）</div><div class="ear">🎧</div></div>
+            <div class="divider"></div>
+            <div class="vrow"><div class="name">腹黑霸总</div><div class="ear">🎧</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- V7 -->
+    <div class="card">
+      <div class="meta"><span class="name">V7 · 分组式</span><span class="ver">浅色/暗色</span></div>
+      <div class="desc">音色按影视剧/家族分组显示，适合配音魔方大库。</div>
+      <button class="toggle" onclick="toggleTheme('scr7')">切换深浅色</button>
+      <div style="height:12px"></div>
+      <div class="phone">
+        <div class="status"><span>9:41</span><span>🔋</span></div>
+        <div class="screen" id="scr7">
+          <div class="appbar"><div class="title">乐少助手音色库</div></div>
+          <div class="tabs"><div class="tab normal">傻包音色库</div><div class="tab active">配音魔方库xx个</div></div>
+          <div class="search"><input placeholder="🔍 搜索音色名称..."></div>
+          <div class="vlist">
+            <div class="group">  ·  仙剑奇侠传</div>
+            <div class="vrow"><div class="sel on"></div><div class="name">温柔桃子</div><div class="ear">🎧</div></div>
+            <div class="group">  ·  电视剧</div>
+            <div class="vrow"><div class="sel"></div><div class="name">磁性俊宇</div><div class="ear">🎧</div></div>
+            <div class="vrow"><div class="sel"></div><div class="name">阳光甜妹</div><div class="ear">🎧</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- V8 -->
+    <div class="card">
+      <div class="meta"><span class="name">V8 · 可操作滑行</span><span class="ver">浅色/暗色</span></div>
+      <div class="desc">每行常驻耳机，右侧「删除」快捷操作，适合管理自定义音色。</div>
+      <button class="toggle" onclick="toggleTheme('scr8')">切换深浅色</button>
+      <div style="height:12px"></div>
+      <div class="phone">
+        <div class="status"><span>9:41</span><span>🔋</span></div>
+        <div class="screen v8" id="scr8">
+          <div class="appbar"><div class="title">乐少助手音色库</div></div>
+          <div class="tabs"><div class="tab active">傻包音色库100个</div><div class="tab normal">配音魔方库</div></div>
+          <div class="search"><input placeholder="🔍 搜索音色名称..."></div>
+          <div class="vlist">
+            <div class="vrow" style="background:var(--badge)"><div class="sel on"></div><div class="name">温柔桃子</div><div class="ear">🎧</div><div class="del">删除</div></div>
+            <div class="vrow"><div class="sel"></div><div class="name">磁性俊宇</div><div class="ear">🎧</div><div class="del">删除</div></div>
+            <div class="vrow"><div class="sel"></div><div class="name">阳光甜妹</div><div class="ear">🎧</div><div class="del">删除</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- V9 -->
+    <div class="card">
+      <div class="meta"><span class="name">V9 · 底部导航</span><span class="ver">浅色/暗色</span></div>
+      <div class="desc">顶部搜索 + 底部导航（音色/收藏/最近/设置），多 Tab 体系。</div>
+      <button class="toggle" onclick="toggleTheme('scr9')">切换深浅色</button>
+      <div style="height:12px"></div>
+      <div class="phone">
+        <div class="status"><span>9:41</span><span>🔋</span></div>
+        <div class="screen v9" id="scr9">
+          <div class="appbar"><div class="title">乐少助手音色库</div></div>
+          <div class="tabs"><div class="tab active">傻包音色库100个</div><div class="tab normal">配音魔方库</div></div>
+          <div class="search"><input placeholder="🔍 搜索音色名称..."></div>
+          <div class="vlist">
+            <div class="vrow"><div class="sel on"></div><div class="name">温柔桃子（升级版）</div><div class="ear">🎧</div></div>
+            <div class="divider"></div>
+            <div class="vrow"><div class="sel"></div><div class="name">磁性俊宇（升级版）</div><div class="ear">🎧</div></div>
+            <div class="divider"></div>
+            <div class="vrow"><div class="sel"></div><div class="name">阳光甜妹（升级版）</div><div class="ear">🎧</div></div>
+          </div>
+          <div class="bottom"><div class="on">音色</div><div>收藏</div><div>最近</div><div>设置</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- V10 -->
+    <div class="card">
+      <div class="meta"><span class="name">V10 · 筛选标签</span><span class="ver">浅色/暗色</span></div>
+      <div class="desc">搜索栏下横向筛选标签（全部/女声/男声/ICL/经典），快速过滤。</div>
+      <button class="toggle" onclick="toggleTheme('scr10')">切换深浅色</button>
+      <div style="height:12px"></div>
+      <div class="phone">
+        <div class="status"><span>9:41</span><span>🔋</span></div>
+        <div class="screen v10" id="scr10">
+          <div class="appbar"><div class="title">乐少助手音色库</div></div>
+          <div class="tabs"><div class="tab active">傻包音色库100个</div><div class="tab normal">配音魔方库</div></div>
+          <div class="search"><input placeholder="🔍 搜索音色名称..."></div>
+          <div class="filters"><span class="on">全部</span><span>女声</span><span>男声</span><span>ICL</span><span>经典</span></div>
+          <div class="vlist">
+            <div class="vrow"><div class="sel on"></div><div class="name">温柔桃子（女声）</div><div class="ear">🎧</div></div>
+            <div class="divider"></div>
+            <div class="vrow"><div class="sel"></div><div class="name">磁性俊宇（男声）</div><div class="ear">🎧</div></div>
+            <div class="divider"></div>
+            <div class="vrow"><div class="sel"></div><div class="name">腹黑霸总（ICL）</div><div class="ear">🎧</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="footer">LeShaoWeChat · 乐少助手音色库 UI 布局探索 · 10 版 × 浅色/暗色</div>
+
+  <script>
+    function toggleTheme(id) {
+      document.getElementById(id).classList.toggle('dark');
+    }
+  </script>
+</body>
+</html>

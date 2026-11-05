@@ -88,6 +88,19 @@ public final class WxForwardReplaceHook {
     // 修复转发.md v4 + SendChain §5A：MvvmContactListUI.finish() 里抓 state.p 选中目标，B 回填 Select_Conv_User
     private static volatile android.app.Activity sLastMvvm;
     private static volatile java.util.List<String> sPickedTargets;
+    // v3.0.575: 选人器 finish 时已由模块发送语音（不依赖 MsgRetransmitUI.onActivityResult），
+    // 防止 onActivityResult 兜底路径重复发送
+    private static volatile boolean sVoiceSentByPicker = false;
+
+    // v3.0.577【关键修复】语音转发"授权闸门"：
+    //   只有用户真正点击「语音转发」菜单项（launchNativeVoiceForward）才置位，
+    //   且仅在短窗口内有效。此前 [FwdFix][A]/[B] 在任意一次普通转发（压缩包/文件/文字）
+    //   的选人器 finish / onActivityResult 里都会无条件把"缓存下来的旧语音"发出去，
+    //   叠加 pendingVoiceE9() 对 sVoiceMsgs 无 TTL 兜底 → 出现
+    //   "群里转发一个压缩包，却把私聊里别人发的语音一起转发到群里"。
+    private static volatile boolean sVoiceFwdArmed = false;
+    private static volatile long sVoiceFwdArmedAt = 0L;
+    private static final long VOICE_ARM_TTL = 90_000L;   // 授权 90 秒（覆盖选人耗时，finish 后立即解除）
 
     // Design A 状态
     private static volatile Object sPendingMsg;                 // manager.t.a 传入的 e9
@@ -169,7 +182,7 @@ public static void hook(ClassLoader cl) {
             if (app != null) {
                 ClassLoader alc = app.getClassLoader();
                 if (alc != null) {
-                    try { alc.loadClass("com.tencent.mm.R"); return alc; } catch (Throwable ignored) {}
+                    try { WxResolver.resolve(alc, "com.tencent.mm.R"); return alc; } catch (Throwable ignored) {}
                     return alc;
                 }
             }
@@ -177,7 +190,7 @@ public static void hook(ClassLoader cl) {
         try {
             ClassLoader tk = VersionCompat.findTinkerClassLoader(base);
             if (tk != null) {
-                try { tk.loadClass("com.tencent.mm.storage.e9"); return tk; } catch (Throwable ignored) {}
+                try { WxResolver.resolve(tk, "com.tencent.mm.storage.e9"); return tk; } catch (Throwable ignored) {}
                 return tk;
             }
         } catch (Throwable ignored) {}
@@ -333,10 +346,11 @@ public static void hook(ClassLoader cl) {
         }
         Class<?> menuCls;
         Class<?> infoCls;
-        try {
-            menuCls = cl.loadClass("kj5.i4");
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "voice menu: load kj5.i4 fail: " + t.getMessage());
+        // v3.0.462：消息类每版改名（kj5.i4 在 8.0.79 已漂移）。
+        // 直接从 provider 方法签名反射取第一参数类型作为消息类，无需硬编码类名。
+        menuCls = findProviderMsgClass(provider);
+        if (menuCls == null) {
+            LogWriter.log(TAG, "voice menu: provider.a first param not a WeChat msg class");
             return;
         }
         try {
@@ -467,27 +481,58 @@ public static void hook(ClassLoader cl) {
     }
 
     /**
-     * §19.2(2) 语音转发 pending：hook {@code bq.Q}，点击 142（转发）时记录语音 e9。
+     * §19.2(2) 语音转发 pending：hook 菜单项 142（转发）点击处理，点击时记录语音 e9。
+     * 8.0.79 起旧锚点 {@code viewitems.bq.Q} 已改名，实际处理在 viewitems.yb#R(MenuItem, d, MvvmMsgInfo)。
+     * 优先权威类名 + 方法名 R/Q(MenuItem,...)，再用「MsgRetransmitUI」字符串锚点兜底跨版本。
      * 兜底「语音 Intent 可能无 Retr_Msg_Id」——SelectConversationUI 放行与模块发送都靠此状态。
      */
     private static void installVoicePendingInBqQ(ClassLoader cl) {
         Method target = null;
-        Class<?> bq;
-        try {
-            bq = XposedHelpers.findClass(CLS_VOICE_VIEW, cl);
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "plan-B: bq not found: " + t.getMessage());
-            return;
+        Class<?> holder = null;
+        // ① 8.0.79 权威类名 yb + 方法 R(MenuItem, d, MvvmMsgInfo)
+        String[] classCands = {
+                "com.tencent.mm.ui.chatting.viewitems.yb",   // 8.0.79：onContextItemSelected 实现在 R(MenuItem,d,ym5.d)
+                CLS_VOICE_VIEW                                // 旧版 bq（3180 及更早的 Q(MenuItem,...)）
+        };
+        for (String cn : classCands) {
+            try {
+                Class<?> k = XposedHelpers.findClass(cn, cl);
+                for (Method m : k.getDeclaredMethods()) {
+                    if (!m.getName().equals("R") && !m.getName().equals("Q")) continue;
+                    Class<?>[] pts = m.getParameterTypes();
+                    if (pts.length >= 1 && MenuItem.class.isAssignableFrom(pts[0])) { target = m; holder = k; break; }
+                }
+                if (target != null) break;
+            } catch (Throwable ignored) {}
         }
-        for (Method m : bq.getDeclaredMethods()) {
-            if (!m.getName().equals("Q")) continue;
-            Class<?>[] pts = m.getParameterTypes();
-            if (pts.length >= 1 && MenuItem.class.isAssignableFrom(pts[0])) { target = m; break; }
+        // ② DexKit 字符串锚点兜底：类体引用 MsgRetransmitUI 的 viewitems 菜单处理类
+        if (target == null) {
+            try {
+                List<String> hits = DexKitHelper.findClassesByString(cl, "MsgRetransmitUI");
+                if (hits != null) {
+                    for (String name : hits) {
+                        if (name == null || !name.contains("viewitems")) continue;
+                        try {
+                            Class<?> k = XposedHelpers.findClass(name, cl);
+                            for (Method m : k.getDeclaredMethods()) {
+                                if (!m.getName().equals("R") && !m.getName().equals("Q")) continue;
+                                Class<?>[] pts = m.getParameterTypes();
+                                if (pts.length >= 1 && MenuItem.class.isAssignableFrom(pts[0])) { target = m; holder = k; break; }
+                            }
+                            if (target != null) {
+                                LogWriter.log(TAG, "plan-B: resolved menu142 handler via string anchor -> " + name);
+                                break;
+                            }
+                        } catch (Throwable ignored) {}
+                    }
+                }
+            } catch (Throwable ignored) {}
         }
         if (target == null) {
-            LogWriter.log(TAG, "plan-B: bq.Q(MenuItem,...) not found in " + bq.getName());
+            LogWriter.log(TAG, "plan-B: no R/Q(MenuItem,...) in yb/bq, menu142 pending tracker skipped");
             return;
         }
+        final Class<?> hookedHolder = holder;
         XposedBridge.hookMethod(target, new XC_MethodHook() {
             @Override
             protected void beforeHookedMethod(MethodHookParam p) {
@@ -496,33 +541,54 @@ public static void hook(ClassLoader cl) {
                     MenuItem mi = (MenuItem) p.args[0];
                     if (mi == null || mi.getItemId() != MENU_ID_FORWARD) return;
                     Object e9 = findE9InQArgs(p.args);
-                    sVoicePendingMsg = e9;
-                    sVoicePending = e9 != null;
-                    sVoicePendingUntil = System.currentTimeMillis() + VOICE_PENDING_TTL;
-                    if (e9 != null) {
-                        long msgId = msgIdOf(e9);
-                        if (msgId > 0) {
-                            sVoiceMsgIds.put(msgId, System.currentTimeMillis());
-                            sVoiceMsgs.put(msgId, e9);
-                        }
-                        LogWriter.log(TAG, "BQ_Q_142 pending msgId=" + msgId);
-                    } else {
+                    if (e9 == null) {
                         LogWriter.log(TAG, "BQ_Q_142 pending (no e9 in args)");
+                        return;
                     }
+                    // v3.0.577【关键】只有"语音消息"点击 142 才记录 pending 并打开授权闸门；
+                    // 非语音（压缩包/文件/文字/图片等）一律忽略，绝不让旧语音被后续普通转发带出。
+                    int mtype = msgTypeOf(e9);
+                    if (mtype != MSG_TYPE_VOICE) {
+                        LogWriter.log(TAG, "BQ_Q_142 非语音(type=" + mtype + "), 忽略不授权");
+                        return;
+                    }
+                    sVoicePendingMsg = e9;
+                    sVoicePending = true;
+                    sVoicePendingUntil = System.currentTimeMillis() + VOICE_PENDING_TTL;
+                    sVoiceFwdArmed = true;                              // 用户真正点了「转发」语音 → 授权
+                    sVoiceFwdArmedAt = System.currentTimeMillis();
+                    long msgId = msgIdOf(e9);
+                    if (msgId > 0) {
+                        sVoiceMsgIds.put(msgId, System.currentTimeMillis());
+                        sVoiceMsgs.put(msgId, e9);
+                    }
+                    LogWriter.log(TAG, "BQ_Q_142 pending+armed msgId=" + msgId + " type=" + mtype);
                 } catch (Throwable ignored) {}
             }
         });
-        LogWriter.log(TAG, "plan-B: hooked bq.Q(MenuItem,...) pending tracker");
+        LogWriter.log(TAG, "plan-B: hooked " + hookedHolder.getName() + "." + target.getName()
+                + "(MenuItem,...) pending tracker");
     }
 
     /** 从 bq.Q 参数中提取 e9 消息对象：storage 对象直接返回，否则尝试 call("c")。 */
     private static Object findE9InQArgs(Object[] args) {
         if (args == null) return null;
+        // ① 直接命中 storage 消息对象
         for (Object a : args) {
             if (a == null) continue;
             String cn = a.getClass().getName();
             if (cn.contains("storage") || cn.equals("com.tencent.mm.storage.e9")) return a;
         }
+        // ② 8.0.79：MvvmMsgInfo 参数（ym5.d），其字段链 d.b = e9 消息对象
+        for (Object a : args) {
+            if (a == null) continue;
+            try {
+                Object d = XposedHelpers.getObjectField(a, "d");
+                Object b = d != null ? XposedHelpers.getObjectField(d, "b") : null;
+                if (b != null && b.getClass().getName().contains("storage")) return b;
+            } catch (Throwable ignored) {}
+        }
+        // ③ 任意包装对象的 c() 方法兜底（旧版结构）
         for (Object a : args) {
             if (a == null) continue;
             try {
@@ -544,10 +610,15 @@ public static void hook(ClassLoader cl) {
         hookPicker(cl);       // ② 钩 MvvmContactListUI.finish 抓 state.p 目标
     }
 
+    /** 开始一次新的转发流程前调用：清空上次转发的缓存目标，防止跨流程错发。 */
+    public static void resetPickedTargets() {
+        sPickedTargets = null;
+    }
+
     /* ---------- ① MsgRetransmitUI.onActivityResult（自身声明层） ---------- */
     private static void hookRetransmit(ClassLoader cl) {
         try {
-            Class<?> c = cl.loadClass("com.tencent.mm.ui.transmit.MsgRetransmitUI");
+            Class<?> c = WxResolver.resolve(cl, "com.tencent.mm.ui.transmit.MsgRetransmitUI");
             Method m = c.getDeclaredMethod("onActivityResult",
                     int.class, int.class, Intent.class);
             // 装机即诊断：确认钩的是 MsgRetransmitUI 自身那一层
@@ -557,8 +628,19 @@ public static void hook(ClassLoader cl) {
             XposedBridge.hookMethod(m, new XC_MethodHook() {
                 @Override protected void beforeHookedMethod(MethodHookParam p) throws Throwable {
                     // ← 第一行，无守卫
+                    if (!sEnabled) return;
+                    // v3.0.577【关键修复】只有用户真正点了「语音转发」菜单（armed）才处理：
+                    //   普通转发（压缩包/文件/文字）未授权 → 纯放行，既不改写 Select_Conv_User，
+                    //   也绝不发送缓存语音。
+                    final boolean armedB = voiceForwardArmed();
+                    final Object pendMsgB = armedB ? sVoicePendingMsg : null;
+                    if (pendMsgB == null) {
+                        LogWriter.log(TAG, "[FwdFix][B] 非语音转发(未授权), 放行不处理 rc=" + p.args[1]);
+                        return;
+                    }
                     LogWriter.log(TAG, "[FwdFix][B] ENTER this=" + p.thisObject.getClass().getName()
-                            + " req=" + p.args[0] + " rc=" + p.args[1] + " data=" + p.args[2]);
+                            + " req=" + p.args[0] + " rc=" + p.args[1] + " data=" + p.args[2]
+                            + " mode=" + (armedB ? "armed" : "fresh"));
                     try {
                         if (p.thisObject == null) return;
                         int rc = intOf(p.args[1]);
@@ -593,8 +675,15 @@ public static void hook(ClassLoader cl) {
                         // 语音转发链根本不触发（MsgRetransmitUI 收到后直接 finish 回 LauncherUI，
                         // x51.b0.kj / v51.r0.doScene 零回调）。3180 原生语音转发 UI 链路已坏，
                         // 必须绕开 UI，用模块 TtsVoiceSender 直发兜底。
-                        // v3.0.197：优先 bq.Q/launch 的 pending；再兜底 sVoiceMsgs 最新（onVoiceMenuBuilt 标记）。
-                        final Object pendMsgF = (sVoicePendingMsg != null) ? sVoicePendingMsg : pendingVoiceE9();
+                        // v3.0.575：选人器 finish 已直接发送（sVoiceSentByPicker=true）时，这里只清理状态不再重复发。
+                        if (sVoiceSentByPicker) {
+                            LogWriter.log(TAG, "[FwdFix][B] already sent by picker, skip activeSend");
+                            sPickedTargets = null;
+                            try { disarmVoiceForward(); } catch (Throwable ignored) {}
+                            return;
+                        }
+                        // v3.0.577: 已通过闸门/新鲜度校验，直接取待转发语音（pendMsgB 保证非空）。
+                        final Object pendMsgF = pendMsgB;
                         if (pendMsgF == null) {
                             LogWriter.log(TAG, "[FwdFix][B] no pending voice msg, skip activeSend");
                         } else {
@@ -614,6 +703,12 @@ public static void hook(ClassLoader cl) {
                         }
                     } catch (Throwable t) {
                         LogWriter.log(TAG, "[FwdFix][B] err " + t);
+                    } finally {
+                        // ★ 修复"语音发出去错发给别人"：用后立即清空缓存目标，
+                        // 防止残留的上次选择目标被下一次转发误用（data 为空时兜底旧目标）。
+                        sPickedTargets = null;
+                        // v3.0.577: 发送完成/处理结束即解除授权并清空 pending，杜绝跨流程误发。
+                        try { disarmVoiceForward(); } catch (Throwable ignored) {}
                     }
                 }
             });
@@ -623,26 +718,62 @@ public static void hook(ClassLoader cl) {
     /* ---------- ② MvvmContactListUI.finish()：确定/关闭一刻读 state.p（mrv5/n0.p LinkedList 选中列表） ---------- */
     private static void hookPicker(ClassLoader cl) {
         try {
-            Class<?> c = cl.loadClass("com.tencent.mm.ui.mvvm.MvvmContactListUI");
+            Class<?> c = WxResolver.resolve(cl, "com.tencent.mm.ui.mvvm.MvvmContactListUI");
             Method m = c.getDeclaredMethod("finish");
             XposedBridge.hookMethod(m, new XC_MethodHook() {
                 @Override protected void beforeHookedMethod(MethodHookParam p) throws Throwable {
                     try {
+                        if (!sEnabled) return;
                         sLastMvvm = (Activity) p.thisObject;
+                        final boolean armed = voiceForwardArmed();
                         java.util.List<String> picked = readSelection((Activity) p.thisObject);
                         if (picked == null || picked.isEmpty()) {
+                            if (armed) disarmVoiceForward();   // 用户取消选择 → 解除授权
                             LogWriter.log(TAG, "[FwdFix][A] finish 无picked, dump state:");
                             dumpState((Activity) p.thisObject);
                             return;
                         }
+                        // v3.0.577【关键修复】只有用户真正点了「语音转发」菜单（armed）才发送语音：
+                        //   普通转发（压缩包/文件/文字）未授权 → pendMsgF=null → 放行不发送。
+                        //   彻底避免"群里转发压缩包，却把私聊旧语音一起发进群"。
+                        final Object pendMsgF = armed ? sVoicePendingMsg : null;
+                        if (pendMsgF == null) {
+                            LogWriter.log(TAG, "[FwdFix][A] 非语音转发(未授权), 放行不发送 picked=" + picked);
+                            return;
+                        }
                         sPickedTargets = picked;
-                        LogWriter.log(TAG, "[FwdFix][A] finish picked=" + picked);
+                        LogWriter.log(TAG, "[FwdFix][A] finish picked=" + picked + " (voiceForward armed)");
+                        // v3.0.575: 微信语音转发在 8.0.79 中 MsgRetransmitUI.onActivityResult 可能不触发
+                        //（原生语音发送链已坏，直接 finish 回 LauncherUI）。选人器 finish 是确定触发的点，
+                        // 在这里直接用模块 TtsVoiceSender 发送语音，不再等 onActivityResult。
+                        java.util.List<String> targets = filterOfficialAccounts(
+                                new java.util.ArrayList<String>(picked));
+                        if (targets.isEmpty()) {
+                            LogWriter.log(TAG, "[FwdFix][A] pickerSend 目标全被过滤, 放弃");
+                            disarmVoiceForward();
+                            return;
+                        }
+                        sVoiceSentByPicker = true;
+                        for (final String one : targets) {
+                            Thread t = new Thread(() -> {
+                                try {
+                                    boolean sent = VoiceForwardHook.forwardVoiceToTarget(one, pendMsgF);
+                                    LogWriter.log(TAG, "[FwdFix][A] pickerSend=" + sent + " target=" + one);
+                                } catch (Throwable th) {
+                                    LogWriter.log(TAG, "[FwdFix][A] pickerSend err " + th);
+                                }
+                            }, "ls-wxfwd-picker");
+                            t.setDaemon(true);
+                            t.start();
+                        }
+                        // v3.0.577: 发送后立即解除授权，防止后续普通转发再次误发。
+                        disarmVoiceForward();
                     } catch (Throwable t) {
                         LogWriter.log(TAG, "[FwdFix][A] err " + t);
                     }
                 }
             });
-            LogWriter.log(TAG, "[FwdFix] installed " + c.getName() + ".finish (pick)");
+            LogWriter.log(TAG, "[FwdFix] installed " + c.getName() + ".finish (pick+send)");
         } catch (Throwable t) { LogWriter.log(TAG, "[FwdFix] installPicker err " + t); }
     }
 
@@ -721,6 +852,8 @@ public static void hook(ClassLoader cl) {
      *  因此必须在此处标记 pending，否则 [FwdFix][B] 永远 no pending voice msg。 */
     public static void markVoiceForwardPending(Object e9) {
         if (e9 == null) return;
+        // v3.0.575: 新一轮转发开始，重置 picker 发送标记
+        sVoiceSentByPicker = false;
         long msgId = msgIdOf(e9);
         if (msgId > 0) {
             sVoiceMsgIds.put(msgId, System.currentTimeMillis());
@@ -733,27 +866,22 @@ public static void hook(ClassLoader cl) {
                 + " type=" + msgTypeOf(e9) + " pendingSet");
     }
 
-    /** 当前待转发语音 e9：优先 bq.Q(142) pending，其次缓存 sVoiceMsgs 中最新的一条。 */
-    private static Object pendingVoiceE9() {
+    /**
+     * v3.0.577: 语音转发闸门是否有效。仅当用户真正点过「语音转发」菜单项
+     * （launchNativeVoiceForward 置位）且仍在 VOICE_ARM_TTL 窗口内、且存在明确的待转发语音时为真。
+     * 这是"普通转发(压缩包/文件/文字)绝不误发旧语音"的核心守卫。
+     */
+    private static boolean voiceForwardArmed() {
         long now = System.currentTimeMillis();
-        if (sVoicePending && now < sVoicePendingUntil && sVoicePendingMsg != null) {
-            return sVoicePendingMsg;
-        }
-        Object best = null;
-        long bestAt = Long.MIN_VALUE;
-        for (java.util.Map.Entry<Long, Object> e : sVoiceMsgs.entrySet()) {
-            Long ts = sVoiceMsgIds.get(e.getKey());
-            if (ts == null) continue;
-            if (ts > bestAt) {
-                bestAt = ts;
-                best = e.getValue();
-            }
-        }
-        return best;
+        return sVoiceFwdArmed
+                && (now - sVoiceFwdArmedAt) <= VOICE_ARM_TTL
+                && sVoicePendingMsg != null;
     }
 
-    /** 消费 pending（发送已接管后清状态，防双发）。 */
-    private static void consumeVoicePending() {
+    /** v3.0.577: 解除闸门并清空语音 pending（发送完成 / 取消 / 非语音转发时调用）。 */
+    private static void disarmVoiceForward() {
+        sVoiceFwdArmed = false;
+        sVoiceFwdArmedAt = 0L;
         sVoicePending = false;
         sVoicePendingMsg = null;
     }
@@ -766,6 +894,8 @@ public static void hook(ClassLoader cl) {
     public static boolean launchNativeVoiceForward(Context ctx, Object e9) {
         try {
             if (ctx == null || e9 == null) return false;
+            // v3.0.575: 新一轮转发开始，重置 picker 发送标记
+            sVoiceSentByPicker = false;
             long msgId = msgIdOf(e9);
             if (msgId > 0) {
                 sVoiceMsgIds.put(msgId, System.currentTimeMillis());
@@ -774,6 +904,9 @@ public static void hook(ClassLoader cl) {
             sVoicePendingMsg = e9;
             sVoicePending = true;
             sVoicePendingUntil = System.currentTimeMillis() + VOICE_PENDING_TTL;
+            // v3.0.577: 用户真正点了「语音转发」→ 打开授权闸门，只有此时 [FwdFix][A]/[B] 才允许发送语音。
+            sVoiceFwdArmed = true;
+            sVoiceFwdArmedAt = System.currentTimeMillis();
             Intent it = new Intent();
             it.setClassName(ctx.getPackageName(), CLS_MSG_RETRANSMIT);
             it.putExtra("Retr_Msg_Type", voiceRetrType(e9));   // e9.V2() ? 6 : 4（§12.1）
@@ -1116,7 +1249,8 @@ public static void hook(ClassLoader cl) {
         return null;
     }
 
-    /** 判断某类是否有 a(kj5.i4, View, ContextMenuInfo)。 */
+    /** 判断某类是否有 a(消息, View, ContextMenuInfo) 三参方法。
+     *  v3.0.462：消息类名每版漂移，不再硬编码 kj5 前缀。 */
     private static boolean hasMenuProviderA(Class<?> c) {
         for (Method m : c.getDeclaredMethods()) {
             if (!m.getName().equals("a")) continue;
@@ -1125,9 +1259,27 @@ public static void hook(ClassLoader cl) {
             if (pts[1] != View.class) continue;
             String p0 = pts[0].getName();
             String p2 = pts[2].getName();
-            if (p0.contains("kj5") && (p2.contains("ContextMenu") || p2.contains("kj5"))) return true;
+            if (p0.startsWith("android.") || p0.startsWith("java.")) continue;
+            if (p2.contains("ContextMenu")) return true;
         }
         return false;
+    }
+
+    /** 从 provider 方法签名反射取第一参数类型（微信消息类），避免硬编码 kj5。 */
+    private static Class<?> findProviderMsgClass(Class<?> c) {
+        if (c == null) return null;
+        for (Method m : c.getDeclaredMethods()) {
+            if (!m.getName().equals("a")) continue;
+            Class<?>[] pts = m.getParameterTypes();
+            if (pts.length != 3) continue;
+            if (pts[1] != View.class) continue;
+            Class<?> p0 = pts[0];
+            String p0n = p0.getName();
+            String p2n = pts[2].getName();
+            if (p0n.startsWith("android.") || p0n.startsWith("java.")) continue;
+            if (p2n.contains("ContextMenu")) return p0;
+        }
+        return null;
     }
 
     private static Object callSafe(Object o, String m, Object... args) {

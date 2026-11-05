@@ -7,6 +7,7 @@ import com.leshao.ai.hook.wechat.StorageHub
 import com.leshao.v3.db.DatabaseProvider
 import com.leshao.v3.hook.DexKitHelper
 import com.leshao.v3.hook.VersionCompat
+import com.leshao.v3.hook.WxResolver
 import com.leshao.v3.model.ContactCard
 import com.leshao.v3.model.ContactCard.Category
 
@@ -418,19 +419,21 @@ class ContactRepository {
             return try {
                 val cl = runtimeCl()
                 if (cl == null) return null
-                // v955(问题6): j1 类名优先取 DexKit 扫描结果, 不再硬编码 gp0.j1
-                val c4 = j1ServiceLookup(cl, "tn3.c4", "tn3.d4") ?: return null
-                val h2 = XposedHelpers.findClass("com.tencent.mm.plugin.messenger.foundation.h2", cl).cast(c4)
-                XposedHelpers.callMethod(h2, "cj")
+                // v3.0.463: 8.0.79 中 tn3.c4/sh3.c4 已删除，服务键改用存储接口。
+                // ServiceManager(ni5.n0).c(com.tencent.mm.storage.d8) 直接返回 RContactStorage 实现(j4)
+                val svc = j1ServiceLookup(cl, "com.tencent.mm.storage.d8", "com.tencent.mm.storage.f9") ?: return null
+                return svc
             } catch (t: Throwable) {
-                LogWriter.log(TAG, "rcontactStorageInstance(j1.v) err: " + t.message)
+                LogWriter.log(TAG, "rcontactStorageInstance(j1.c) err: " + t.message)
                 null
             }
         }
 
         /**
-         * v955(问题6): j1 服务定位器查找。优先 DexKitHelper.getJ1ServiceClass(), 回退 gp0.j1/fp0.j1;
-         * 定位方法兼容 3180 的 v(Class) 与旧版 s(Class)。任一失败返回 null。
+         * v3.0.464: j1 服务定位器查找。8.0.79 中旧 gp0.j1/tn3.c4 已删除，
+         * 服务定位器为 pp0.i1（含 "MicroMsg.ServiceManager" 字符串），取服务方法 v(Class)→up0.a，
+         * 存储接口改用 com.tencent.mm.storage.d8(RContactStorage)/f9(MsgInfoStorage)。
+         * 优先 DexKitHelper.getJ1ServiceClass()（=pp0.i1），回退 gp0.j1/fp0.j1；任一失败返回 null。
          */
         private fun j1ServiceLookup(cl: ClassLoader, vararg keyClassNames: String?): Any? {
             var j1: Class<*>? = null
@@ -454,7 +457,7 @@ class ContactRepository {
                 }
             }
             if (key == null) return null
-            for (mn in arrayOf("v", "s")) {
+            for (mn in arrayOf("v", "c", "s")) {
                 try {
                     val r = XposedHelpers.callStaticMethod(j1, mn, key)
                     if (r != null) return r
@@ -473,9 +476,8 @@ class ContactRepository {
         private fun inProcessContactDb(): Any? {
             return try {
                 val cl = runtimeCl() ?: return null
-                // v955(问题6): j1 类名优先取 DexKit 扫描结果, 不再硬编码 gp0.j1
-                val c4 = j1ServiceLookup(cl, "tn3.c4", "tn3.d4") ?: return null
-                val j4 = XposedHelpers.callMethod(c4, "cj") ?: return null
+                // v3.0.463: 服务键改用存储接口 d8/f9，svc 即 RContactStorage(j4) 实现
+                val j4 = j1ServiceLookup(cl, "com.tencent.mm.storage.d8", "com.tencent.mm.storage.f9") ?: return null
                 readFieldInHierarchy(j4, "d")
             } catch (t: Throwable) {
                 null
@@ -551,24 +553,33 @@ class ContactRepository {
         }
 
         private fun findQueryMethod(dbClass: Class<*>): Method? {
-            // 1) 优先精确匹配: 恰好 2 个参数 (String, String[]) 的 rawQuery。
+            // v3.0.466: WCDB SQLiteDatabase.rawQuery 第二参数是 Object[] 而非 String[]，
+            // 必须同时匹配 (String,String[]) 与 (String,Object[]) 两种签名。
+            val sig2 = arrayOf(
+                    Array<String>::class.java,
+                    Array<Any>::class.java)
+            // 1) 优先精确匹配: 恰好 2 个参数 (String, String[]/Object[]) 的 rawQuery。
             //    参考《数据库.md》: 进程内句柄 qf5.k0 的 rawQuery 名为 B; 自开 WCDB SQLiteDatabase 为 u。
             for (name in arrayOf("B", "u")) {
-                try {
-                    val m = dbClass.getDeclaredMethod(name, String::class.java, Array<String>::class.java)
-                    m.isAccessible = true
-                    return m
-                } catch (ignored: NoSuchMethodException) {
+                for (arr in sig2) {
+                    try {
+                        val m = dbClass.getDeclaredMethod(name, String::class.java, arr)
+                        m.isAccessible = true
+                        return m
+                    } catch (ignored: NoSuchMethodException) {
+                    }
                 }
             }
-            // 2) 尝试其他已知名称的 2 参 (String, String[]) 签名
+            // 2) 尝试其他已知名称的 2 参 (String, String[]/Object[]) 签名
             val knownNames = arrayOf("rawQuery", "v", "w", "x", "y", "z", "rowQuery")
             for (name in knownNames) {
-                try {
-                    val m = dbClass.getDeclaredMethod(name, String::class.java, Array<String>::class.java)
-                    m.isAccessible = true
-                    return m
-                } catch (ignored: NoSuchMethodException) {
+                for (arr in sig2) {
+                    try {
+                        val m = dbClass.getDeclaredMethod(name, String::class.java, arr)
+                        m.isAccessible = true
+                        return m
+                    } catch (ignored: NoSuchMethodException) {
+                    }
                 }
             }
             // 3) 单参数 String 签名
@@ -582,12 +593,13 @@ class ContactRepository {
             }
             // 4) 兜底：遍历所有方法找返回 Cursor 的，按参数数量排序优先 2 参
             // v955(问题18): 严格校验返回类型为 Cursor 且参数签名可被 invokeQuery 调用
-            // (1 参 String 或 2 参 (String, String[])), 避免选中无法调用的方法。
+            // (1 参 String 或 2 参 (String, String[]/Object[])), 避免选中无法调用的方法。
             var best: Method? = null
             for (m in dbClass.declaredMethods) {
                 if (m.returnType != Cursor::class.java) continue
                 val pts = m.parameterTypes
-                if (pts.size == 2 && pts[0] == String::class.java && pts[1] == Array<String>::class.java) {
+                if (pts.size == 2 && pts[0] == String::class.java
+                        && (pts[1] == Array<String>::class.java || pts[1] == Array<Any>::class.java)) {
                     m.isAccessible = true
                     return m
                 }

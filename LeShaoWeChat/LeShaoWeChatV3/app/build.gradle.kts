@@ -32,15 +32,15 @@ fun signingValue(name: String, fallback: String): String =
 
 android {
     namespace = "com.leshao.v3"
-    compileSdk = 36
+    compileSdk = 35
     buildToolsVersion = "35.0.0"
 
     defaultConfig {
         applicationId = "com.leshao.v3"
         minSdk = 24
-        targetSdk = 36
-        versionCode = 30314
-        versionName = "3.0.314"
+        targetSdk = 35
+        versionCode = 30581
+        versionName = "3.0.581"
         buildConfigField("String", "BUILD_TIME", "\"$moduleBuildTime\"")
     }
 
@@ -97,4 +97,7 @@ dependencies {
     implementation("com.github.xxinPro:SilkDecoder:1.0")
     implementation("org.luckypray:dexkit:2.3.0")
     implementation("com.tencent:mmkv:1.3.5")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okio:okio:3.9.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
 }

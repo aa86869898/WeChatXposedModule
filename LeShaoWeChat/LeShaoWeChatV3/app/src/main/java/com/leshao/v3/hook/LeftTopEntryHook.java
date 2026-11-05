@@ -92,7 +92,9 @@ public final class LeftTopEntryHook {
             Activity cur = com.leshao.v3.MainHook.currentActivity();
             if (cur == null || !LAUNCHER_UI.equals(cur.getClass().getName())) return;
             sInChat = isChatInputVisible(cur);
-            onHomeResumed(cur);
+            // 安装线程是后台线程，碰 View 必须切主线程
+            final Activity a = cur;
+            sH.post(() -> onHomeResumed(a));
             LogWriter.log(TAG, "adopt current home, inChat=" + sInChat);
         } catch (Throwable ignored) {}
     }
@@ -204,7 +206,10 @@ public final class LeftTopEntryHook {
                 try {
                     sInChat = true;
                     Activity a = sHost.get();
-                    if (a != null) sync(a);
+                    if (a != null) {
+                        final Activity fa = a;
+                        sH.post(() -> sync(fa));
+                    }
                 } catch (Throwable ignored) {}
             }
         });
@@ -260,7 +265,26 @@ public final class LeftTopEntryHook {
             chosen.setAccessible(true);
             Class<?> gateType = chosen.getType();
             int n = 0;
-            for (Method m : gateType.getDeclaredMethods()) {
+            // v3.0.529: gateType 可能是接口（8.0.79 HomeUI.r 类型为接口 p8，接口上无 m()）。
+            // 优先 hook 实现类 com.tencent.mm.ui.NewChattingTabUI（类名稳定，m() 存在）。
+            Class<?> impl = null;
+            try {
+                Class<?> c = findClass("com.tencent.mm.ui.NewChattingTabUI", cl);
+                if (c != null && gateType.isAssignableFrom(c)) impl = c;
+            } catch (Throwable ignored) {}
+            if (impl == null) {
+                for (Class<?> iface : gateType.getInterfaces()) {
+                    if ("p8".equals(iface.getName())) {
+                        try {
+                            Class<?> c = findClass("com.tencent.mm.ui.NewChattingTabUI", cl);
+                            if (c != null) impl = c;
+                        } catch (Throwable ignored) {}
+                        break;
+                    }
+                }
+            }
+            Class<?> hookTarget = impl != null ? impl : gateType;
+            for (Method m : hookTarget.getDeclaredMethods()) {
                 if (!"m".equals(m.getName()) || m.getParameterCount() != 0
                         || m.getReturnType() != boolean.class) continue;
                 m.setAccessible(true);
@@ -281,7 +305,7 @@ public final class LeftTopEntryHook {
                 });
                 n++;
             }
-            LogWriter.log(TAG, "chatting gate installed on " + gateType.getName()
+            LogWriter.log(TAG, "chatting gate installed on " + hookTarget.getName()
                     + " via field " + chosen.getName() + " x" + n
                     + " (m()"+ (n > 0 ? "" : " not found") + ")");
             if (n == 0) {
@@ -443,7 +467,7 @@ public final class LeftTopEntryHook {
             LinearLayout panel = new LinearLayout(ctx);
             panel.setOrientation(LinearLayout.VERTICAL);
             panel.setPadding((int) (18 * d), (int) (10 * d), (int) (18 * d), (int) (10 * d));
-            panel.setBackgroundColor(AppColors.windowBg());
+            panel.setBackground(CandyUi.pageGradient());
 
             TextView title = new TextView(ctx);
             title.setText("乐少模块");
@@ -476,7 +500,7 @@ public final class LeftTopEntryHook {
                     .setCancelable(true)
                     .create();
             if (ref[0].getWindow() != null) {
-                ref[0].getWindow().setBackgroundDrawable(new ColorDrawable(AppColors.windowBg()));
+                ref[0].getWindow().setBackgroundDrawable(new ColorDrawable(android.graphics.Color.TRANSPARENT));
             }
             ref[0].show();
         } catch (Throwable e) {

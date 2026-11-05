@@ -11,6 +11,7 @@ import android.view.Gravity
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.leshao.v3.ui.AppColors
+import com.leshao.v3.ui.CandyUi
 
 /** 模块统一顶栏：返回箭头 + 标题 + 右侧动作区 */
 class ModernTopBar(ctx: Context, title: String?, showBack: Boolean, onBack: Runnable?) : LinearLayout(ctx) {
@@ -25,11 +26,13 @@ class ModernTopBar(ctx: Context, title: String?, showBack: Boolean, onBack: Runn
         gravity = Gravity.CENTER_VERTICAL
         minimumHeight = (AppColors.TOP_BAR_HEIGHT_DP * d).toInt()
         setPadding((12 * d).toInt(), 0, (12 * d).toInt(), 0)
+        // v3.0.457 玻璃风格顶栏：实色主栏 + 白字（禁渐变）
+        background = CandyUi.topBarGradientBg(ctx)
 
         mBack = TextView(ctx)
         mBack.text = "‹"
         mBack.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f)
-        mBack.setTextColor(AppColors.primary())
+        mBack.setTextColor(AppColors.onGradient())
         mBack.gravity = Gravity.CENTER
         mBack.setPadding((6 * d).toInt(), 0, (6 * d).toInt(), 0)
         mBack.isClickable = true
@@ -47,7 +50,7 @@ class ModernTopBar(ctx: Context, title: String?, showBack: Boolean, onBack: Runn
         mTitle.text = title
         mTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
         mTitle.typeface = Typeface.DEFAULT_BOLD
-        mTitle.setTextColor(AppColors.onSurface())
+        mTitle.setTextColor(AppColors.onGradient())
         mTitle.setSingleLine(true)
         mTitle.ellipsize = TextUtils.TruncateAt.END
         // v998: 标题栏标题居中显示
@@ -68,7 +71,7 @@ class ModernTopBar(ctx: Context, title: String?, showBack: Boolean, onBack: Runn
             val a = TextView(context)
             a.text = text
             a.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-            a.setTextColor(AppColors.primary())
+            a.setTextColor(AppColors.onGradient())
             a.setPadding((10 * d).toInt(), (6 * d).toInt(), (10 * d).toInt(), (6 * d).toInt())
             a.isClickable = true
             applyRipple(a, AppColors.SHAPE_FULL_DP.toFloat())

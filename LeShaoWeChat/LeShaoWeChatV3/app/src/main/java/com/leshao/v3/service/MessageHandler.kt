@@ -23,10 +23,14 @@ class MessageHandler(
 
     fun speak(text: String?) {
         if (text == null || text.isEmpty()) return
-        if (mCubeTts != null && WmPrefs.isTTSCube()) {
+        // ★ 三态引擎：system 走系统 TTS；silly/cube 走 CubeTtsPlayer（内部按引擎选择合成）
+        val engine = WmPrefs.getTtsEngine()
+        if (engine == "system") {
+            mTts?.speak(text)
+        } else if (mCubeTts != null) {
             mCubeTts.speak(text)
-        } else if (mTts != null) {
-            mTts.speak(text)
+        } else {
+            mTts?.speak(text)
         }
     }
 

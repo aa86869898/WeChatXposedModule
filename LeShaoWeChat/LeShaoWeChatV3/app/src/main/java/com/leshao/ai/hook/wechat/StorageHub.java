@@ -14,6 +14,7 @@ import java.lang.reflect.Modifier;
 import java.util.List;
 
 import de.robv.android.xposed.XposedHelpers;
+import com.leshao.v3.hook.WxResolver;
 
 /**
  * 微信核心存储访问链（整座 AI 助手的地基）。
@@ -164,30 +165,32 @@ public final class StorageHub {
         if (bindViaServiceLocator(cl)) {
             return;
         }
-        LogWriter.log(TAG, "bindInternal: j1 服务链未命中, 回退 b41.h9 旧链");
+        LogWriter.log(TAG, "bindInternal: j1 服务链未命中, 回退 l41.h9 旧链");
 
-        // v1042 兜底链: b41.h9.d() → b41.e → v/r/q
-        Class<?> hubClass = DexKitAdapter.findCoreHubClass();
-        Class<?> accClass = DexKitAdapter.findAccountStorageClass();
-        Class<?> msgClass = DexKitAdapter.findMsgInfoStorageClass();
-        Class<?> rcontactClass = DexKitAdapter.findRContactStorageClass();
+        // v3.0.577 兜底链: l41.h9.d() → l41.e → v/r/q
+        // 【关键修复】DexKitAdapter 返回的 Class 对象可能来自 base.apk 平行 CL(PathClassLoader),
+        // 而微信运行时由 Tinker 的 DelegateLastClassLoader 加载真实类。在平行副本 CL 上取得的
+        // l41.h9/l41.e 其静态单例(pp0.i1.m 内核、h9.b) 从未被微信初始化 → v()/r() 抛
+        // "Kernel not initialized by MMApplication!" → MsgInfoStorage/RContactStorage 获取失败。
+        // 因此必须按类名在真实 CL(Tinker) 上重新解析所有 Class 对象(此前只在 null 时才重载)。
+        Class<?> hubClass = resolveOn(cl, DexKitAdapter.findCoreHubClass(), "l41.h9");
+        Class<?> accClass = resolveOn(cl, DexKitAdapter.findAccountStorageClass(), "l41.e");
+        // MsgInfoStorage 接口=ro3.m0(f9 implements), RContactStorage 接口=d8(j4 implements)。
+        // 用接口作为 expect 才能跨 CL 用类名兜底命中(实现类 f9/j4 在双 CL 下 isAssignableFrom 会失效)。
+        Class<?> msgClass = resolveInterfaceOr(cl, "ro3.m0", DexKitAdapter.findMsgInfoStorageClass());
+        Class<?> rcontactClass = resolveInterfaceOr(cl, "com.tencent.mm.storage.d8",
+                DexKitAdapter.findRContactStorageClass());
         LogWriter.log(TAG, "bindInternal: hub=" + cn(hubClass) + " acc=" + cn(accClass)
-                + " msg=" + cn(msgClass) + " rcontact=" + cn(rcontactClass));
+                + " msg=" + cn(msgClass) + " rcontact=" + cn(rcontactClass)
+                + " (cl=" + cl.getClass().getSimpleName() + ")");
 
-        // DexKit 结果可能因 bridge 回收而不可用，按 3180 类名兜底
-        if (hubClass == null) {
-            try { hubClass = XposedHelpers.findClass("b41.h9", cl); } catch (Throwable ignored) {}
-        }
-        if (accClass == null) {
-            try { accClass = XposedHelpers.findClass("b41.e", cl); } catch (Throwable ignored) {}
-        }
         if (hubClass == null || accClass == null) {
             LogWriter.log(TAG, "bindInternal: Hub/AccountStorage 定位失败 hub=" + cn(hubClass)
                     + " acc=" + cn(accClass));
             return;
         }
 
-        // 1) b41.h9.d() → Hub 单例（d() 返回自身）
+        // 1) l41.h9.d() → Hub 单例（d() 返回自身）
         Object hub = callStaticNoArg(hubClass, "d", hubClass);
         if (hub == null) {
             hub = callStaticNoArg(hubClass, "d", null);
@@ -242,19 +245,33 @@ public final class StorageHub {
                 return false;
             }
             Class<?> c4 = null;
-            for (String cn : new String[]{"tn3.c4", "sh3.c4"}) {
+            // v3.0.577: 8.0.79 真实服务键 = po3.c4（h2 implements c4，已 jadx 反编译确认）。
+            // 旧版兼容 tn3.c4/sh3.c4。此前误用 MsgInfoStorage 实现类 f9 作服务键，
+            // 而微信注册的是接口 c4，pp0.i1.v(f9) 必然返回 null → "服务实例仍 null"。
+            for (String cn : new String[]{"po3.c4", "tn3.c4", "sh3.c4"}) {
                 try {
                     c4 = XposedHelpers.findClass(cn, cl);
-                    break;
+                    if (c4 != null) {
+                        LogWriter.log(TAG, "bindViaServiceLocator: 服务键=" + cn);
+                        break;
+                    }
                 } catch (Throwable ignored) {
                 }
             }
             if (c4 == null) {
-                LogWriter.log(TAG, "bindViaServiceLocator: IM 接口(tn3.c4) 未定位");
-                return false;
+                // 最后兜底: 用存储接口(旧版 f9 直接注册)作键
+                c4 = findMsgInfoStorageClass(cl);
+                if (c4 != null) {
+                    LogWriter.log(TAG, "bindViaServiceLocator: 回退存储接口作服务键: " + c4.getName());
+                } else {
+                    LogWriter.log(TAG, "bindViaServiceLocator: 服务接口(c4/f9) 未定位");
+                    return false;
+                }
             }
             Object svc = null;
-            for (String mn : new String[]{"v", "s"}) {
+            // v3.0.464: 8.0.79 ServiceManager=pp0.i1，取服务方法为 v(Class)（返回 up0.a 中转），
+            // 旧 c/s 仅作兼容。
+            for (String mn : new String[]{"v", "c", "s"}) {
                 try {
                     svc = XposedHelpers.callStaticMethod(j1, mn, c4);
                     if (svc != null) {
@@ -274,22 +291,30 @@ public final class StorageHub {
                 return false;
             }
 
-            // ① MsgInfoStorage = svc.lj()
-            Class<?> f9 = findMsgInfoStorageClass(cl);
-            msgInfoStorage = getterByPrefs(svc, f9, new String[]{"lj", "j2", "j3"});
+            // v3.0.577: 8.0.79 svc = h2 (implements po3.c4, jadx 反编译确认)。
+            // h2 直接暴露存储 getter（不再需要旧的 lj()/cj() IM 中转）：
+            //   h2.Jj() → f9  MsgInfoStorage (implements ro3.m0)
+            //   h2.Aj() → j4  RContactStorage (implements d8)
+            Class<?> msgIface = resolveInterfaceOr(cl, "ro3.m0", findMsgInfoStorageClass(cl));
+            Class<?> rcIface = resolveInterfaceOr(cl, "com.tencent.mm.storage.d8", findRContactStorageClass(cl));
+            // ① MsgInfoStorage
+            msgInfoStorage = getterByPrefs(svc, msgIface, new String[]{"Jj", "v", "lj", "j2", "j3"});
             if (msgInfoStorage == null) {
-                msgInfoStorage = firstGetter(svc, f9, "lj");
+                msgInfoStorage = firstGetter(svc, msgIface, "Jj");
             }
-            // ② RContactStorage = svc.cj()/ij()
-            Class<?> j4 = findRContactStorageClass(cl);
-            rcontactStorage = getterByPrefs(svc, j4, new String[]{"cj", "ij"});
+            if (msgInfoStorage == null) {
+                LogWriter.log(TAG, "bindViaServiceLocator: MsgInfoStorage getter 未命中 svc="
+                        + svc.getClass().getName());
+                dumpAccMethods(svc, msgIface);
+            }
+            // ② RContactStorage
+            rcontactStorage = getterByPrefs(svc, rcIface, new String[]{"Aj", "r", "cj", "ij"});
             if (rcontactStorage == null) {
-                rcontactStorage = firstGetter(svc, j4, "cj");
+                rcontactStorage = firstGetter(svc, rcIface, "Aj");
             }
             // ③ NetSceneQueue = j1.q() 实例 .b
             netSceneQueue = readNetSceneQueue(j1);
-            // ④ ConfigStorage(q3) = selfWxid/selfNickname 取数源。
-            //    旧链(acc.q())才有, 服务定位链此前漏绑 → configStorage 恒为 false。
+            // ④ ConfigStorage(q3/m3) = selfWxid/selfNickname 取数源（尽力而为, 失败走 prefs 兜底）。
             if (configStorage == null) {
                 configStorage = readConfigStorage(svc, cl);
             }
@@ -306,7 +331,7 @@ public final class StorageHub {
 
     /**
      * v1099 补绑 ConfigStorage(q3)：selfWxid(key2)/selfNickname(key4) 的取数源。
-     * 优先取服务实例直接暴露的 ConfigStorage, 否则经 AccountStorage(b41.e).q() 兜底。
+     * 优先取服务实例直接暴露的 ConfigStorage, 否则经 AccountStorage(l41.e).q() 兜底。
      * 失败返回 null, 由 selfWxid 的 y1.u / SharedPreferences 兜底接管。
      */
     private static Object readConfigStorage(Object svc, ClassLoader cl) {
@@ -319,14 +344,14 @@ public final class StorageHub {
                 return c;
             }
         }
-        // b) 经 AccountStorage(b41.e).q()
-        Class<?> accCls = resolveOn(cl, null, "b41.e");
+        // b) 经 AccountStorage(l41.e).q()
+        Class<?> accCls = resolveOn(cl, null, "l41.e");
         if (accCls == null) {
             accCls = resolveOn(cl, DexKitAdapter.findAccountStorageClass(), null);
         }
         Object acc = (accCls != null && svc != null) ? firstGetter(svc, accCls, null) : null;
         if (acc == null) {
-            Class<?> hubCls = resolveOn(cl, null, "b41.h9");
+            Class<?> hubCls = resolveOn(cl, null, "l41.h9");
             if (hubCls == null) {
                 hubCls = resolveOn(cl, DexKitAdapter.findCoreHubClass(), null);
             }
@@ -358,8 +383,7 @@ public final class StorageHub {
     }
 
     /** 将类名按目标 CL 重新解析(规避 Tinker 双 CL 下的 Class 对象不匹配), 失败回退原 Class。 */
-    private static Class<?> resolveOn(ClassLoader cl, Class<?> cls, String fallbackName) {
-        if (cls != null && cl != null) {
+    private static Class<?> resolveOn(ClassLoader cl, Class<?> cls, String fallbackName) {        if (cls != null && cl != null) {
             try {
                 return XposedHelpers.findClass(cls.getName(), cl);
             } catch (Throwable ignored) {
@@ -375,7 +399,21 @@ public final class StorageHub {
         return cls;
     }
 
-    /** 定位 j1 服务定位类：优先 DexKit 扫描结果, 兜底类名 gp0.j1。 */
+    /**
+     * 优先按接口类名在目标 CL 上解析(接口跨 CL 用类名匹配更稳), 失败回退 DexKit 返回的 Class。
+     * v3.0.577: MsgInfoStorage 接口=ro3.m0, RContactStorage 接口=d8。
+     */
+    private static Class<?> resolveInterfaceOr(ClassLoader cl, String ifaceName, Class<?> dexkitCls) {
+        if (cl != null && ifaceName != null) {
+            try {
+                return XposedHelpers.findClass(ifaceName, cl);
+            } catch (Throwable ignored) {
+            }
+        }
+        return dexkitCls;
+    }
+
+    /** 定位 j1 服务定位类：优先 DexKit 扫描结果, 兜底类名 pp0.i1(8.0.79)/gp0.j1(旧版)。 */
     private static Class<?> serviceLocatorClass(ClassLoader cl) {
         String dk = DexKitHelper.getJ1ServiceClass();
         if (dk != null && !dk.isEmpty()) {
@@ -384,7 +422,7 @@ public final class StorageHub {
             } catch (Throwable ignored) {
             }
         }
-        for (String cn : new String[]{"gp0.j1", "gp0.j1.j"}) {
+        for (String cn : new String[]{"pp0.i1", "gp0.j1", "gp0.j1.j"}) {
             try {
                 return XposedHelpers.findClass(cn, cl);
             } catch (Throwable ignored) {
@@ -400,7 +438,7 @@ public final class StorageHub {
             return c;
         }
         try {
-            return XposedHelpers.findClass("com.tencent.mm.storage.f9", cl);
+            return WxResolver.get("storage_f9", cl);
         } catch (Throwable ignored) {
         }
         return null;
@@ -504,15 +542,7 @@ public final class StorageHub {
                 Log.w(TAG, "selfWxid 失败: " + t);
             }
         }
-        // 兜底1: b41.y1.u() = 当前登录用户 wxid（文档 §数据库 key2; 与 v3 BatchAddFriend 同款,
-        // 不依赖存储链绑定, 群聊 @ 判定必需）。
-        String y = readSelfWxidFromAccountUtil();
-        if (y != null && !y.isEmpty()) {
-            cachedSelfWxid = y;
-            LogWriter.log(TAG, "selfWxid 兜底(y1.u)=" + y);
-            return y;
-        }
-        // 兜底2: 存储链不可用/取不到时, 从微信 SharedPreferences 读登录 wxid
+        // 兜底: b41.y1 在 8.0.79 已删除，直接读 SharedPreferences 登录 wxid
         String p = readWxidFromPrefs();
         if (p != null && !p.isEmpty()) {
             cachedSelfWxid = p;
@@ -522,20 +552,8 @@ public final class StorageHub {
         return null;
     }
 
-    /** 兜底: b41.y1.u() = 当前登录用户 wxid(不依赖存储链, 与 v3 BatchAddFriend 同款)。 */
+    /** 兜底已废弃：b41.y1 在 8.0.79 中不存在，selfWxid 统一走 SharedPreferences。 */
     private String readSelfWxidFromAccountUtil() {
-        try {
-            ClassLoader cl = HookEntry.appClassLoader;
-            if (cl == null) {
-                return null;
-            }
-            Class<?> c = XposedHelpers.findClass("b41.y1", cl);
-            Object v = XposedHelpers.callStaticMethod(c, "u");
-            if (v instanceof String && !((String) v).isEmpty()) {
-                return (String) v;
-            }
-        } catch (Throwable ignored) {
-        }
         return null;
     }
 
@@ -611,7 +629,7 @@ public final class StorageHub {
     }
 
     /**
-     * v1044: 旧链(b41.h9)绑定成功但缺 NetSceneQueue 时, 内核就绪后尝试 j1 服务链补绑。
+     * v1044: 旧链(l41.h9)绑定成功但缺 NetSceneQueue 时, 内核就绪后尝试 j1 服务链补绑。
      * 发送链路 v51.r0 入队强依赖 queue; 早期 installCore 时 j1 未 ready 会走旧链,
      * 旧链拿不到 NetSceneQueue → 文字发送入队必然失败(「语音能发文字不发」)。
      * 这里在每次取 queue 时兜底一次, 内核就绪即可升级。
@@ -696,7 +714,7 @@ public final class StorageHub {
                 if (ret == null) {
                     continue;
                 }
-                if (expect == null || expect.isAssignableFrom(ret.getClass())) {
+                if (expect == null || isTypeMatch(expect, ret.getClass())) {
                     return ret;
                 }
                 if (fallback == null) {
@@ -706,6 +724,35 @@ public final class StorageHub {
             }
         }
         return fallback;
+    }
+
+    /**
+     * 类型匹配：兼容不同 ClassLoader 的同名类（Tinker/主 dex 双加载导致 isAssignableFrom 误判）。
+     * 先做标准 assignable 判断；失败再用类名（含父类/接口）比较兜底。
+     */
+    private static boolean isTypeMatch(Class<?> expect, Class<?> actual) {
+        if (expect == null || actual == null) {
+            return false;
+        }
+        if (expect.isAssignableFrom(actual) || actual.isAssignableFrom(expect)) {
+            return true;
+        }
+        // 跨 ClassLoader：类名一致（自身/父类/实现的接口）
+        String expName = expect.getName();
+        Class<?> a = actual;
+        while (a != null && a != Object.class) {
+            if (expName.equals(a.getName())) return true;
+            a = a.getSuperclass();
+        }
+        for (Class<?> iface : actual.getInterfaces()) {
+            if (expName.equals(iface.getName())) return true;
+        }
+        Class<?> e = expect;
+        while (e != null && e != Object.class) {
+            if (e.getName().equals(actual.getName())) return true;
+            e = e.getSuperclass();
+        }
+        return false;
     }
 
     /**
@@ -771,7 +818,7 @@ public final class StorageHub {
             }
             try {
                 Object ret = m.invoke(obj);
-                if (ret != null && expect.isInstance(ret)) {
+                if (ret != null && isTypeMatch(expect, ret.getClass())) {
                     LogWriter.log(TAG, "firstGetter 命中 " + obj.getClass().getName()
                             + "." + m.getName() + "() -> " + m.getReturnType().getName());
                     return ret;

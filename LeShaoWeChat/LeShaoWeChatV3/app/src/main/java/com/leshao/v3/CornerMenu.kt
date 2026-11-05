@@ -456,8 +456,8 @@ class CornerMenu {
 
         private fun isEnabled(ctx: Context): Boolean {
             try {
-                return UnifiedPrefs.get(ctx, "wm_prefs")?.getBoolean("corner_menu", true) ?: true
-            } catch (ignored: Throwable) { return true }
+                return UnifiedPrefs.get(ctx, "wm_prefs")?.getBoolean("corner_menu", false) ?: false
+            } catch (ignored: Throwable) { return false }
         }
 
         private fun darkMode(ctx: Context): Boolean {

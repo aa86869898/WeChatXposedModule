@@ -4,6 +4,7 @@ import com.leshao.v3.LogWriter;
 
 import java.lang.reflect.Method;
 import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.List;
 
 import org.luckypray.dexkit.result.ClassData;
@@ -137,29 +138,30 @@ public class AdBlockerHook {
         // 1.1 ★主★ 开屏广告总闸 d7.K2(d7) -> false
         //     DexKit 锚点: "checkCanShowAd, show ad (splash ad debug mode open)"
         //     + "MicroMsg.AppBrandAdUtils[AppBrandSplashAd]"
-        String d7 = resolveClassByStrings(cl, new String[]{
-                "MicroMsg.AppBrandAdUtils[AppBrandSplashAd]"
-        }, "com.tencent.mm.plugin.appbrand.d7");
-        // K2(d7) 共 1 参 -> 恒 false
-        hookByNameParamCount(cl, d7, "K2", 1, false, "appbrand.K2");
+        // 1.1 主级: K2(d7) 共 1 参 -> 恒 false
+        //     8.0.79 字符串 MicroMsg.AppBrandAdUtils[AppBrandSplashAd] 仍存在，
+        //     宿主已漂移（jsapi.auth.q0 / page.l0 / f7），用方法级字符串锚点直接定位。
+        //     v3.0.524: 仅 hook 返回 boolean 的方法（真正的广告闸门）。page.l0.onClick
+        //     等 void 点击处理器不再拦截，避免小程序页面卡死（setResult(false) 塞 void 会
+        //     吞掉页面点击，导致「一直加载中」）。
+        //     v3.0.525: f7.L2（AppBrandSplashAd 字符串同时命中的另一个 1 参 boolean 方法）
+        //     被实机日志证实会在小程序启动瞬间被调用，且拦截后小程序一直加载中 ——
+        //     排除 f7 类，只保留 vc1.j.a（确认的 checkCanShowAd 闸门），f7.L2 改 DIAG 观察。
+        hookMethodsByString(cl, "MicroMsg.AppBrandAdUtils[AppBrandSplashAd]", 1, false, "appbrand.K2", true, new String[]{"f7"});
 
-        // 1.2 次级: lc1.d.b()/a() (AppBrandAdABTests) -> false
-        //     DexKit 锚点: "MicroMsg.AppBrandAdABTests[AppBrandSplashAd]"
-        String abTests = resolveClassByStrings(cl, new String[]{
-                "MicroMsg.AppBrandAdABTests[AppBrandSplashAd]"
-        }, "lc1.d");
-        hookReturnConst(cl, abTests, "b", false, "appbrand.AB.canShowAppBrandAd");
-        hookReturnConst(cl, abTests, "a", false, "appbrand.AB.canAllShowAppBrandAd");
+        // 1.2 次级: AppBrandAdABTests b()/a() -> false
+        //     8.0.79 该 TAG 仍存在，宿主漂移到 com.tencent.mm.plugin.appbrand.ad.jsapi.n
+        //     v3.0.524: 仅 hook boolean 方法。vc1.d.c()/d() 返回 int，硬塞 false 会
+        //     ClassCastException 被微信内部吞掉 -> 小程序加载打不开。
+        //     v3.0.525: 同样排除 f7 类（只保留 vc1.d.a/b 布尔开关）。
+        hookMethodsByString(cl, "MicroMsg.AppBrandAdABTests[AppBrandSplashAd]", -1, false, "appbrand.AB", true, new String[]{"f7"});
 
-        // 1.3 次级: lc1.j.a(AppBrandInitConfigWC) -> false (isAdContact，比 1.2 更彻底)
-        //     注意: lc1.j 与 d7 共用 Log TAG, 用锚点会误命中 d7, 故此处直接用混淆短名。
-        hookByNameParamCount(cl, "lc1.j", "a", 1, false, "appbrand.isAdContact");
+        // 1.3 次级: isAdContact —— 8.0.79 中宿主为 vc1.j.a(AppBrandInitConfigWC)（AppBrandAdUtils TAG），
+        //     已由上面 appbrand.K2（MicroMsg.AppBrandAdUtils[AppBrandSplashAd] 1 参 boolean）覆盖，不再重复 hook。
 
-        // 1.4 次级: lc1.b0.l(I) -> no-op (不再向小程序派发 shouldShowSplashAd)
-        String splashLogic = resolveClassByStrings(cl, new String[]{
-                "MicroMsg.AppBrandSplashAdLogic[AppBrandSplashAd]"
-        }, "lc1.b0");
-        hookByNameParamCount(cl, splashLogic, "l", 1, null, "appbrand.sendShouldShowAdIfNeed");
+        // 1.4 次级: sendShouldShowAdIfNeed（原 lc1.b0.l(I)）-> no-op
+        //     8.0.79 宿主为 jsapi.u（AppBrand.JsApiShowSplashAd / showSplashAd 日志串）
+        hookMethodsByString(cl, "MicroMsg.AppBrand.JsApiShowSplashAd[AppBrandSplashAd]", -1, null, "appbrand.sendShouldShowAdIfNeed");
 
         // 1.5 兜底: 开屏广告宿主 Activity 一起来就 finish
         //     微信按进程槽位拆分 Activity：AppBrandAdUI(=slot0) / AppBrandAdUI1..4。
@@ -234,27 +236,33 @@ public class AdBlockerHook {
         LogWriter.log(TAG, "mbad: install MBAD in-app ad blocker (v3.0.144, 十轮终版)");
 
         // ★★★ P0 总闸：MBAD 拿不到 installer → 微信原生失败分支（最安全）
+        // v3.0.526: 实机日志 + baksmali 确认 8.0.79 中 MBAD installer 仍在
+        // com.tencent.mm.plugin.appbrand.service.b0.T1()（返回 Lom1/u，懒加载：
+        // 内部 if (Z==null) Y1(false) 再 return Z）。之前硬编码 type.service.b0
+        // 是误判（类不存在，总闸一直没装上 → 网格/弹窗/格子广告全漏）。
         hookByNameParamCount(cl, "com.tencent.mm.plugin.appbrand.service.b0",
                 "T1", 0, null, "mbad.b0.T1");
 
         // ★★★ 备选：installer 协程 / 预加载
-        hookMethodsReturnNull(cl, "cm1.r",
-                java.util.Collections.singleton("invoke"), "mbad.cm1r.installerCoroutine");
-        hookMethodsReturnNull(cl, "cm1.u",
-                java.util.Collections.singleton("d"), "mbad.cm1u.preload");
+// ★★★ 备选：installer 协程 / 预加载（8.0.79 类已漂移，改用 [MBAd] 字符串锚点定位）
+        // v3.0.525: 实机日志证实 mbad.cm1r.installerCoroutine（b0.Y1）在小程序启动瞬间
+        // (18:57:28.598) 被调用并被 setResult(null) 拦截 → 小程序一直加载中。
+        // 这两个是"备选"拦截点（P0 总闸 b0.T1 因类漂移未装上），收益低风险高，
+        // 改为 DIAG 只观察不拦截。开屏广告显示与否由 K2/AB/sendShouldShowAdIfNeed 布尔闸门控制。
+        hookMethodsDiagByString(cl, "[MBAd] create new installer, appId:%s, service:%s", "mbad.cm1r.installerCoroutine");
+        hookMethodsDiagByString(cl, "[MBAd] preloadMBAdIfEnable", "mbad.cm1u.preload");
 
-        // ★★★ 宿主 → 小程序消息正门
-        hookMethodsReturnNull(cl, "cm1.m",
-                java.util.Collections.singleton("N3"), "mbad.cm1m.bizCreated");
+        // ★★★ 宿主 → 小程序消息正门（8.0.79 用 notifyAdEvent show 字符串定位）
+        hookMethodsByString(cl, "[MBAd] notifyAdEvent show->mark adType=%s", -1, null, "mbad.cm1m.bizCreated");
 
         // ★★☆ 封面广告（《十轮终版》第七轮错误 1 修正）：
         //      只拦 cm1.j.a(Object,Object,`xi3.k`)（onRequestInsertCoverView，插不进来就不显示）。
         //      🔴 绝不可拦 e()（onRequestRemoveCoverView = 关掉封面）——拦了让封面广告关不掉。
         //      f() 只 setLayoutParams，d() 返回 show/hide 回调持有者，也不拦。
-        hookMethodsReturnNull(cl, "cm1.j",
-                java.util.Collections.singleton("a"), "mbad.cm1j.cover");
-        hookMethodsReturnNull(cl, "cm1.k",
-                java.util.Collections.singleton("invoke"), "mbad.cm1k.bindFrameSetView");
+        // ★★☆ 封面广告（8.0.79 用 [MBAd] B4 bizClient 导航字符串定位插入入口）
+        //      🔴 绝不可拦 e()/移除封面方法——拦了让封面广告关不掉。
+        hookMethodsByString(cl, "[MBAd] B4: bizClient navigator", -1, null, "mbad.cm1j.cover");
+        hookMethodsByString(cl, "[MBAd] keepAlive setPauseType", -1, null, "mbad.cm1k.bindFrameSetView");
 
         // ★★☆ 激励视频 show/hide（含 bridge 重载 a/b）
         // v3.0.148：改走《激励视频_直接跳过拿奖励_深度分析.md》方案 D —— 完全放行，让广告真播，
@@ -262,11 +270,12 @@ public class AdBlockerHook {
         // 之前此处 setResult(null) 会令广告不播、onReceiveResult 不达，发奖率骤降，故 v3.0.148 起移除。
         // （sAdShowing 标记仍由 hookSeekTo 内 cm1.i.d 的独立钩子维护。）
 
-        // ★★☆ 广告事件总线（JsApiNotifyAdEvent）
+        // ★★☆ 广告事件总线（JsApiNotifyAdEvent）—— v3.0.526: 实机日志确认仍在 appbrand.jsapi.advertise.p
+        //      （字符串锚点 mbad.cm1m.bizCreated 已命中 com.tencent.mm.plugin.appbrand.jsapi.advertise.p.A/3）
         hookMethodsReturnNull(cl, "com.tencent.mm.plugin.appbrand.jsapi.advertise.p",
                 java.util.Collections.singleton("A"), "mbad.jsapi.notifyAdEvent");
 
-        // ★★☆ 广告跳转族（MBAD JSAPI 白名单中的 8 个类，统一软 hook A/E/I/C）
+        // ★★☆ 广告跳转族（MBAD JSAPI 白名单，v3.0.526: 确认未迁 type 包，统一软 hook A/E/I/C）
         String[] jsApi = {
                 "com.tencent.mm.plugin.appbrand.jsapi.advertise.o",
                 "com.tencent.mm.plugin.appbrand.jsapi.advertise.s",
@@ -294,12 +303,11 @@ public class AdBlockerHook {
         // ★☆☆ 上报（让广告主收不到数据）
         hookMethodsReturnNull(cl, "bk3.a",
                 java.util.Collections.singleton("t"), "mbad.bk3a.fullLinkReport");
-        hookMethodsReturnNull(cl, "pu0.m",
-                new java.util.HashSet<>(java.util.Arrays.asList("cj", "dj")), "mbad.innerReport");
 
-        // ★☆☆ 广告关系追踪（防"杀宿主"误判）
-        hookMethodsReturnNull(cl, "nc1.f",
-                new java.util.HashSet<>(java.util.Arrays.asList("f", "a")), "mbad.adTracker");
+        // ★☆☆ 上报（8.0.79 用 JsApiNotifyAdEvent 字符串锚点，存在于 classes29/54/69/75）
+        hookMethodsByString(cl, "MicroMsg.JsApiNotifyAdEvent[MBAd]", -1, null, "mbad.innerReport");
+        // ★☆☆ 广告关系追踪（防"杀宿主"误判）（8.0.79 用 sendEventToMBBiz 字符串锚点）
+        hookMethodsByString(cl, "[MBAd] sendEventToMBBiz mMBADInstaller is null", -1, null, "mbad.adTracker");
 
         // ★☆☆ 广告落地页（点中也不落地）
         hookAdLandingPages(cl);
@@ -323,84 +331,111 @@ public class AdBlockerHook {
             java.util.Collections.newSetFromMap(new java.util.WeakHashMap<Object, Boolean>());
 
     /**
-     * v3.0.144：激励视频秒过。
+     * v3.0.521：激励视频秒过（8.0.79 字符串锚点版）。
      * v3.0.148：改方案 D-1（短播）—— seekTo(duration-3000) 而非 seekTo(duration)，
      * 留 3 秒让 play1s / ValidExpose 上报，配合 hookRewardAdResult 的 isEnded 注入拿奖励。
      *
-     * <p>原理（文档第六部分 + 第十轮最终代码）：{@code tl3.g.e(po3.o, long position, long duration)} 的
-     * 第一参就是底层播放器，直接 {@code seekTo} 绕开 {@code po3.r} 状态机。仅在
-     * {@code cm1.i.d(View)}（onShowMBAd）触发后 60 秒内生效，避免误伤普通 MB 视频。</p>
+     * <p>8.0.79 旧短名 tl3.g / po3.o / cm1.i 已全部漂移（jadx 实锤：tl3.g 变成依赖注入枚举、
+     * po3.o 变成 Iterator、cm1.i 变成 Runnable），旧签名找不到任何方法。本版改用 MBAD 唯一
+     * 字符串锚点定位真实类：
+     * <ul>
+     *   <li>门控：{@code "[MBAd] reward video show -> markAdAction appId=%s"} /
+     *       {@code "[MBAd] reward video hide -> clearAdAction appId=%s"}（唯一命中 om1.i，
+     *       MagicAdMiniProgramInstaller 的 onRequestShow/onRequestHide）</li>
+     *   <li>进度回调：{@code "onVideoPlayProgressMs"}（唯一命中 pm3.g.h(lp3.o, long, long)，
+     *       TPPlayer 监听器）</li>
+     * </ul>
+     * 完全绕过混淆短名，DexKit 缓存命中后秒装。</p>
      */
     private static void hookSeekTo(ClassLoader cl) {
-        try {
-            // 标记广告展示中：d(View) 触发 -> true；d/c 返回后复位
-            Class<?> cm1i = loadClass(cl, "cm1.i");
-            if (cm1i != null) {
-                Method d = null;
-                try { d = findMethodInHierarchy(cm1i, "d", android.view.View.class); } catch (Throwable ignored) {}
-                if (d != null) {
-                    d.setAccessible(true);
-                    XposedBridge.hookMethod(d, new XC_MethodHook() {
-                        @Override protected void beforeHookedMethod(MethodHookParam param) {
-                            if (!sEnabled) return;
-                            sAdShowing = true;
-                            sAdShowAt = System.currentTimeMillis();
-                        }
-                        @Override protected void afterHookedMethod(MethodHookParam param) {
-                            sAdShowing = false;
-                        }
-                    });
-                }
-                Method c = null;
-                try { c = findMethodInHierarchy(cm1i, "c", android.view.View.class); } catch (Throwable ignored) {}
-                if (c != null) {
-                    c.setAccessible(true);
-                    XposedBridge.hookMethod(c, new XC_MethodHook() {
-                        @Override protected void afterHookedMethod(MethodHookParam param) {
-                            sAdShowing = false;
-                        }
-                    });
-                }
-            }
+        // 1) 广告门控：reward video show/hide 维护 sAdShowing（60 秒超时防多开串号）
+        hookSeekGate(cl, "[MBAd] reward video show -> markAdAction appId=%s", true);
+        hookSeekGate(cl, "[MBAd] reward video hide -> clearAdAction appId=%s", false);
 
-            // tl3.g.e(Lpo3/o;, J position, J duration)V
-            Class<?> tl3g = loadClass(cl, "tl3.g");
-            if (tl3g == null) {
-                LogWriter.log(TAG, "[WARN] seekTo: tl3.g null");
+        // 2) 播放器进度回调：onVideoPlayProgressMs 唯一命中 pm3.g.h(lp3.o, long, long)
+        try {
+            List<String> sigs = DexKitHelper.findMethodsByString(cl, null, "onVideoPlayProgressMs");
+            if (sigs == null || sigs.isEmpty()) {
+                LogWriter.log(TAG, "[WARN] seekTo: no method strings 'onVideoPlayProgressMs' (cache miss?)");
                 return;
             }
-            Class<?> po3o = loadClass(cl, "po3.o");
-            if (po3o == null) {
-                LogWriter.log(TAG, "[WARN] seekTo: po3.o null");
-                return;
-            }
-            Method e = null;
-            try { e = findMethodInHierarchy(tl3g, "e", po3o, long.class, long.class); } catch (Throwable ignored) {}
-            if (e == null) {
-                LogWriter.log(TAG, "[WARN] seekTo: tl3.g.e(null)");
-                return;
-            }
-            e.setAccessible(true);
-            XposedBridge.hookMethod(e, new XC_MethodHook() {
-                @Override protected void afterHookedMethod(MethodHookParam param) {
-                    if (!sEnabled || !sAdShowing) return;
-                    if (System.currentTimeMillis() - sAdShowAt > 60_000L) return;
-                    try {
-                        Object mp = param.args[0];
-                        if (mp == null || sSeeked.contains(mp)) return;
-                        long duration = (long) XposedHelpers.callMethod(mp, "getDurationMs");
-                        long position = (long) param.args[1];
-                        if (duration <= 3000 || position < 500) return;
-                        XposedHelpers.callMethod(mp, "seekTo", duration - 3000);
-                        sSeeked.add(mp);
-                        markTriggered("seekTo.rewardAd");
-                        LogWriter.log(TAG, "seekTo: reward ad seekTo(" + (duration - 3000) + ") <- " + position);
-                    } catch (Throwable ignored) {}
+            int hooked = 0;
+            for (String sig : sigs) {
+                String[] parsed = parseSig(sig);
+                if (parsed == null) continue;
+                Class<?> c = loadClass(cl, parsed[0]);
+                if (c == null) continue;
+                for (Method m : c.getDeclaredMethods()) {
+                    if (!m.getName().equals(parsed[1])) continue;
+                    Class<?>[] pts = m.getParameterTypes();
+                    if (m.getParameterCount() != 3) continue;
+                    if (pts[1] != long.class || pts[2] != long.class) continue;
+                    m.setAccessible(true);
+                    XposedBridge.hookMethod(m, new XC_MethodHook() {
+                        @Override protected void afterHookedMethod(MethodHookParam param) {
+                            if (!sEnabled || !sAdShowing) return;
+                            if (System.currentTimeMillis() - sAdShowAt > 60_000L) return;
+                            try {
+                                Object mp = param.args[0];
+                                if (mp == null || sSeeked.contains(mp)) return;
+                                long duration = (long) XposedHelpers.callMethod(mp, "getDurationMs");
+                                long position = (long) param.args[1];
+                                if (duration <= 3000 || position < 500) return;
+                                XposedHelpers.callMethod(mp, "seekTo", duration - 3000);
+                                sSeeked.add(mp);
+                                markTriggered("seekTo.rewardAd");
+                                LogWriter.log(TAG, "seekTo: reward ad seekTo(" + (duration - 3000) + ") <- " + position);
+                            } catch (Throwable ignored) {}
+                        }
+                    });
+                    hooked++;
                 }
-            });
-            LogWriter.log(TAG, "seekTo: installed");
+            }
+            if (hooked > 0) {
+                LogWriter.log(TAG, "seekTo: installed progress hook (" + hooked + "): " + sigs);
+            } else {
+                LogWriter.log(TAG, "[WARN] seekTo: no 3-param method for 'onVideoPlayProgressMs': " + sigs);
+            }
         } catch (Throwable t) {
             LogWriter.log(TAG, "[WARN] seekTo err: " + t);
+        }
+    }
+
+    /** 用 MBAD reward video show/hide 字符串锚点定位门控方法并维护 sAdShowing。 */
+    private static void hookSeekGate(final ClassLoader cl, final String anchor, final boolean show) {
+        try {
+            List<String> sigs = DexKitHelper.findMethodsByString(cl, null, anchor);
+            if (sigs == null || sigs.isEmpty()) {
+                LogWriter.log(TAG, "[WARN] seekTo gate: no method strings '" + anchor + "'");
+                return;
+            }
+            int hooked = 0;
+            for (String sig : sigs) {
+                String[] parsed = parseSig(sig);
+                if (parsed == null) continue;
+                Class<?> c = loadClass(cl, parsed[0]);
+                if (c == null) continue;
+                for (Method m : c.getDeclaredMethods()) {
+                    if (!m.getName().equals(parsed[1])) continue;
+                    if (m.getParameterCount() != 1) continue; // View 参数
+                    m.setAccessible(true);
+                    XposedBridge.hookMethod(m, new XC_MethodHook() {
+                        @Override protected void beforeHookedMethod(MethodHookParam param) {
+                            if (!sEnabled) return;
+                            sAdShowing = show;
+                            if (show) sAdShowAt = System.currentTimeMillis();
+                        }
+                    });
+                    hooked++;
+                }
+            }
+            if (hooked > 0) {
+                LogWriter.log(TAG, "seekTo gate '" + anchor + "' -> " + (show ? "SHOW" : "HIDE") + " (" + hooked + ")");
+            } else {
+                LogWriter.log(TAG, "[WARN] seekTo gate: no hookable method for '" + anchor + "'");
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "[WARN] seekTo gate err: " + t);
         }
     }
 
@@ -409,21 +444,27 @@ public class AdBlockerHook {
     // ============================================================
 
     /**
-     * v3.0.148：激励视频「看完」事实注入。
+     * v3.0.521：激励视频「看完」事实注入（8.0.79 版）。
      *
      * <p>原理（《激励视频_直接跳过拿奖励_深度分析.md》第七部分）：微信不负责发奖，发奖由小程序业务代码
      * 依据 {@code onClose({isEnded})} 决定。seekTo 只能过"播放器完成"门，过不了"基础库 JS 的 isEnded 事件"门。
-     * 本钩子在 {@code a0.onReceiveResult(ProcessResult)} 到达时，把 {@code errCode} 置 0、并给
-     * {@code feedbackInfo} 注入 {@code isEnded:true} + {@code rewardedDuration:99999}，让小程序
+     * 本钩子在 {@code com.tencent.mm.plugin.type.jsapi.channels.a0.onReceiveResult(ProcessResult)} 到达时，
+     * 把 errCode 字段 {@code d} 置 0，并把 protobuf 反馈 {@code e}（nd5.da3）注入
+     * {@code rewardedDuration=99999} + {@code feedbackInfo=[{"isEnded":true}]}，让小程序
      * {@code onClose} 收到 {@code {isEnded:true}} 直接发奖。</p>
+     *
+     * <p>8.0.79：旧类 com.tencent.mm.plugin.appbrand.jsapi.channels.a0 已删除，新实现为
+     * com.tencent.mm.plugin.type.jsapi.channels.a0（implements type.ipc.u），结果类型
+     * OpenChannelsRewardedVideoAdResult 字段：d=errCode、e=nd5.da3（protobuf：
+     * field0=rewardedDuration int、field1=feedbackInfo String/JSON）。</p>
      *
      * <p>关键：不 setResult(null)，放行原流程把结果吐给小程序；与 {@link #hookSeekTo}（短播）联动构成方案 D。</p>
      */
     private static void hookRewardAdResult(ClassLoader cl) {
         try {
-            Class<?> a0 = loadClass(cl, "com.tencent.mm.plugin.appbrand.jsapi.channels.a0");
+            Class<?> a0 = loadClass(cl, "com.tencent.mm.plugin.type.jsapi.channels.a0");
             Class<?> resultType = loadClass(cl,
-                    "com.tencent.mm.plugin.appbrand.ipc.AppBrandProxyUIProcessTask$ProcessResult");
+                    "com.tencent.mm.plugin.type.ipc.AppBrandProxyUIProcessTask$ProcessResult");
             if (a0 == null || resultType == null) {
                 LogWriter.log(TAG, "[WARN] rewardAd: a0/resultType null");
                 return;
@@ -441,19 +482,16 @@ public class AdBlockerHook {
                     try {
                         Object result = param.args[0];
                         if (result == null) return;
-                        XposedHelpers.setObjectField(result, "errCode", 0);
-                        Object fb = XposedHelpers.getObjectField(result, "feedbackInfo");
-                        if (fb == null) {
-                            fb = new org.json.JSONObject();
-                            XposedHelpers.setObjectField(result, "feedbackInfo", fb);
-                        }
-                        if (fb instanceof org.json.JSONObject) {
-                            org.json.JSONObject j = (org.json.JSONObject) fb;
-                            j.put("isEnded", true);
-                            j.put("rewardedDuration", 99999);
+                        // errCode -> 0（字段 d）
+                        XposedHelpers.setIntField(result, "d", 0);
+                        // protobuf 反馈 e（nd5.da3）：field0=rewardedDuration，field1=feedbackInfo(JSON 串)
+                        Object fb = XposedHelpers.getObjectField(result, "e");
+                        if (fb != null) {
+                            XposedHelpers.callMethod(fb, "set", 0, 99999);
+                            XposedHelpers.callMethod(fb, "set", 1, "[{\"isEnded\":true}]");
                         }
                         markTriggered("rewardAd.isEnded");
-                        LogWriter.log(TAG, "rewardAd: isEnded injected");
+                        LogWriter.log(TAG, "rewardAd: isEnded injected (d=0, rewardedDuration=99999)");
                     } catch (Throwable ignored) {}
                 }
             });
@@ -505,6 +543,15 @@ public class AdBlockerHook {
 
     /** 按方法返回类型生成安全默认值；void 返回 null（对 void 方法 setResult(null)
      *  同样会阻止方法体执行，是合法的 Xposed 用法）。 */
+    private static boolean hasMethod(Class<?> cls, String name, int paramCount) {
+        if (cls == null) return false;
+        for (Method m : cls.getDeclaredMethods()) {
+            if (m.getName().equals(name)
+                    && (paramCount < 0 || m.getParameterCount() == paramCount)) return true;
+        }
+        return false;
+    }
+
     private static Object defaultValueFor(Method m) {
         Class<?> rt = m.getReturnType();
         if (rt == boolean.class) return Boolean.FALSE;
@@ -525,9 +572,17 @@ public class AdBlockerHook {
     private static void hookSnsTimeline(ClassLoader cl) {
         // 2.1 ★主★ AdSnsInfoStorageLogic.insert(List,List,boolean,int) -> 空实现（广告永不入库）
         //     DexKit 锚点: "insert, forbid ad" + "MicroMsg.AdSnsInfoStorageLogic"
-        String storageLogic = resolveClassByStrings(cl, new String[]{
-                "MicroMsg.AdSnsInfoStorageLogic"
-        }, "com.tencent.mm.plugin.sns.model.x");
+        //     v3.0.469: 字符串候选会误选内部类 w（LinkedHashMap lambda）。权威类名
+        //     com.tencent.mm.plugin.sns.model.x 存在且含 i/4 方法，优先直接使用。
+        String storageLogic = "com.tencent.mm.plugin.sns.model.x";
+        Class<?> xCls = loadClass(cl, storageLogic);
+        if (xCls == null || !hasMethod(xCls, "i", 4)) {
+            storageLogic = resolveClassByStrings(cl, new String[]{
+                    "MicroMsg.AdSnsInfoStorageLogic"
+            }, "com.tencent.mm.plugin.sns.model.x");
+        } else {
+            LogWriter.log(TAG, "class via authoritative: " + storageLogic);
+        }
         // insert(List,List,boolean,int) 共 4 参 -> 空实现
         hookByNameParamCount(cl, storageLogic, "i", 4, null, "sns.insert");
 
@@ -542,10 +597,14 @@ public class AdBlockerHook {
         // 2.3 ★辅★ UI 层: SnsInfo.isAd() -> false
         hookReturnConst(cl, "com.tencent.mm.plugin.sns.storage.SnsInfo", "isAd", false, "sns.SnsInfo.isAd");
 
-        // 2.4 ★辅★ 新版时间线: ImproveSnsInfo.isAd() -> false（混淆名 jk4.p 兜底）
-        String improve = resolveClassByStrings(cl, new String[]{
-                "ImproveSnsInfo"
-        }, "jk4.p");
+        // 2.4 ★辅★ 新版时间线: ImproveSnsInfo.isAd() -> false（权威类名 dl4.p，含 isAd()）
+        String improve = "dl4.p";
+        Class<?> improveCls = loadClass(cl, improve);
+        if (improveCls == null || !hasMethod(improveCls, "isAd", 0)) {
+            improve = resolveClassByStrings(cl, new String[]{
+                    "ImproveSnsInfo"
+            }, "dl4.p");
+        }
         hookReturnConst(cl, improve, "isAd", false, "sns.ImproveSnsInfo.isAd");
 
         // 2.5 ★兜底★ ConsecutiveAdDataImproveHelper.c(List) 清空返回
@@ -554,12 +613,17 @@ public class AdBlockerHook {
         }, "cc4.o4");
         hookSnsConsecutiveAd(cl, consecutive);
 
-        // 2.6 ★第十一部分★ FinderAdJumpHelper(cc4.s4) 广告跳转执行器 6 方法 -> null
+        // 2.6 ★第十一部分★ FinderAdJumpHelper 广告跳转执行器 6 方法 -> null
         //     日志锚点："FinderAdJumpHelper" / "is_from_ad" / "doJumpFinderFeedsDetailUI"
-        //     类在 plugin dex，find_class 查不到（DexKit 反查），只能按混淆短名 cc4.s4。
-        hookMethodsReturnNull(cl, "cc4.s4",
-                new java.util.HashSet<>(java.util.Arrays.asList("a", "b", "d", "e", "g", "h")),
-                "finderAdJump");
+        //     8.0.78 短名 cc4.s4；8.0.79 短名 wc4.s4（com.tencent.mm.plugin.sns.ad.helper.FinderAdJumpHelper）。
+        String finderJump = resolveClassByStrings(cl, new String[]{
+                "FinderAdJumpHelper", "doJumpFinderFeedsDetailUI"
+        }, WeChatVersion.isNew() ? "wc4.s4" : "cc4.s4");
+        if (finderJump != null) {
+            hookMethodsReturnNull(cl, finderJump,
+                    new java.util.HashSet<>(java.util.Arrays.asList("a", "b", "d", "e", "g", "h")),
+                    "finderAdJump");
+        }
     }
 
     /** l3.J(II,String,pc5/ni6) after: 仅清空响应对象里 o(广告)/r(推荐) 两个 LinkedList 字段。 */
@@ -719,10 +783,9 @@ public class AdBlockerHook {
         hookMethodsReturnNull(cl, "ds2.x",
                 java.util.Collections.singleton("invoke"), "finder.liveVideoSize");
 
-        // finder.live.widget.h3.b(FinderLiveGuideFollowAdInfo) -> null
-        // 只拦 protobuf 重载(参数仅一个且类型简名含 Follow 引导 ad 特征)；
-        // 名称在 wx 版本间漂移("FinderLiveGuideFollowAdInfo"/"FinderLiveGuideAdjInfo" 等),
-        // 放宽为: 参数个数=1 + 参数类型简名含 "Guide" 或 "FollowAd" 或 "LiveAd"。
+        // finder.liveGuideAd —— v3.0.558 反编译确认：8.0.79 中 h3.b(b12) 是直播间列表/榜单刷新方法
+        // （getList -> notifyDataSetChanged），原 FinderLiveGuideFollowAdInfo 引导广告方法已不存在。
+        // 强行拦截会损坏直播间列表，故移除该 hook。
         try {
             Class<?> h3 = loadClass(cl, "com.tencent.mm.plugin.finder.live.widget.h3");
             if (h3 != null) {
@@ -908,8 +971,20 @@ public class AdBlockerHook {
      * 若 fallback 是具名类，直接采用（最稳，避免锚点误命中同 TAG 的其它类）；</p>
      */
     private static String resolveClassByStrings(ClassLoader cl, String[] anchors, String fallback) {
-        // 短混淆名（如 lc1.d）是本 APK 的唯一真相：文档的“原始类名”并不存在，
-        // 且锚点字符串（Log TAG）会误命中同 TAG 的其它类。故优先用短名解析。
+        // v3.0.461：跨版本字符串锚点优先。R8 每版都会改混淆短名（lc1.d / jk4.p / cc4.o4），
+        // 但类内的 Log TAG / 协议串是稳定常量。先按字符串定位，短名只作最后兜底。
+        for (String kw : anchors) {
+            if (kw == null || kw.isEmpty()) continue;
+            try {
+                List<String> cands = DexKitHelper.findClassesByString(cl, kw);
+                if (cands != null && !cands.isEmpty()) {
+                    String hit = pickPreferred(cands);
+                    LogWriter.log(TAG, "class hit: " + hit + " via '" + kw + "'");
+                    return hit;
+                }
+            } catch (Throwable ignored) {}
+        }
+        // 字符串未命中：再尝试短名（仅当前版本有效）
         if (fallback != null) {
             Class<?> fb = loadClass(cl, fallback);
             if (fb != null) {
@@ -919,16 +994,6 @@ public class AdBlockerHook {
         }
         if (fallback != null && fallback.startsWith("com.tencent.mm.") && loadClass(cl, fallback) != null) {
             return fallback;
-        }
-        for (String kw : anchors) {
-            try {
-                List<String> cands = DexKitHelper.findClassesByString(cl, kw);
-                if (cands != null && !cands.isEmpty()) {
-                    String hit = pickPreferred(cands);
-                    LogWriter.log(TAG, "class hit: " + hit + " via '" + kw + "'");
-                    return hit;
-                }
-            } catch (Throwable ignored) {}
         }
         LogWriter.log(TAG, "class miss(anchors), fallback=" + fallback);
         return fallback;
@@ -948,6 +1013,8 @@ public class AdBlockerHook {
    /** 按类型加载类，失败返回 null；短名（混淆类）回退 DexKit 按简名解析，并遍历候选 CL。 */
     private static Class<?> loadClass(ClassLoader cl, String name) {
         if (name == null || name.isEmpty()) return null;
+        Class<?> c = WxResolver.resolve(cl, name);
+        if (c != null) return c;
         for (ClassLoader loader : HookUtil.candidateLoaders(cl)) {
             try { return loader.loadClass(name); } catch (Throwable ignored) {}
         }
@@ -995,6 +1062,167 @@ public class AdBlockerHook {
     }
 
     /** 定位指定名字的方法（无参）并固定返回值。 */
+    /**
+     * 跨版本稳定：按方法内字符串锚点定位方法并固定返回值（替代按短名类+方法名）。
+     * R8 混淆会改类名/方法名，但方法内的日志 TAG/协议串是稳定常量。
+     * 用 findMethodsByString(cl, null, anchor) 直接拿到「包含该字符串的方法」，
+     * 从签名解析出类名+方法名后 hook，完全绕过短名漂移。
+     */
+    private static void hookMethodsByString(final ClassLoader cl, final String anchor,
+                                           final int paramCount, final Object result, final String tag) {
+        hookMethodsByString(cl, anchor, paramCount, result, tag, false);
+    }
+
+    /** 字符串锚点通用 hook。booleanReturnOnly=true 时只 hook 返回 boolean 的方法
+     * （用于开屏广告布尔闸门，避免 setResult 硬塞给 void/int 方法导致小程序卡死）。 */
+    private static void hookMethodsByString(final ClassLoader cl, final String anchor,
+                                           final int paramCount, final Object result, final String tag,
+                                           final boolean booleanReturnOnly) {
+        hookMethodsByString(cl, anchor, paramCount, result, tag, booleanReturnOnly, null);
+    }
+
+    /** v3.0.525: 支持排除类（如 f7——AppBrandSplashAd 字符串同时命中的非广告闸门方法）。
+     *  被排除的方法改为安装 DIAG 钩子（只记录调用栈，不拦截），用于确认其真实身份。 */
+    private static void hookMethodsByString(final ClassLoader cl, final String anchor,
+                                           final int paramCount, final Object result, final String tag,
+                                           final boolean booleanReturnOnly, final String[] excludeClasses) {
+        try {
+            List<String> sigs = DexKitHelper.findMethodsByString(cl, null, anchor);
+            if (sigs == null || sigs.isEmpty()) {
+                LogWriter.log(TAG, "[WARN] " + tag + ": no method strings '" + anchor + "' (cache miss?)");
+                return;
+            }
+            int hooked = 0;
+            LinkedHashSet<String> hookedDesc = new LinkedHashSet<>();
+            for (String sig : sigs) {
+                String[] parsed = parseSig(sig);
+                if (parsed == null) continue;
+                String clsName = parsed[0];
+                String methodName = parsed[1];
+                if (clsName == null || methodName == null) continue;
+                // 排除类（子串匹配，如 "f7" 命中 com.tencent.mm.plugin.appbrand.f7）
+                if (excludeClasses != null) {
+                    boolean excluded = false;
+                    for (String ex : excludeClasses) {
+                        if (clsName.contains(ex)) { excluded = true; break; }
+                    }
+                    if (excluded) {
+                        hookDiag(cl, clsName, methodName, paramCount, tag + ".excluded");
+                        continue;
+                    }
+                }
+                Class<?> c = loadClass(cl, clsName);
+                if (c == null) continue;
+                for (Method m : c.getDeclaredMethods()) {
+                    if (!m.getName().equals(methodName)) continue;
+                    if (paramCount >= 0 && m.getParameterCount() != paramCount) continue;
+                    if (booleanReturnOnly && m.getReturnType() != boolean.class) continue;
+                    m.setAccessible(true);
+                    // v3.0.524: 类型安全。result 类型与方法返回类型不匹配时（如 int 方法塞
+                    // Boolean false、Object 方法塞 boolean），改用 defaultValueFor 生成
+                    // 安全默认值，避免 ClassCastException 被微信内部吞掉导致小程序打不开。
+                    final Object block = typeCompatible(result, m.getReturnType())
+                            ? result : defaultValueFor(m);
+                    XposedBridge.hookMethod(m, new XC_MethodHook() {
+                        @Override protected void beforeHookedMethod(MethodHookParam p) {
+                            if (!sEnabled) return;
+                            p.setResult(block);
+                            markTriggered(tag);
+                        }
+                    });
+                    hooked++;
+                    hookedDesc.add(clsName + "." + methodName + "/" + m.getParameterCount());
+                }
+            }
+            if (hooked > 0) {
+                LogWriter.log(TAG, "hooked by-string '" + anchor + "' as " + tag + " (" + hooked + "): " + hookedDesc);
+            } else {
+                LogWriter.log(TAG, "[WARN] " + tag + ": string '" + anchor + "' no hookable method (param=" + paramCount + ")");
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "[WARN] " + tag + " err: " + t);
+        }
+    }
+
+    /** v3.0.525: 只记录不拦截的诊断钩子。用于确认字符串锚点命中的非目标方法真实身份，
+     *  避免盲目 setResult 误伤小程序加载流程。每个方法只打印前 3 次调用栈。 */
+    private static void hookDiag(final ClassLoader cl, final String clsName, final String methodName,
+                                 final int paramCount, final String tag) {
+        try {
+            Class<?> c = loadClass(cl, clsName);
+            if (c == null) return;
+            for (Method m : c.getDeclaredMethods()) {
+                if (!m.getName().equals(methodName)) continue;
+                if (paramCount >= 0 && m.getParameterCount() != paramCount) continue;
+                m.setAccessible(true);
+                final String desc = clsName + "." + methodName + "(" + m.getParameterCount()
+                        + ") ret=" + m.getReturnType().getName();
+                final java.util.concurrent.atomic.AtomicInteger cnt = new java.util.concurrent.atomic.AtomicInteger();
+                XposedBridge.hookMethod(m, new XC_MethodHook() {
+                    @Override protected void beforeHookedMethod(MethodHookParam p) {
+                        if (cnt.incrementAndGet() > 3) return;
+                        StringBuilder sb = new StringBuilder();
+                        StackTraceElement[] st = Thread.currentThread().getStackTrace();
+                        int n = Math.min(st.length, 10);
+                        for (int i = 3; i < n; i++) {
+                            sb.append("\n    at ").append(st[i]);
+                        }
+                        LogWriter.log(TAG, "DIAG " + tag + " called: " + desc + " stack:" + sb);
+                    }
+                });
+                LogWriter.log(TAG, "DIAG hooked " + desc + " (no block)");
+                break;
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "DIAG hook err " + clsName + "." + methodName + ": " + t);
+        }
+    }
+
+    /** v3.0.525: 按字符串锚点安装诊断钩子（不拦截）。用于 mbad installer/preload 等
+     *  被确认会阻塞小程序加载的"备选拦截点"——先放行并观察其调用上下文。 */
+    private static void hookMethodsDiagByString(final ClassLoader cl, final String anchor, final String tag) {
+        try {
+            List<String> sigs = DexKitHelper.findMethodsByString(cl, null, anchor);
+            if (sigs == null || sigs.isEmpty()) {
+                LogWriter.log(TAG, "[WARN] " + tag + ": diag no method strings '" + anchor + "'");
+                return;
+            }
+            for (String sig : sigs) {
+                String[] parsed = parseSig(sig);
+                if (parsed == null) continue;
+                hookDiag(cl, parsed[0], parsed[1], -1, tag);
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    /** 检查 result 能否安全 setResult 到返回类型 rt 上（void/原始类型需精确匹配）。 */
+    private static boolean typeCompatible(Object result, Class<?> rt) {
+        if (result == null) return false;
+        if (rt == Void.TYPE) return false;
+        if (rt.isPrimitive()) {
+            if (rt == boolean.class) return result instanceof Boolean;
+            if (rt == byte.class) return result instanceof Byte;
+            if (rt == short.class) return result instanceof Short;
+            if (rt == int.class) return result instanceof Integer;
+            if (rt == long.class) return result instanceof Long;
+            if (rt == float.class) return result instanceof Float;
+            if (rt == double.class) return result instanceof Double;
+            if (rt == char.class) return result instanceof Character;
+            return false;
+        }
+        return rt.isInstance(result);
+    }
+
+    private static String[] parseSig(String sig) {
+        if (sig == null) return null;
+        int lp = sig.indexOf('(');
+        if (lp <= 0) return null;
+        String head = sig.substring(0, lp);
+        int dot = head.lastIndexOf('.');
+        if (dot <= 0 || dot >= head.length() - 1) return null;
+        return new String[]{ head.substring(0, dot), head.substring(dot + 1) };
+    }
+
     private static void hookReturnConst(final ClassLoader cl, final String clsName,
                                         final String methodName, final Object result, final String tag) {
         Class<?> c = loadClass(cl, clsName);

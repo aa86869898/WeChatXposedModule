@@ -51,7 +51,7 @@ public final class FavVoiceForwardHook {
     private static final String C_DISPATCH_NEW = "de2.n";                 // 新链路点击分发
     private static final String C_BUILDER_OLD = "com.tencent.mm.plugin.fav.ui.gc"; // 兜底构建器
     private static final String C_DISPATCH_OLD = "com.tencent.mm.plugin.fav.ui.hc";  // 兜底点击回调
-    private static final String C_FAV_API = "tc2.s2";                    // FavApiUtil
+    private static final String C_FAV_API = "jd2.a3";                    // FavApiUtil
     private static final String C_VOICE_LOGIC = "v61.d1";                // VoiceLogic
     private static final String C_VOICE_INFO = "v61.c1";                 // VoiceInfo
     private static final String C_SELECT_UI = "com.tencent.mm.ui.transmit.SelectConversationUI";
@@ -74,7 +74,7 @@ public final class FavVoiceForwardHook {
     private static volatile Object sPendingFavInfo;
     // 最近长按的收藏对象：菜单构建时 gc 不直接持有 item，用它兜底判断是否注入
     private static volatile Object sLastLongClickInfo;
-    // v3.0.88：FavApiLogic（tc2.s2）实例 —— 微信打开收藏页时会调用其方法，
+    // v3.0.88：FavApiLogic（jd2.a3）实例 —— 微信打开收藏页时会调用其方法，
     // hook 捕获 thisObject 后即可反射调用 K/y/d0 获取收藏语音数据。
     private static volatile Object sFavApiLogic;
 
@@ -139,7 +139,7 @@ public final class FavVoiceForwardHook {
         //          （v3.0.87 起不再启动微信 SelectConversationUI，改用模块联系人选择器，
         //            此钩子仅作历史兜底，pending 被模块选择器回调消费后不会触发）=====
         installPickResult(cl);
-        // ===== 3.2 v3.0.88：捕获 FavApiLogic（tc2.s2）实例，供 K/y 反射调用 =====
+        // ===== 3.2 v3.0.88：捕获 FavApiLogic（jd2.a3）实例，供 K/y 反射调用 =====
         installFavApiInstanceCapture(cl);
         LogWriter.log(TAG, "installHooks done");
     }
@@ -147,7 +147,7 @@ public final class FavVoiceForwardHook {
     /** 捕获收藏列表长按的语音项：fc.onItemLongClick → ui.W.i(pos - headerViews)。 */
     private static void installLongClickCapture(ClassLoader cl) {
         try {
-            Class<?> fcCls = XposedHelpers.findClass("com.tencent.mm.plugin.fav.ui.fc", cl);
+            Class<?> fcCls = WxResolver.get("plugin_fav_ui_fc", cl);
             XposedBridge.hookAllMethods(fcCls, "onItemLongClick", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
@@ -495,8 +495,8 @@ public final class FavVoiceForwardHook {
         return false;
     }
 
-/** v3.0.88：捕获 FavApiLogic（tc2.s2）实例。微信打开收藏页/详情页时必然调用
-     *  tc2.s2 的方法，hook 所有声明方法在 before 中记录 thisObject，
+/** v3.0.88：捕获 FavApiLogic（jd2.a3）实例。微信打开收藏页/详情页时必然调用
+     *  jd2.a3 的方法，hook 所有声明方法在 before 中记录 thisObject，
      *  之后 callFavApi 就能用实例反射调用 K(info)/y(rq0)/d0/Z。 */
     private static void installFavApiInstanceCapture(ClassLoader cl) {
         try {
@@ -571,8 +571,8 @@ public final class FavVoiceForwardHook {
             LogWriter.log(TAG, "sendVoice start localId=" + localId + " to=" + toUser);
 
             // ① 收藏语音本地文件（v3.0.90：严格按《WeChat_收藏语音转发_逆向分析与注入方案_1.md》
-            //    附录 A 实现——静态方法 tc2.s2.K(item)/y(rq0) + 未混淆字段 field_favProto.f，
-            //    不依赖 tc2.s2 实例，规避 R8 下 varargs 反射静默失败的问题）
+            //    附录 A 实现——静态方法 jd2.a3.K(item)/y(rq0) + 未混淆字段 field_favProto.f，
+            //    不依赖 jd2.a3 实例，规避 R8 下 varargs 反射静默失败的问题）
             Object rq0 = getFavVoiceData(cl, favInfo);
             if (rq0 == null) { toast("获取收藏语音数据失败"); return; }
             String srcPath = getFavVoicePath(cl, rq0);
@@ -604,7 +604,7 @@ public final class FavVoiceForwardHook {
     }
 
     /** v3.0.90：按文档附录 A 获取收藏语音数据项 rq0。
-     *  优先静态方法 tc2.s2.K(item)（显式反射调用，避免 R8 varargs 问题），
+     *  优先静态方法 jd2.a3.K(item)（显式反射调用，避免 R8 varargs 问题），
      *  失败则直接用未混淆字段 field_favProto.f.get(0)。 */
     private static Object getFavVoiceData(ClassLoader cl, Object favItem) {
         try {
@@ -614,7 +614,7 @@ public final class FavVoiceForwardHook {
                 k.setAccessible(true);
                 Object rq0 = k.invoke(null, favItem);
                 if (rq0 != null) {
-                    LogWriter.log(TAG, "getFavVoiceData via tc2.s2.K cls="
+                    LogWriter.log(TAG, "getFavVoiceData via jd2.a3.K cls="
                             + rq0.getClass().getName());
                     return rq0;
                 }
@@ -643,7 +643,7 @@ public final class FavVoiceForwardHook {
         return null;
     }
 
-    /** v3.0.90：按文档附录 A 获取语音本地路径。优先静态方法 tc2.s2.y(rq0)，
+    /** v3.0.90：按文档附录 A 获取语音本地路径。优先静态方法 jd2.a3.y(rq0)，
      *  失败则直接在磁盘上按文件名搜索（微信收藏语音落盘于
      *  /data/data/com.tencent.mm/MicroMsg/<uinMd5>/favorite/ 下，
      *  不依赖任何需要 Context 的微信 API）。 */
@@ -655,7 +655,7 @@ public final class FavVoiceForwardHook {
                 y.setAccessible(true);
                 Object path = y.invoke(null, rq0);
                 if (path != null && !path.toString().isEmpty()) {
-                    LogWriter.log(TAG, "getFavVoicePath via tc2.s2.y");
+                    LogWriter.log(TAG, "getFavVoicePath via jd2.a3.y");
                     return path.toString();
                 }
             }
@@ -854,7 +854,7 @@ public final class FavVoiceForwardHook {
     }
 
     /** 获取 FavApiLogic 实例：优先 hook 捕获的 thisObject，其次静态字段/静态方法，
-     *  v3.0.89 起再尝试 BFS 扫描已知收藏相关类的静态字段（微信未调用 tc2.s2 方法时，
+     *  v3.0.89 起再尝试 BFS 扫描已知收藏相关类的静态字段（微信未调用 jd2.a3 方法时，
      *  单例仍会保存在某个静态字段中，BFS 可直接找到）。 */
     private static Object getFavApiInstance(Class<?> apiCls) {
         if (sFavApiLogic != null) return sFavApiLogic;
@@ -878,14 +878,14 @@ public final class FavVoiceForwardHook {
         return null;
     }
 
-    /** v3.0.89：BFS 扫描收藏相关类的静态字段，寻找类型与 tc2.s2 兼容的单例实例。
-     *  从 tc2.s2 自身及常见持有者（n0.c、tc2.* 等）出发，逐类扫描静态字段；
+    /** v3.0.89：BFS 扫描收藏相关类的静态字段，寻找类型与 jd2.a3 兼容的单例实例。
+     *  从 jd2.a3 自身及常见持有者（n0.c、tc2.* 等）出发，逐类扫描静态字段；
      *  字段类型为 apiCls 的类也加入队列（其静态字段可能直接持有实例）。 */
     private static Object scanFavApiInstance(Class<?> apiCls) {
         java.util.ArrayDeque<Class<?>> queue = new java.util.ArrayDeque<>();
         java.util.Set<Class<?>> visited = new java.util.HashSet<>();
         queue.add(apiCls);
-        for (String seed : new String[]{"n0.c", "n0.d", "tc2.s2", "tc2.r1", "tc2.t1",
+        for (String seed : new String[]{"n0.c", "n0.d", "jd2.a3", "tc2.r1", "tc2.t1",
                 "tc2.u1", "tc2.v1", "tc2.s1", "tc2.q1"}) {
             try {
                 Class<?> c = XposedHelpers.findClass(seed, apiCls.getClassLoader());
@@ -956,6 +956,7 @@ public final class FavVoiceForwardHook {
         List<String> locators = new ArrayList<>();
         String dk = DexKitHelper.getServiceLocatorClass();
         if (dk != null && !dk.isEmpty()) locators.add(dk);
+        locators.add("ni5.n0");
         locators.add("ph5.n0");
         locators.add("pa5.n0");
         locators.add("hm0.j1");

@@ -495,7 +495,7 @@ public final class ChatVoiceSwitchHook {
         float density = ctx.getResources().getDisplayMetrics().density;
         LinearLayout row = new LinearLayout(ctx);
         row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setGravity(Gravity.CENTER);
         row.setPadding(0, (int) (5 * density), 0, (int) (5 * density));
 
         int gap = (int) (6 * density);
@@ -524,18 +524,48 @@ public final class ChatVoiceSwitchHook {
             buttons.add(makeFooterButton(ctx, "拉群", AppColors.tertiary(),
                     v -> com.leshao.v3.hook.ChatFooterInviteHook.openInvitePicker(ctx), noBackground));
         }
+        // v3.0.547: 「群管理」入口（群欢迎语/退群播报/违禁词等）。无条件加入快捷栏（构建时 currentUser 尚未就绪），
+        // 点击时再判断当前会话是否群聊：群聊打开配置面板，非群聊提示。
+        // v3.0.557: 群管理按钮加 tag，由 ChatFooterBarHook 按当前会话动态显隐（仅群聊显示）
+        final TextView groupMgrBtn = makeFooterButton(ctx, "群管理", AppColors.tertiary(), v -> {
+            Activity act = getActivityFromContext(ctx);
+            String cur = com.leshao.v3.wm.hook.WmChatHook.currentUser();
+            if (act == null) {
+                LogWriter.log(TAG, "群管理: 无法获取 Activity");
+                return;
+            }
+            if (cur == null || !(cur.endsWith("@chatroom") || cur.endsWith("@im.chatroom"))) {
+                android.widget.Toast.makeText(act, "仅群聊可用", android.widget.Toast.LENGTH_SHORT).show();
+                return;
+            }
+            com.leshao.v3.hook.WanQunGroupHook.showConfigDialog(act, cur);
+        }, noBackground);
+        groupMgrBtn.setTag("ls_group_mgr_btn");
+        buttons.add(groupMgrBtn);
         for (int i = 0; i < buttons.size(); i++) {
             int mg = (i == buttons.size() - 1) ? 0 : gap;
             addButton(row, buttons.get(i), mg);
         }
         // v3.0.270: 输入框上方快捷菜单改为横向滚动容器，按钮多时不再换行/被截断，可左右滑动查看
+        // v3.0.557: fillViewport=true + 按钮行 MATCH_PARENT + gravity CENTER —— 按钮少时居中显示
         HorizontalScrollView scroll = new HorizontalScrollView(ctx);
         scroll.setHorizontalScrollBarEnabled(false);
-        scroll.setFillViewport(false);
+        scroll.setFillViewport(true);
         scroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
         scroll.addView(row, new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.MATCH_PARENT));
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
         return scroll;
+    }
+
+    /** v3.0.557: 按当前会话动态显隐「群管理」按钮（仅群聊显示）。 */
+    public static void updateGroupMgrVisibility(View bar) {
+        try {
+            View btn = bar == null ? null : bar.findViewWithTag("ls_group_mgr_btn");
+            if (btn == null) return;
+            String cur = com.leshao.v3.wm.hook.WmChatHook.currentUser();
+            boolean isRoom = cur != null && (cur.endsWith("@chatroom") || cur.endsWith("@im.chatroom"));
+            btn.setVisibility(isRoom ? View.VISIBLE : View.GONE);
+        } catch (Throwable ignored) {}
     }
 
     /** v1002: 供 WmEntry reconciler 调用 —— 微信复用 ChatFooter/漏掉生命周期 hook 时补注入。
@@ -583,29 +613,29 @@ public final class ChatVoiceSwitchHook {
         btn.setTextSize(13);
         btn.setGravity(Gravity.CENTER);
         btn.setSingleLine(true);
-        btn.setMinWidth(dp(40, ctx));
+        btn.setMinWidth(dp(44, ctx));
         // 收紧字间距(替代原先逐字插空格的写法)
         btn.setLetterSpacing(0.06f);
 
         boolean dark = isDarkMode(ctx);
         if (noBackground) {
-            // 尺寸与旧版按钮保持一致：最小宽度 40dp、内边距 12/5dp、字号 13sp。
+            // 尺寸与旧版按钮保持一致：最小宽度 44dp、内边距 12/7dp、字号 13sp。
             btn.setBackground(null);
             btn.setTextColor(color);
-            btn.setPadding(dp(12, ctx), dp(5, ctx), dp(12, ctx), dp(5, ctx));
+            btn.setPadding(dp(12, ctx), dp(7, ctx), dp(12, ctx), dp(7, ctx));
         } else {
             int bgColor = dark ? mix(color, 0xFF1B1F24, 0.26f) : mix(color, 0xFFFFFFFF, 0.14f);
             int borderColor = dark ? mix(color, 0xFF1B1F24, 0.55f) : mix(color, 0xFFFFFFFF, 0.45f);
             int textColor = dark ? mix(color, 0xFFFFFFFF, 0.78f) : color;
 
-            // v1148 去渐变：纯色底 + 描边（此前为三色流动渐变）
+            // v1148 去渐变：纯色底 + 描边（此前为三色流动渐变）；圆角统一全圆角药丸
             GradientDrawable bg = new GradientDrawable();
             bg.setColor(bgColor);
-            bg.setCornerRadius(dp(18, ctx));
+            bg.setCornerRadius(dp(AppColors.SHAPE_MD_DP, ctx));
             bg.setStroke(dp(1, ctx), borderColor);
             btn.setBackground(bg);
             btn.setTextColor(textColor);
-            btn.setPadding(dp(12, ctx), dp(5, ctx), dp(12, ctx), dp(5, ctx));
+            btn.setPadding(dp(12, ctx), dp(7, ctx), dp(12, ctx), dp(7, ctx));
         }
         btn.setOnClickListener(listener);
         return btn;

@@ -64,14 +64,15 @@ class CandyUi private constructor() {
                 // v967 关键修复: 自定义 track/thumb 为 GradientDrawable 时无 intrinsic size,
                 // 必须对每个 drawable 调用 setSize() 显式提供 intrinsic 尺寸。
                 val track = StateListDrawable()
+                // 关闭态轨道：玻璃实底 + 发丝描边。
                 val off = GradientDrawable()
                 off.shape = GradientDrawable.RECTANGLE
                 off.cornerRadius = trackR.toFloat()
-                off.setColor(AppColors.surfaceContainerHighest())
-                off.setStroke(dp(ctx, 2), AppColors.outline())
+                off.setColor(AppColors.glassRowFill())
+                off.setStroke(dp(ctx, 2), AppColors.glassStroke())
                 off.setSize(w, h)
                 track.addState(intArrayOf(-android.R.attr.state_checked), off)
-                // 打开状态轨道：纯色 primary 填充，圆角胶囊形。
+                // 打开状态轨道：主色实底，圆角胶囊形。
                 val on = GradientDrawable()
                 on.setColor(AppColors.primary())
                 on.cornerRadius = trackR.toFloat()
@@ -126,13 +127,13 @@ class CandyUi private constructor() {
             gd.shape = GradientDrawable.RECTANGLE
             val d = Resources.getSystem().displayMetrics.density
             gd.cornerRadius = AppColors.DIALOG_RADIUS_DP * d
-            // 去渐变：页面浮层统一纯色 surfaceContainerLowest 底
-            gd.setColor(AppColors.surfaceContainerLowest())
-            gd.setStroke(Math.max(1, (1.0f * d + 0.5f).toInt()), AppColors.outlineVariant())
+            // v3.0.457 实色玻璃：半透明实底 + 发丝描边，圆角外透出底帘
+            gd.setColor(AppColors.glassFill())
+            gd.setStroke(Math.max(1, (1.0f * d + 0.5f).toInt()), AppColors.glassStroke())
             return gd
         }
 
-        /** v3.0.101：糖果粉纯色圆角底（保留动画接口），用于按钮/徽标/FAB 等主色面 */
+        /** v3.0.101：主色面 · v3.0.457 实色圆角底（按钮/徽标/FAB） */
         @JvmStatic
         fun gradientBg(ctx: Context, radiusDp: Float): Drawable {
             val gd = GradientDrawable()
@@ -148,7 +149,7 @@ class CandyUi private constructor() {
             return gradientBg(ctx, radiusDp)
         }
 
-        /** v3.0.101：顶栏/Hero 糖果粉纯色底——仅上方圆角，贴合页面浮层顶部 */
+        /** v3.0.101：顶栏/Hero · v3.0.457 实色主色栏（无渐变，仅上方圆角贴合页面浮层） */
         @JvmStatic
         fun topBarGradientBg(ctx: Context): Drawable {
             val gd = GradientDrawable()
@@ -176,66 +177,47 @@ class CandyUi private constructor() {
             }
         }
 
-        /** M3 Expressive filled 卡片：surfaceContainerLowest（浅色纯白）底 + 24dp 大圆角 */
+        /** M3 Expressive filled 卡片 · v3.0.456 玻璃卡：受光渐变 + 玻璃描边 */
         @JvmStatic
         fun cardBg(ctx: Context): GradientDrawable {
-            val gd = GradientDrawable()
-            gd.shape = GradientDrawable.RECTANGLE
-            gd.cornerRadius = dp(ctx, AppColors.SHAPE_CARD_DP).toFloat()
-            gd.setColor(AppColors.surfaceContainerLowest())
-            if (AppColors.isDarkMode()) {
-                gd.setStroke(dp(ctx, 0.5f), AppColors.outlineVariant())
-            }
-            return gd
+            return glassPanel(ctx, AppColors.SHAPE_CARD_DP.toFloat())
         }
 
-        /** M3 Expressive elevated 卡片：surfaceContainerLowest 底 + 24dp 大圆角 + 细描边（暗色下区分层级） */
+        /** M3 Expressive elevated 卡片 · v3.0.456 玻璃卡（同 filled，描边恒显） */
         @JvmStatic
         fun cardElevatedBg(ctx: Context): GradientDrawable {
-            val gd = GradientDrawable()
-            gd.shape = GradientDrawable.RECTANGLE
-            gd.cornerRadius = dp(ctx, AppColors.SHAPE_CARD_DP).toFloat()
-            gd.setColor(AppColors.surfaceContainerLowest())
-            if (AppColors.isDarkMode()) {
-                gd.setStroke(dp(ctx, 0.5f), AppColors.outlineVariant())
-            }
-            return gd
+            return glassPanel(ctx, AppColors.SHAPE_CARD_DP.toFloat())
         }
 
-        /** M3 Expressive 行背景：surfaceContainerLow 底 + 16dp 圆角（独立行/列表行） */
+        /** M3 Expressive 行背景 · v3.0.457 玻璃行：实色行填充 + 发丝描边 */
         @JvmStatic
         fun rowBg(ctx: Context): GradientDrawable {
-            return roundedRect(AppColors.surfaceContainerLow(), dp(ctx, AppColors.SHAPE_LG_DP))
-        }
-
-        /** M3 Expressive 指定圆角卡片底（供页面自定义卡片半径时使用） */
-        @JvmStatic
-        fun cardBgRadius(ctx: Context, radiusDp: Float): GradientDrawable {
             val gd = GradientDrawable()
             gd.shape = GradientDrawable.RECTANGLE
-            gd.cornerRadius = dp(ctx, radiusDp).toFloat()
-            gd.setColor(AppColors.surfaceContainerLowest())
-            if (AppColors.isDarkMode()) {
-                gd.setStroke(dp(ctx, 0.5f), AppColors.outlineVariant())
-            }
+            gd.cornerRadius = dp(ctx, AppColors.SHAPE_LG_DP).toFloat()
+            gd.setColor(AppColors.glassRowFill())
+            gd.setStroke(dp(ctx, 1), blend(AppColors.glassStroke(), 0x00FFFFFF, 0.35f))
             return gd
         }
 
-        /** M3 Expressive filter chip：药丸全圆角，选中主色纯色 / 未选中 surfaceContainerLow + outline 描边 */
+        /** M3 Expressive 指定圆角卡片 · v3.0.456 玻璃卡（供页面自定义卡片半径时使用） */
+        @JvmStatic
+        fun cardBgRadius(ctx: Context, radiusDp: Float): GradientDrawable {
+            return glassPanel(ctx, radiusDp)
+        }
+
+        /** M3 Expressive filter chip · v3.0.457 实色药丸：选中=主色实底白字 / 未选中=玻璃底 + 描边 */
         @JvmStatic
         fun pillBg(selected: Boolean, ctx: Context): Drawable {
-            if (selected) {
-                val gd = GradientDrawable()
-                gd.shape = GradientDrawable.RECTANGLE
-                gd.cornerRadius = dp(ctx, AppColors.SHAPE_FULL_DP).toFloat()
-                gd.setColor(AppColors.primary())
-                return gd
-            }
             val gd = GradientDrawable()
             gd.shape = GradientDrawable.RECTANGLE
             gd.cornerRadius = dp(ctx, AppColors.SHAPE_FULL_DP).toFloat()
-            gd.setColor(AppColors.surfaceContainerLow())
-            gd.setStroke(dp(ctx, 1), AppColors.outline())
+            if (selected) {
+                gd.setColor(AppColors.primary())
+                return gd
+            }
+            gd.setColor(AppColors.glassRowFill())
+            gd.setStroke(dp(ctx, 1), AppColors.glassStroke())
             return gd
         }
 
@@ -251,72 +233,76 @@ class CandyUi private constructor() {
             return roundedRect(AppColors.tertiaryContainer(), dp(ctx, AppColors.SHAPE_SM_DP))
         }
 
-        /** M3 filled text field：surfaceContainerHighest 底 + 16dp 圆角 + outline 描边 */
+        /** M3 filled text field · v3.0.457 玻璃输入框：实底 + 发丝描边 */
         @JvmStatic
         fun inputBg(ctx: Context): GradientDrawable {
-            val gd = roundedRect(AppColors.surfaceContainerHighest(), dp(ctx, AppColors.SHAPE_INPUT_DP))
-            gd.setStroke(dp(ctx, 1), AppColors.outlineVariant())
+            val gd = GradientDrawable()
+            gd.shape = GradientDrawable.RECTANGLE
+            gd.cornerRadius = dp(ctx, AppColors.SHAPE_INPUT_DP).toFloat()
+            gd.setColor(AppColors.glassFillSolid())
+            gd.setStroke(dp(ctx, 1), AppColors.glassStroke())
             return gd
         }
 
-        /** M3 filled button：糖果粉纯色底 + 全圆角 + 状态层涟漪（v3.0.101） */
+        /** M3 filled button · v3.0.457 实色主钮 + 深压态 + 状态层涟漪 */
         @JvmStatic
         fun buttonBg(ctx: Context): Drawable {
             val sd = StateListDrawable()
+            val r = dp(ctx, AppColors.SHAPE_MD_DP).toFloat()
             val pressed = GradientDrawable()
             pressed.shape = GradientDrawable.RECTANGLE
-            pressed.cornerRadius = dp(ctx, AppColors.SHAPE_FULL_DP).toFloat()
-            pressed.setColor(AppColors.gradientPressed())
+            pressed.cornerRadius = r
+            pressed.setColor(blend(AppColors.primary(), 0xFF000000.toInt(), 0.22f))
             val normal = GradientDrawable()
             normal.shape = GradientDrawable.RECTANGLE
-            normal.cornerRadius = dp(ctx, AppColors.SHAPE_FULL_DP).toFloat()
+            normal.cornerRadius = r
             normal.setColor(AppColors.primary())
             sd.addState(intArrayOf(android.R.attr.state_pressed), pressed)
             sd.addState(intArrayOf(), normal)
             return rippleWrap(ctx, sd, AppColors.stateLayerOnPrimary())
         }
 
-        /** M3 outlined button：透明底 + outline 描边 + 全圆角 + 状态层涟漪 */
+        /** M3 outlined button · v3.0.457 玻璃幽灵钮：半透明实底 + 发丝描边 + 涟漪 */
         @JvmStatic
         fun buttonGhostBg(ctx: Context): Drawable {
             val sd = StateListDrawable()
             val pressed = GradientDrawable()
             pressed.shape = GradientDrawable.RECTANGLE
-            pressed.cornerRadius = dp(ctx, AppColors.SHAPE_FULL_DP).toFloat()
+            pressed.cornerRadius = dp(ctx, AppColors.SHAPE_MD_DP).toFloat()
             pressed.setColor(AppColors.stateLayerPressed())
             val normal = GradientDrawable()
             normal.shape = GradientDrawable.RECTANGLE
-            normal.cornerRadius = dp(ctx, AppColors.SHAPE_FULL_DP).toFloat()
-            normal.setColor(0x00000000)
-            normal.setStroke(dp(ctx, 1), AppColors.outline())
+            normal.cornerRadius = dp(ctx, AppColors.SHAPE_MD_DP).toFloat()
+            normal.setColor(AppColors.glassFill())
+            normal.setStroke(dp(ctx, 1), AppColors.glassStroke())
             sd.addState(intArrayOf(android.R.attr.state_pressed), pressed)
             sd.addState(intArrayOf(), normal)
             return rippleWrap(ctx, sd, AppColors.stateLayerPressed())
         }
 
-        /** M3 filled tonal button（危险）：error 底 + 全圆角 + 状态层涟漪 */
+        /** M3 filled tonal button（危险）：error 底 + 长形微圆角 + 状态层涟漪 */
         @JvmStatic
         fun buttonDangerBg(ctx: Context): Drawable {
             val sd = StateListDrawable()
             val pressed = GradientDrawable()
             pressed.shape = GradientDrawable.RECTANGLE
-            pressed.cornerRadius = dp(ctx, AppColors.SHAPE_FULL_DP).toFloat()
+            pressed.cornerRadius = dp(ctx, AppColors.SHAPE_MD_DP).toFloat()
             pressed.setColor(0xFF8C0F16.toInt())
             val normal = GradientDrawable()
             normal.shape = GradientDrawable.RECTANGLE
-            normal.cornerRadius = dp(ctx, AppColors.SHAPE_FULL_DP).toFloat()
+            normal.cornerRadius = dp(ctx, AppColors.SHAPE_MD_DP).toFloat()
             normal.setColor(AppColors.error())
             sd.addState(intArrayOf(android.R.attr.state_pressed), pressed)
             sd.addState(intArrayOf(), normal)
             return rippleWrap(ctx, sd, 0x1FFFFFFF)
         }
 
-        /** M3 text button：透明底 + 全圆角涟漪 */
+        /** M3 text button：透明底 + 长形微圆角涟漪 */
         @JvmStatic
         fun buttonTextBg(ctx: Context): Drawable {
             val normal = GradientDrawable()
             normal.shape = GradientDrawable.RECTANGLE
-            normal.cornerRadius = dp(ctx, AppColors.SHAPE_FULL_DP).toFloat()
+            normal.cornerRadius = dp(ctx, AppColors.SHAPE_MD_DP).toFloat()
             normal.setColor(0x00000000)
             return rippleWrap(ctx, normal, AppColors.stateLayerPressed())
         }
@@ -342,7 +328,7 @@ class CandyUi private constructor() {
             return try {
                 val mask = GradientDrawable()
                 mask.shape = GradientDrawable.RECTANGLE
-                mask.cornerRadius = dp(ctx, AppColors.SHAPE_FULL_DP).toFloat()
+                mask.cornerRadius = dp(ctx, AppColors.SHAPE_MD_DP).toFloat()
                 mask.setColor(0xFFFFFFFF.toInt())
                 RippleDrawable(
                     ColorStateList.valueOf(rippleColor), content, mask)
@@ -378,25 +364,20 @@ class CandyUi private constructor() {
         }
 
         /**
-         * M3 对话框：底色随层级变化 + （第 2 层起）1dp 描边。
-         * 第 1 层：surfaceContainerHigh；第 2 层：surfaceContainerHighest；
-         * 第 3 层起：向 primaryContainer 逐层混色（上限 24%）。
+         * M3 对话框 · v3.0.457 磨砂玻璃：磨砂实底（不过透保可读）+ 层级混色 + 发丝描边。
          */
         @JvmStatic
         fun dialogBg(ctx: Context, layer: Int): GradientDrawable {
-            val color: Int
-            if (layer <= 0) {
-                color = AppColors.surfaceContainerHigh()
-            } else if (layer == 1) {
-                color = AppColors.surfaceContainerHighest()
-            } else {
-                val t = Math.min(0.06f * layer, 0.24f)
-                color = blend(AppColors.surfaceContainerHighest(), AppColors.primaryContainer(), t)
-            }
-            val gd = roundedRect(color, dp(ctx, AppColors.DIALOG_RADIUS_DP))
+            var fill = AppColors.glassDialogFill()
             if (layer > 0) {
-                gd.setStroke(dp(ctx, 1), AppColors.outlineVariant())
+                val t = Math.min(0.06f * layer, 0.24f)
+                fill = blend(fill, AppColors.primaryContainer(), t)
             }
+            val gd = GradientDrawable()
+            gd.shape = GradientDrawable.RECTANGLE
+            gd.cornerRadius = dp(ctx, AppColors.DIALOG_RADIUS_DP).toFloat()
+            gd.setColor(fill)
+            gd.setStroke(dp(ctx, 1), AppColors.glassStroke())
             return gd
         }
 
@@ -419,6 +400,42 @@ class CandyUi private constructor() {
             val g = (g1 + (g2 - g1) * t).toInt()
             val b = (b1 + (b2 - b1) * t).toInt()
             return (a shl 24) or (r shl 16) or (g shl 8) or b
+        }
+
+        /** v3.0.457 玻璃面板工厂：半透明实底 + 1dp 发丝描边（明暗双模，无渐变）。 */
+        private fun glassPanel(ctx: Context, radiusDp: Float): GradientDrawable {
+            val gd = GradientDrawable()
+            gd.shape = GradientDrawable.RECTANGLE
+            gd.cornerRadius = dp(ctx, radiusDp).toFloat()
+            gd.setColor(AppColors.glassFillSolid())
+            gd.setStroke(dp(ctx, 1), AppColors.glassStroke())
+            return gd
+        }
+
+        /**
+         * v3.0.457 玻璃底栏：贴页底的实底玻璃条（仅上方圆角）+ 发丝描边。
+         * 供页面底部操作区使用；实色不过透，保证可读。
+         */
+        @JvmStatic
+        fun bottomBar(ctx: Context): GradientDrawable {
+            val gd = GradientDrawable()
+            gd.shape = GradientDrawable.RECTANGLE
+            val r = (AppColors.SHAPE_XL_DP * ctx.resources.displayMetrics.density)
+            gd.setCornerRadii(floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f))
+            gd.setColor(AppColors.glassFillSolid())
+            gd.setStroke(dp(ctx, 1), AppColors.glassStroke())
+            return gd
+        }
+
+        /** v3.0.457 玻璃搜索框：药丸形实底 + 发丝描边（供搜索输入区） */
+        @JvmStatic
+        fun searchBg(ctx: Context): GradientDrawable {
+            val gd = GradientDrawable()
+            gd.shape = GradientDrawable.RECTANGLE
+            gd.cornerRadius = dp(ctx, AppColors.SHAPE_FULL_DP).toFloat()
+            gd.setColor(AppColors.glassFillSolid())
+            gd.setStroke(dp(ctx, 1), AppColors.glassStroke())
+            return gd
         }
 
         private fun roundedRect(color: Int, radius: Int): GradientDrawable {

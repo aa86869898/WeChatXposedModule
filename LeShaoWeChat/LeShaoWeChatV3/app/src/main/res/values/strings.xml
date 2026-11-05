@@ -2,6 +2,7 @@
 <resources>
     <!-- 应用 / 模块名 -->
     <string name="app_name">乐少助手</string>
+    <string name="xposed_description">乐少助手：微信增强模块（AI 助手 / TTS 语音 / 竹节跳动音色 / 群管理）</string>
 
     <!-- 设置页 -->
     <string name="settings_title">乐少助手 设置</string>

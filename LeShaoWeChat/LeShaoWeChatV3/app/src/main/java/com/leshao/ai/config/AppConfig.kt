@@ -57,6 +57,12 @@ class AppConfig(private val configFile: File) {
 
     @get:Synchronized @get:JvmName("isTtsEnabled") @set:Synchronized
     var ttsEnabled: Boolean = false
+    /** 豆包网页纯文本模型会话开关（开启后文本对话走豆包 completion） */
+    @get:Synchronized @get:JvmName("isDoubaoTextEnabled") @set:Synchronized
+    var doubaoTextEnabled: Boolean = false
+    /** 图片识别回复开关（开启后收到图片自动识别并回复，默认关闭避免意外回复） */
+    @get:Synchronized @get:JvmName("isImageReplyEnabled") @set:Synchronized
+    var imageReplyEnabled: Boolean = false
 
     @get:Synchronized @set:Synchronized
     var botName: String = "小乐"
@@ -86,10 +92,14 @@ class AppConfig(private val configFile: File) {
     var autoAt: Boolean = false
 
     @get:Synchronized @set:Synchronized
-    var maxHistoryMessages: Int = 100
+    var maxHistoryMessages: Int = 200
         set(value) {
             field = if (value < 1) 1 else value
         }
+
+    /** 聊天总结开关：用户消息含"总结"时拉取该会话聊天记录生成文字总结。 */
+    @get:Synchronized @get:JvmName("isSummaryEnabled") @set:Synchronized
+    var summaryEnabled: Boolean = true
 
     @get:Synchronized @get:JvmName("isKeywordReplyEnabled") @set:Synchronized
     var keywordReplyEnabled: Boolean = false
@@ -111,15 +121,20 @@ class AppConfig(private val configFile: File) {
         try {
             FileInputStream(configFile).use { fis ->
                 val data = ByteArray(configFile.length().toInt())
-                val read = fis.read(data)
-                if (read <= 0) {
-                    return
+                var off = 0
+                while (off < data.size) {
+                    val n = fis.read(data, off, data.size - off)
+                    if (n < 0) break
+                    off += n
                 }
-                val obj = JSONObject(String(data, 0, read, StandardCharsets.UTF_8))
+                if (off <= 0) return
+                val obj = JSONObject(String(data, 0, off, StandardCharsets.UTF_8))
                 parse(obj)
             }
         } catch (e: IOException) {
+            com.leshao.v3.LogWriter.log("AppConfig", "load err: " + e)
         } catch (e: JSONException) {
+            com.leshao.v3.LogWriter.log("AppConfig", "load json err: " + e)
         }
     }
 
@@ -134,13 +149,22 @@ class AppConfig(private val configFile: File) {
                 return false
             }
             val obj = toJson()
-            FileOutputStream(configFile, false).use { out ->
+            val tmp = File(parent, configFile.name + ".tmp")
+            FileOutputStream(tmp, false).use { out ->
                 out.write(obj.toString(2).toByteArray(StandardCharsets.UTF_8))
+            }
+            // ★ 原子替换，防止进程被杀留下半截 JSON
+            if (!tmp.renameTo(configFile)) {
+                tmp.delete()
+                com.leshao.v3.LogWriter.log("AppConfig", "save renameTo fail")
+                return false
             }
             return true
         } catch (e: IOException) {
+            com.leshao.v3.LogWriter.log("AppConfig", "save err: " + e)
             return false
         } catch (e: JSONException) {
+            com.leshao.v3.LogWriter.log("AppConfig", "save json err: " + e)
             return false
         }
     }
@@ -155,6 +179,8 @@ class AppConfig(private val configFile: File) {
         maxTokens = obj.optInt("maxTokens", maxTokens)
         systemPrompt = obj.optString("systemPrompt", systemPrompt)
         ttsEnabled = obj.optBoolean("ttsEnabled", ttsEnabled)
+        doubaoTextEnabled = obj.optBoolean("doubaoTextEnabled", doubaoTextEnabled)
+        imageReplyEnabled = obj.optBoolean("imageReplyEnabled", imageReplyEnabled)
         botName = obj.optString("botName", botName)
         wakeKeyword = obj.optString("wakeKeyword", wakeKeyword)
         autoReplyInGroups = obj.optBoolean("autoReplyInGroups", autoReplyInGroups)
@@ -163,6 +189,11 @@ class AppConfig(private val configFile: File) {
         quoteReply = obj.optBoolean("quoteReply", quoteReply)
         autoAt = obj.optBoolean("autoAt", autoAt)
         maxHistoryMessages = obj.optInt("maxHistoryMessages", maxHistoryMessages)
+        // ★ 旧版本默认 50 迁移为 200（用户要求默认 200 条）
+        if (maxHistoryMessages < 100) {
+            maxHistoryMessages = 200
+        }
+        summaryEnabled = obj.optBoolean("summaryEnabled", summaryEnabled)
         keywordReplyEnabled = obj.optBoolean("keywordReplyEnabled", keywordReplyEnabled)
         val rules = com.leshao.v3.model.KeywordRule
                 .listFromJson(obj.optJSONArray("keywordReplyRules")) ?: emptyList()
@@ -190,6 +221,8 @@ class AppConfig(private val configFile: File) {
         obj.put("maxTokens", maxTokens)
         obj.put("systemPrompt", systemPrompt)
         obj.put("ttsEnabled", ttsEnabled)
+        obj.put("doubaoTextEnabled", doubaoTextEnabled)
+        obj.put("imageReplyEnabled", imageReplyEnabled)
         obj.put("botName", botName)
         obj.put("wakeKeyword", wakeKeyword)
         obj.put("autoReplyInGroups", autoReplyInGroups)
@@ -198,6 +231,7 @@ class AppConfig(private val configFile: File) {
         obj.put("quoteReply", quoteReply)
         obj.put("autoAt", autoAt)
         obj.put("maxHistoryMessages", maxHistoryMessages)
+        obj.put("summaryEnabled", summaryEnabled)
         obj.put("keywordReplyEnabled", keywordReplyEnabled)
         obj.put("keywordReplyRules",
                 com.leshao.v3.model.KeywordRule.listToJson(keywordReplyRules))
@@ -224,6 +258,8 @@ class AppConfig(private val configFile: File) {
                 "4.只输出回复文本，不加解释、标签、标点外多余内容。\n" +
                 "场景参考：对方难过→共情安抚；对方开玩笑→幽默接梗；对方说事→正常客套回应。"
         ttsEnabled = false
+        doubaoTextEnabled = false
+        imageReplyEnabled = false
         botName = "小乐"
         wakeKeyword = ""
         autoReplyInGroups = false
@@ -231,7 +267,8 @@ class AppConfig(private val configFile: File) {
         onlyWhenMentioned = false
         quoteReply = false
         autoAt = false
-        maxHistoryMessages = 100
+        maxHistoryMessages = 200
+        summaryEnabled = true
         keywordReplyEnabled = false
         keywordReplyRules.clear()
         modelHistory.clear()

@@ -77,6 +77,9 @@ object InstanceManager {
     }
 
     @JvmStatic
+    fun isInited(): Boolean = sInited
+
+    @JvmStatic
     fun isEnabled(): Boolean {
         val prefs = sPrefs ?: return true
         return try {

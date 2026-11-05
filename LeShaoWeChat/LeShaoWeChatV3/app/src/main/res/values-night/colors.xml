@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- v3.0.459 品牌色板：闲鱼黄（暗色模式，强调色保持高亮黄） -->
+    <color name="colorPrimary">#FFD43B</color>
+    <color name="colorPrimaryDark">#FFE59A</color>
+    <color name="colorAccent">#B4CFA4</color>
+    <color name="ic_launcher_background">#FFD43B</color>
+
+    <color name="background">#FF1A1710</color>
+    <color name="section_title">#FFD43B</color>
+    <color name="divider">#FF403B2F</color>
+    <color name="text_primary">#FFEFE5D4</color>
+    <color name="text_secondary">#FFD3CAB5</color>
+    <color name="input_background">#FF2A251C</color>
+</resources>

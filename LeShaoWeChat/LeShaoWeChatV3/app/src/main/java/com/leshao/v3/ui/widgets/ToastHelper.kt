@@ -68,8 +68,10 @@ object ToastHelper {
             val bg = GradientDrawable()
             bg.shape = GradientDrawable.RECTANGLE
             bg.setCornerRadius(AppColors.SHAPE_LG_DP * d)
-            // M3 snackbar：inverseSurface 底 + inverseOnSurface 字
-            bg.setColor(if (accent == 0) AppColors.inverseSurface() else accent)
+            // v3.0.457 玻璃风 snackbar：磨砂深色实底 + 发丝描边（明暗双模）
+            val toastFill = if (AppColors.isDarkMode()) 0xF2282A2E.toInt() else 0xF21A1C1E.toInt()
+            bg.setColor(if (accent == 0) toastFill else accent)
+            bg.setStroke(Math.max(1, (0.8f * d + 0.5f).toInt()), AppColors.glassStroke())
             card.background = bg
 
             val pw = PopupWindow(card,

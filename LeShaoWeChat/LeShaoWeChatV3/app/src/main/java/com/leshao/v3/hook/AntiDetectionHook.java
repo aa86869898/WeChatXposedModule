@@ -44,14 +44,14 @@ public class AntiDetectionHook {
     private static final String J_CLASS_LOADER = "java.lang.ClassLoader";
     private static final String J_LOAD_CLASS = "loadClass";
 
-    private static boolean sEnabled = true;
+    private static boolean sEnabled = false;
 
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 
     public static void hook(ClassLoader cl) {
         try {
             android.content.SharedPreferences p = com.leshao.v3.ContextManager.getPrefs();
-            if (p != null) sEnabled = p.getBoolean("ls_anti_detection", true);
+            if (p != null) sEnabled = p.getBoolean("ls_anti_detection", false);
         } catch (Throwable ignored) {}
 
         if (!sEnabled) return;

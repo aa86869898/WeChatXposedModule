@@ -32,8 +32,9 @@ class SegmentedControl(ctx: Context, items: Array<String>, initial: Int) : Linea
             val containerBg = GradientDrawable()
             containerBg.shape = GradientDrawable.RECTANGLE
             containerBg.setCornerRadius(dp(ctx, AppColors.SHAPE_FULL_DP.toFloat()).toFloat())
-            containerBg.setColor(0x00000000)
-            containerBg.setStroke(dp(ctx, 1f), AppColors.outline())
+            // v3.0.457 玻璃容器：实底 + 发丝描边
+            containerBg.setColor(AppColors.glassFill())
+            containerBg.setStroke(dp(ctx, 1f), AppColors.glassStroke())
             background = containerBg
         } catch (ignored: Throwable) {}
 

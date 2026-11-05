@@ -47,7 +47,7 @@ public class VoiceForwardHook {
     private static volatile boolean sHooked = false;
     private static volatile boolean sMenuInjected = false;
     private static volatile long sMenuInjectedTime = 0;
-    private static volatile boolean sEnabled = true;
+    private static volatile boolean sEnabled = false;
     // v3.0.184 修复：恢复注入自定义「语音转发」菜单项（0x7E000001），保证长按语音有转发按钮。
     // 点击后走本模块 ContactPickerDialog + TtsVoiceSender 发送（executeForward）。
     // 同时保留 WxForwardReplaceHook 注入的微信原生「转发」(142)（方案B：微信原生选人+模块发送）并行。
@@ -111,7 +111,7 @@ public class VoiceForwardHook {
     // ===== 聊天页 Activity =====
     private static void hookChatActivity(ClassLoader cl) {
         try {
-            Class<?> cui = cl.loadClass("com.tencent.mm.ui.chatting.ChattingUI");
+            Class<?> cui = WxResolver.resolve(cl, "com.tencent.mm.ui.chatting.ChattingUI");
             XposedBridge.hookAllMethods(cui, "onResume", new XC_MethodHook() {
                 @Override protected void afterHookedMethod(MethodHookParam param) {
                     try {
@@ -249,6 +249,10 @@ public class VoiceForwardHook {
         }
         if (!ok) return;
 
+        // ★ 修复"语音发出去错发给别人"：新一次转发流程开始，清空上次缓存的转发目标，
+        // 防止 [FwdFix][B] 在 data 为空时误用旧目标。
+        WxForwardReplaceHook.resetPickedTargets();
+
         sPendingView = anchor;
         sPendingMsg = tag;
         sPendingTalker = extractTalker(e9);
@@ -263,6 +267,16 @@ public class VoiceForwardHook {
         // v3.0.197: 菜单注入即标记方案B pending —— 日志铁证 onVoiceMenuBuilt 一定触发(menuBuild#1/#2)，
         // 而 bq.Q(142)/launchNativeVoiceForward 均零回调。标记后 [FwdFix][B] 才有语音可发。
         try { WxForwardReplaceHook.markVoiceForwardPending(e9); } catch (Throwable ignored) {}
+        // ★ 语音转发依赖 WxForwardReplaceHook 的 [FwdFix] 兜底发送（微信 3180 原生语音转发链已坏）。
+        // 分身的 prefs 独立，可能未启用该开关 → 选完人后无发送。此处注入 142 时联动启用。
+        try {
+            if (!WxForwardReplaceHook.isEnabled()) {
+                WxForwardReplaceHook.setEnabled(true);
+                com.leshao.v3.ContextManager.getPrefs().edit()
+                        .putBoolean(WxForwardReplaceHook.K_ENABLED, true).apply();
+                LogWriter.log(TAG, "语音转发注入 142：已联动启用 WxForwardReplaceHook（确保 [FwdFix] 兜底发送）");
+            }
+        } catch (Throwable ignored) {}
     }
 
     private static int msgTypeOf(Object e9) {
@@ -903,10 +917,15 @@ public class VoiceForwardHook {
                         + (live != null && !live.equals(targetWxid) ? "  [MISMATCH live!=target]" : ""));
             } catch (Throwable ignored) {}
 
-            // 1. 找语音文件
+            // 1. 找语音文件（刚收到的语音可能尚未下载到 voice2，等待下载最多 5s）
             String voiceFile = findVoiceFile(e9);
+            long deadline = System.currentTimeMillis() + 5000L;
+            while (voiceFile == null && System.currentTimeMillis() < deadline) {
+                try { Thread.sleep(500); } catch (InterruptedException ignored) { break; }
+                voiceFile = findVoiceFile(e9);
+            }
             if (voiceFile == null) {
-                LogWriter.log(TAG, "doForward: cannot find any voice file");
+                LogWriter.log(TAG, "doForward: cannot find any voice file (等待 5s 后仍无)");
                 return false;
             }
             LogWriter.log(TAG, "doForward: voiceFile=" + voiceFile);
@@ -987,9 +1006,13 @@ public class VoiceForwardHook {
      *  j() 的冒号前缀在部分消息上取到的是发送者 wxid(talker) 而非 clientmsgid，故放到最后并过滤。 */
     static String extractClientMsgId(Object e9) {
         if (e9 == null) return null;
-        // 1) e9.x0() field_imgPath: 语音文件名 msg_<cid>.amr / <cid>.amr / <cid> (最可靠)
+        // 1) e9.u0()(8.0.79+ field_imgPath) / 旧 x0() field_imgPath: 语音文件名 msg_<cid>.amr / <cid>.amr / <cid> (最可靠)
         try {
-            String imgPath = (String) XposedHelpers.callMethod(e9, "x0");
+            String imgPath = null;
+            try { imgPath = (String) XposedHelpers.callMethod(e9, "u0"); } catch (Throwable ignored) {}
+            if (imgPath == null || imgPath.isEmpty()) {
+                try { imgPath = (String) XposedHelpers.callMethod(e9, "x0"); } catch (Throwable ignored) {}
+            }
             if (imgPath != null && !imgPath.isEmpty()) {
                 String name = imgPath;
                 int slash = name.lastIndexOf('/');
@@ -1560,44 +1583,16 @@ public class VoiceForwardHook {
     private static String[] buildVoice2Roots(String uinHash) {
         int currentUser = Process.myUid() / 100000;
         java.util.List<String> roots = new java.util.ArrayList<>();
+        // 只扫描当前用户自己的 voice2，禁止跨用户回退（避免分身误播主微信语音）
         roots.add("/data/user/" + currentUser + "/com.tencent.mm/MicroMsg/" + uinHash + "/voice2");
-        if (currentUser != 0) {
-            roots.add("/data/user/0/com.tencent.mm/MicroMsg/" + uinHash + "/voice2");
-        }
-        java.io.File userBase = new java.io.File("/data/user");
-        java.io.File[] userDirs = userBase.listFiles();
-        if (userDirs != null) {
-            for (java.io.File ud : userDirs) {
-                if (!ud.isDirectory()) continue;
-                try {
-                    int id = Integer.parseInt(ud.getName());
-                    if (id == currentUser || (currentUser != 0 && id == 0)) continue;
-                } catch (Throwable ignored) { continue; }
-                roots.add(ud.getAbsolutePath() + "/com.tencent.mm/MicroMsg/" + uinHash + "/voice2");
-            }
-        }
         return roots.toArray(new String[0]);
     }
 
     private static String[] buildMicroMsgRoots() {
         int currentUser = Process.myUid() / 100000;
         java.util.List<String> roots = new java.util.ArrayList<>();
+        // 只扫描当前用户自己的微信目录，禁止跨用户回退（避免多开串音）
         roots.add("/data/user/" + currentUser + "/com.tencent.mm/MicroMsg");
-        if (currentUser != 0) {
-            roots.add("/data/user/0/com.tencent.mm/MicroMsg");
-        }
-        java.io.File userBase = new java.io.File("/data/user");
-        java.io.File[] userDirs = userBase.listFiles();
-        if (userDirs != null) {
-            for (java.io.File ud : userDirs) {
-                if (!ud.isDirectory()) continue;
-                try {
-                    int id = Integer.parseInt(ud.getName());
-                    if (id == currentUser || (currentUser != 0 && id == 0)) continue;
-                } catch (Throwable ignored) { continue; }
-                roots.add(ud.getAbsolutePath() + "/com.tencent.mm/MicroMsg");
-            }
-        }
         return roots.toArray(new String[0]);
     }
 }

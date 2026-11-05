@@ -55,6 +55,11 @@ object ContextManager {
 
     @JvmStatic
     fun hookAttachBaseContext(lpp: XC_LoadPackage.LoadPackageParam?) {
+        hookAttachBaseContext(lpp, false)
+    }
+
+    @JvmStatic
+    fun hookAttachBaseContext(lpp: XC_LoadPackage.LoadPackageParam?, appBrandOnly: Boolean) {
         try {
             val attachMethod: Method =
                 android.content.ContextWrapper::class.java.getDeclaredMethod("attachBaseContext", Context::class.java)
@@ -64,18 +69,22 @@ object ContextManager {
                     // sAppContext 并被静态引用导致 Activity 泄漏
                     if (param.thisObject !is Application) return
                     sAppContext = param.thisObject as Context
-                    // v1025: 最早探针 —— Application 的 CL 即微信真实 CL, 须在微信打开
-                    // EnMicroMsg.db 之前 rehook WCDB(否则 open 事件捕获不到)
-                    try {
-                        com.leshao.v3.db.DatabaseProvider.probeAndRehook(param.thisObject)
-                    } catch (t: Throwable) {
-                        LogWriter.log(TAG, "DatabaseProvider.probeAndRehook FAILED: " + t.message)
-                    }
-                    // v962: 主/分身实例隔离管理器初始化(须早于一切业务 Hook, 见《微信模块隔离.md》)
-                    try {
-                        InstanceManager.init(sAppContext)
-                    } catch (t: Throwable) {
-                        LogWriter.log(TAG, "InstanceManager.init FAILED: " + t.message)
+                    // 小程序子进程仅做去广告：跳过数据库/实例管理 hook，避免多进程同时
+                    // hook WCDB 与主进程冲突（曾导致返回微信主页白屏/卡顿）
+                    if (!appBrandOnly) {
+                        // v1025: 最早探针 —— Application 的 CL 即微信真实 CL, 须在微信打开
+                        // EnMicroMsg.db 之前 rehook WCDB(否则 open 事件捕获不到)
+                        try {
+                            com.leshao.v3.db.DatabaseProvider.probeAndRehook(param.thisObject)
+                        } catch (t: Throwable) {
+                            LogWriter.log(TAG, "DatabaseProvider.probeAndRehook FAILED: " + t.message)
+                        }
+                        // v962: 主/分身实例隔离管理器初始化(须早于一切业务 Hook, 见《微信模块隔离.md》)
+                        try {
+                            InstanceManager.init(sAppContext)
+                        } catch (t: Throwable) {
+                            LogWriter.log(TAG, "InstanceManager.init FAILED: " + t.message)
+                        }
                     }
                     if (!sReady) {
                         sReady = true
@@ -155,6 +164,6 @@ object ContextManager {
 
     @JvmStatic
     fun getVersionName(): String {
-        return "3.6.6-v166"
+        return BuildConfig.VERSION_NAME
     }
 }

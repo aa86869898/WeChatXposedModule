@@ -199,7 +199,7 @@ class BatchAddRecordPageView {
             val badge = TextView(ctx)
             badge.text = if (r.success) "成功" else "失败"
             badge.setTextSize(12f)
-            badge.setTextColor(AppColors.whiteTextOnAccent())
+            badge.setTextColor(if (r.success) AppColors.onPrimary() else AppColors.onError())
             badge.gravity = Gravity.CENTER
             badge.setPadding((12 * d).toInt(), (5 * d).toInt(), (12 * d).toInt(), (5 * d).toInt())
             val bg = GradientDrawable()

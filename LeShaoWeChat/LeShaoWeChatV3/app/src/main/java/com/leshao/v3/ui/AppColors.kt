@@ -15,7 +15,7 @@ import java.util.concurrent.CopyOnWriteArrayList
  * M3 色彩角色（primary/onPrimary/primaryContainer/surface/surfaceVariant/outline/…）
  * 一律走动态 getter，支持暗色模式运行时切换。
  *
- * 主题：微信绿 · 纯色（#07C160，动态取色优先，低版本回退微信绿）。
+ * 主题：闲鱼黄（#F5B301，v3.0.459 品牌默认固定色板，废弃动态取色与旧色板）。
  */
 class AppColors private constructor() {
 
@@ -47,24 +47,26 @@ class AppColors private constructor() {
         const val PALETTE_CUSTOM = 100
         /** 动态取色（Material You，Android 12+ 系统强调色） */
         const val PALETTE_DYNAMIC = 101
+        /** v3.0.459 品牌固定色板「闲鱼黄」：放弃系统动态取色/蓝紫/橙色板，全工程唯一默认 */
+        const val PALETTE_BRAND = 200
 
         private val PALETTE_NAMES = arrayOf(
-            "糖果粉", "樱粉", "蜜桃", "玫瑰粉", "淡粉", "亮粉",
-            "深粉", "藕粉", "玫粉", "暖粉", "荧光粉", "粉紫"
+            "闲鱼黄", "薄荷青", "罗兰紫", "琥珀橙", "莓果红", "海湖蓝",
+            "樱粉", "靛蓝", "翡翠绿", "珊瑚橙", "天青蓝", "石墨灰"
         )
         private val PALETTE_SEEDS = intArrayOf(
-            0xFFFF99C2.toInt(), // 糖果粉（主题）
-            0xFFFFAFCC.toInt(), // 樱粉
-            0xFFF472B6.toInt(), // 蜜桃
-            0xFFFF6FB0.toInt(), // 玫瑰粉
-            0xFFFFC2D8.toInt(), // 淡粉
-            0xFFFF8FC7.toInt(), // 亮粉
-            0xFFD9639D.toInt(), // 深粉
-            0xFFFFD9E8.toInt(), // 藕粉
-            0xFFE56EA6.toInt(), // 玫粉
-            0xFFFB7185.toInt(), // 暖粉
-            0xFFFF5FA2.toInt(), // 荧光粉
-            0xFF8E6B7C.toInt()  // 粉紫
+            0xFFF5B301.toInt(), // 闲鱼黄（品牌默认）
+            0xFF00A98F.toInt(), // 薄荷青
+            0xFF8B5CF6.toInt(), // 罗兰紫
+            0xFFE8890C.toInt(), // 琥珀橙
+            0xFFE5484D.toInt(), // 莓果红
+            0xFF0091FF.toInt(), // 海湖蓝
+            0xFFEE3D8B.toInt(), // 樱粉
+            0xFF4F46E5.toInt(), // 靛蓝
+            0xFF30A46C.toInt(), // 翡翠绿
+            0xFFF76B15.toInt(), // 珊瑚橙
+            0xFF0EA5E9.toInt(), // 天青蓝
+            0xFF5A6472.toInt()  // 石墨灰
         )
         private const val PREFS = "leshao_m3_prefs"
         private const val KEY_PALETTE = "m3_palette"
@@ -75,7 +77,7 @@ class AppColors private constructor() {
         @Volatile
         private var sPalette = PALETTE_DYNAMIC
         @Volatile
-        private var sCustomSeed = 0xFF07C160.toInt()
+        private var sCustomSeed = 0xFFF5B301.toInt()
         @Volatile
         private var sSchemeVersion = 0
         /** 上次成功读取的动态取色 seed（Android 12+ system_accent1_500），用于 refresh 时检测壁纸变化 */
@@ -150,9 +152,9 @@ class AppColors private constructor() {
         }
 
         private fun loadPaletteFromPrefs() {
-            // v1018: 模块统一使用 M3 动态配色（Material You），全局所有界面实时生效；
-            // 配色选择功能已移除，不再读取用户选择，单元素颜色覆盖一并复位。
-            sPalette = PALETTE_DYNAMIC
+            // v3.0.459: 品牌配色全面换血 —— 默认锁定 PALETTE_BRAND（闲鱼黄）
+            // 不再读取系统动态取色（Material You）与旧色板，保证所有设备配色完全一致。
+            sPalette = PALETTE_BRAND
             sOvTitleBar = 0
             sOvSwitch = 0
             sOvWindowBg = 0
@@ -305,8 +307,8 @@ class AppColors private constructor() {
         /**
          * 依据明暗模式重算当前配色角色。
          *
-         * v3.0.102：全局锁定「动态取色」（Material You）——Android 12+ 读取系统壁纸强调色，
-         * 低版本/系统色不可用时回退到糖果粉静态色板。
+         * v3.0.102：全局锁定品牌色板「闲鱼黄」——Android 12+ 也不走系统壁纸色，
+         * 统一保证所有设备配色一致；低版本同样使用同一品牌色板。
          */
         @Synchronized
         private fun recomputePalette() {
@@ -338,61 +340,63 @@ class AppColors private constructor() {
                     + " dark=" + dark + " (dynamic unavailable)")
             } catch (ignored: Throwable) {
             }
-            // ==================== M3 Expressive · 微信绿体系 ====================
+            // ==================== v3.0.459 品牌色板 · 闲鱼黄（Xianyu Yellow） ====================
+            // 高亮 M3 配色：主色为明亮琥珀黄（亮而不暗），黄底配深咖文字保证可读；
+            // 第三色用暖调橄榄绿做点缀。浅色暖白黄底，暗色暖棕黑底但强调色保持高亮。
             if (dark) {
-                cPrimary = 0xFF3DD68C.toInt()
-                cOnPrimary = 0xFF00391F.toInt()
-                cPrimaryContainer = 0xFF005234.toInt()
-                cOnPrimaryContainer = 0xFFB3F5D3.toInt()
-                cSecondary = 0xFFB4CCBC.toInt()
-                cOnSecondary = 0xFF21382A.toInt()
-                cSecondaryContainer = 0xFF37513F.toInt()
-                cOnSecondaryContainer = 0xFFD0E8D4.toInt()
-                cTertiary = 0xFFA6D8C2.toInt()
-                cOnTertiary = 0xFF00382A.toInt()
-                cTertiaryContainer = 0xFF00513D.toInt()
-                cOnTertiaryContainer = 0xFFB0F2DA.toInt()
-                cPrimaryDark = 0xFF3DD68C.toInt()
+                cPrimary = 0xFFFFD43B.toInt()
+                cOnPrimary = 0xFF3D2F00.toInt()
+                cPrimaryContainer = 0xFF5E4700.toInt()
+                cOnPrimaryContainer = 0xFFFFE59A.toInt()
+                cSecondary = 0xFFCFC29E.toInt()
+                cOnSecondary = 0xFF352F17.toInt()
+                cSecondaryContainer = 0xFF4C462D.toInt()
+                cOnSecondaryContainer = 0xFFE8DFB8.toInt()
+                cTertiary = 0xFFB4CFA4.toInt()
+                cOnTertiary = 0xFF203617.toInt()
+                cTertiaryContainer = 0xFF364C2C.toInt()
+                cOnTertiaryContainer = 0xFFCFEAC0.toInt()
+                cPrimaryDark = 0xFFFFD43B.toInt()
 
-                cBackground = 0xFF1B1218.toInt()
-                cSurface = 0xFF1B1218.toInt()
-                cScLowest = 0xFF130B10.toInt()
-                cScLow = 0xFF241A20.toInt()
-                cSc = 0xFF2A2026.toInt()
-                cScHigh = 0xFF35292F.toInt()
-                cScHighest = 0xFF40343A.toInt()
-                cSurfaceVariant = 0xFF44323B.toInt()
-                cOnSurface = 0xFFF5E6ED.toInt()
-                cOnSurfaceVariant = 0xFFD0B4C1.toInt()
-                cOutline = 0xFF9D838F.toInt()
-                cOutlineVariant = 0xFF4B3843.toInt()
+                cBackground = 0xFF1A1710.toInt()
+                cSurface = 0xFF1A1710.toInt()
+                cScLowest = 0xFF12100A.toInt()
+                cScLow = 0xFF241F16.toInt()
+                cSc = 0xFF2A251C.toInt()
+                cScHigh = 0xFF353025.toInt()
+                cScHighest = 0xFF403B2F.toInt()
+                cSurfaceVariant = 0xFF4C4636.toInt()
+                cOnSurface = 0xFFEFE5D4.toInt()
+                cOnSurfaceVariant = 0xFFD3CAB5.toInt()
+                cOutline = 0xFF9C9481.toInt()
+                cOutlineVariant = 0xFF4C4636.toInt()
             } else {
-                cPrimary = 0xFF07C160.toInt()
-                cOnPrimary = 0xFFFFFFFF.toInt()
-                cPrimaryContainer = 0xFF9EF2C8.toInt()
-                cOnPrimaryContainer = 0xFF00391F.toInt()
-                cSecondary = 0xFF4E6356.toInt()
+                cPrimary = 0xFFF5B301.toInt()
+                cOnPrimary = 0xFF2B2100.toInt()
+                cPrimaryContainer = 0xFFFFE59A.toInt()
+                cOnPrimaryContainer = 0xFF241A00.toInt()
+                cSecondary = 0xFF6E5F3A.toInt()
                 cOnSecondary = 0xFFFFFFFF.toInt()
-                cSecondaryContainer = 0xFFD0E8D4.toInt()
-                cOnSecondaryContainer = 0xFF0C1F14.toInt()
-                cTertiary = 0xFF3D6373.toInt()
+                cSecondaryContainer = 0xFFF6E4B4.toInt()
+                cOnSecondaryContainer = 0xFF3A3200.toInt()
+                cTertiary = 0xFF4E6544.toInt()
                 cOnTertiary = 0xFFFFFFFF.toInt()
-                cTertiaryContainer = 0xFFC1E8FA.toInt()
-                cOnTertiaryContainer = 0xFF001F29.toInt()
-                cPrimaryDark = 0xFF07C160.toInt()
+                cTertiaryContainer = 0xFFCFEAC0.toInt()
+                cOnTertiaryContainer = 0xFF0C1F0A.toInt()
+                cPrimaryDark = 0xFFF5B301.toInt()
 
-                cBackground = 0xFFFBF8F6.toInt()
-                cSurface = 0xFFFBF8F6.toInt()
+                cBackground = 0xFFFFFBF2.toInt()
+                cSurface = 0xFFFFFBF2.toInt()
                 cScLowest = 0xFFFFFFFF.toInt()
-                cScLow = 0xFFF7F3F1.toInt()
-                cSc = 0xFFF2ECEA.toInt()
-                cScHigh = 0xFFECE5E3.toInt()
-                cScHighest = 0xFFE6DEDC.toInt()
-                cSurfaceVariant = 0xFFF1DEE4.toInt()
-                cOnSurface = 0xFF221A1E.toInt()
-                cOnSurfaceVariant = 0xFF6B5560.toInt()
-                cOutline = 0xFF9C818D.toInt()
-                cOutlineVariant = 0xFFE4CBD5.toInt()
+                cScLow = 0xFFFFF5E1.toInt()
+                cSc = 0xFFFFF0D3.toInt()
+                cScHigh = 0xFFFAE6BC.toInt()
+                cScHighest = 0xFFF3DCAB.toInt()
+                cSurfaceVariant = 0xFFEFE0BE.toInt()
+                cOnSurface = 0xFF1F1B10.toInt()
+                cOnSurfaceVariant = 0xFF4C4636.toInt()
+                cOutline = 0xFF7D7663.toInt()
+                cOutlineVariant = 0xFFD0C5A4.toInt()
             }
         }
 
@@ -700,69 +704,69 @@ class AppColors private constructor() {
             return primaryDark()
         }
 
-        // ==================== M3 色彩角色（浅色方案 · Expressive 中性暖白） ====================
-        private val L_PRIMARY = 0xFF07C160.toInt()
-        private val L_ON_PRIMARY = 0xFFFFFFFF.toInt()
-        private val L_PRIMARY_CONTAINER = 0xFF9EF2C8.toInt()
-        private val L_ON_PRIMARY_CONTAINER = 0xFF00391F.toInt()
-        private val L_SECONDARY = 0xFF4E6356.toInt()
+        // ==================== M3 色彩角色（浅色方案 · 闲鱼黄） ====================
+        private val L_PRIMARY = 0xFFF5B301.toInt()
+        private val L_ON_PRIMARY = 0xFF2B2100.toInt()
+        private val L_PRIMARY_CONTAINER = 0xFFFFE59A.toInt()
+        private val L_ON_PRIMARY_CONTAINER = 0xFF241A00.toInt()
+        private val L_SECONDARY = 0xFF6E5F3A.toInt()
         private val L_ON_SECONDARY = 0xFFFFFFFF.toInt()
-        private val L_SECONDARY_CONTAINER = 0xFFD0E8D4.toInt()
-        private val L_ON_SECONDARY_CONTAINER = 0xFF0C1F14.toInt()
-        private val L_TERTIARY = 0xFF3D6373.toInt()
+        private val L_SECONDARY_CONTAINER = 0xFFF6E4B4.toInt()
+        private val L_ON_SECONDARY_CONTAINER = 0xFF3A3200.toInt()
+        private val L_TERTIARY = 0xFF4E6544.toInt()
         private val L_ON_TERTIARY = 0xFFFFFFFF.toInt()
-        private val L_TERTIARY_CONTAINER = 0xFFC1E8FA.toInt()
-        private val L_ON_TERTIARY_CONTAINER = 0xFF001F29.toInt()
+        private val L_TERTIARY_CONTAINER = 0xFFCFEAC0.toInt()
+        private val L_ON_TERTIARY_CONTAINER = 0xFF0C1F0A.toInt()
         private val L_ERROR = 0xFFBA1A1A.toInt()
         private val L_ON_ERROR = 0xFFFFFFFF.toInt()
         private val L_ERROR_CONTAINER = 0xFFFFDAD6.toInt()
         private val L_ON_ERROR_CONTAINER = 0xFF410002.toInt()
-        private val L_BACKGROUND = 0xFFF8F8F8.toInt()
-        private val L_ON_BACKGROUND = 0xFF1A1C1B.toInt()
-        private val L_SURFACE = 0xFFF8F8F8.toInt()
-        private val L_ON_SURFACE = 0xFF1A1C1B.toInt()
-        private val L_SURFACE_VARIANT = 0xFFE3E3E3.toInt()
-        private val L_ON_SURFACE_VARIANT = 0xFF444746.toInt()
+        private val L_BACKGROUND = 0xFFFFFBF2.toInt()
+        private val L_ON_BACKGROUND = 0xFF1F1B10.toInt()
+        private val L_SURFACE = 0xFFFFFBF2.toInt()
+        private val L_ON_SURFACE = 0xFF1F1B10.toInt()
+        private val L_SURFACE_VARIANT = 0xFFEFE0BE.toInt()
+        private val L_ON_SURFACE_VARIANT = 0xFF4C4636.toInt()
         private val L_SURFACE_CONTAINER_LOWEST = 0xFFFFFFFF.toInt()
-        private val L_SURFACE_CONTAINER_LOW = 0xFFF3F3F3.toInt()
-        private val L_SURFACE_CONTAINER = 0xFFEDEDED.toInt()
-        private val L_SURFACE_CONTAINER_HIGH = 0xFFE6E6E6.toInt()
-        private val L_SURFACE_CONTAINER_HIGHEST = 0xFFE0E0E0.toInt()
-        private val L_OUTLINE = 0xFF79747E.toInt()
-        private val L_OUTLINE_VARIANT = 0xFFCAC4D0.toInt()
+        private val L_SURFACE_CONTAINER_LOW = 0xFFFFF5E1.toInt()
+        private val L_SURFACE_CONTAINER = 0xFFFFF0D3.toInt()
+        private val L_SURFACE_CONTAINER_HIGH = 0xFFFAE6BC.toInt()
+        private val L_SURFACE_CONTAINER_HIGHEST = 0xFFF3DCAB.toInt()
+        private val L_OUTLINE = 0xFF7D7663.toInt()
+        private val L_OUTLINE_VARIANT = 0xFFD0C5A4.toInt()
         private val L_INVERSE_SURFACE = 0xFF303030.toInt()
         private val L_INVERSE_ON_SURFACE = 0xFFF5F5F5.toInt()
 
-        // ==================== M3 色彩角色（暗色方案 · Expressive 中性深灰） ====================
-        private val D_PRIMARY = 0xFF3DD68C.toInt()
-        private val D_ON_PRIMARY = 0xFF00391F.toInt()
-        private val D_PRIMARY_CONTAINER = 0xFF005234.toInt()
-        private val D_ON_PRIMARY_CONTAINER = 0xFFB3F5D3.toInt()
-        private val D_SECONDARY = 0xFFB4CCBC.toInt()
-        private val D_ON_SECONDARY = 0xFF21382A.toInt()
-        private val D_SECONDARY_CONTAINER = 0xFF37513F.toInt()
-        private val D_ON_SECONDARY_CONTAINER = 0xFFD0E8D4.toInt()
-        private val D_TERTIARY = 0xFFA6D8C2.toInt()
-        private val D_ON_TERTIARY = 0xFF00382A.toInt()
-        private val D_TERTIARY_CONTAINER = 0xFF00513D.toInt()
-        private val D_ON_TERTIARY_CONTAINER = 0xFFB0F2DA.toInt()
+        // ==================== M3 色彩角色（暗色方案 · 闲鱼黄：强调色保持高亮黄） ====================
+        private val D_PRIMARY = 0xFFFFD43B.toInt()
+        private val D_ON_PRIMARY = 0xFF3D2F00.toInt()
+        private val D_PRIMARY_CONTAINER = 0xFF5E4700.toInt()
+        private val D_ON_PRIMARY_CONTAINER = 0xFFFFE59A.toInt()
+        private val D_SECONDARY = 0xFFCFC29E.toInt()
+        private val D_ON_SECONDARY = 0xFF352F17.toInt()
+        private val D_SECONDARY_CONTAINER = 0xFF4C462D.toInt()
+        private val D_ON_SECONDARY_CONTAINER = 0xFFE8DFB8.toInt()
+        private val D_TERTIARY = 0xFFB4CFA4.toInt()
+        private val D_ON_TERTIARY = 0xFF203617.toInt()
+        private val D_TERTIARY_CONTAINER = 0xFF364C2C.toInt()
+        private val D_ON_TERTIARY_CONTAINER = 0xFFCFEAC0.toInt()
         private val D_ERROR = 0xFFFFB4AB.toInt()
         private val D_ON_ERROR = 0xFF690005.toInt()
         private val D_ERROR_CONTAINER = 0xFF93000A.toInt()
         private val D_ON_ERROR_CONTAINER = 0xFFFFDAD6.toInt()
-        private val D_BACKGROUND = 0xFF121212.toInt()
-        private val D_ON_BACKGROUND = 0xFFF0F0F0.toInt()
-        private val D_SURFACE = 0xFF121212.toInt()
-        private val D_ON_SURFACE = 0xFFF0F0F0.toInt()
-        private val D_SURFACE_VARIANT = 0xFF3A3A3A.toInt()
-        private val D_ON_SURFACE_VARIANT = 0xFFC9C9C9.toInt()
-        private val D_SURFACE_CONTAINER_LOWEST = 0xFF0E0E0E.toInt()
-        private val D_SURFACE_CONTAINER_LOW = 0xFF1A1A1A.toInt()
-        private val D_SURFACE_CONTAINER = 0xFF212121.toInt()
-        private val D_SURFACE_CONTAINER_HIGH = 0xFF2A2A2A.toInt()
-        private val D_SURFACE_CONTAINER_HIGHEST = 0xFF333333.toInt()
-        private val D_OUTLINE = 0xFF9B9B9B.toInt()
-        private val D_OUTLINE_VARIANT = 0xFF494949.toInt()
+        private val D_BACKGROUND = 0xFF1A1710.toInt()
+        private val D_ON_BACKGROUND = 0xFFEFE5D4.toInt()
+        private val D_SURFACE = 0xFF1A1710.toInt()
+        private val D_ON_SURFACE = 0xFFEFE5D4.toInt()
+        private val D_SURFACE_VARIANT = 0xFF4C4636.toInt()
+        private val D_ON_SURFACE_VARIANT = 0xFFD3CAB5.toInt()
+        private val D_SURFACE_CONTAINER_LOWEST = 0xFF12100A.toInt()
+        private val D_SURFACE_CONTAINER_LOW = 0xFF241F16.toInt()
+        private val D_SURFACE_CONTAINER = 0xFF2A251C.toInt()
+        private val D_SURFACE_CONTAINER_HIGH = 0xFF353025.toInt()
+        private val D_SURFACE_CONTAINER_HIGHEST = 0xFF403B2F.toInt()
+        private val D_OUTLINE = 0xFF9C9481.toInt()
+        private val D_OUTLINE_VARIANT = 0xFF4C4636.toInt()
         private val D_INVERSE_SURFACE = 0xFF3A3A3A.toInt()
         private val D_INVERSE_ON_SURFACE = 0xFFF5F5F5.toInt()
 
@@ -947,7 +951,7 @@ class AppColors private constructor() {
         /** 主色按压深阶（渐变/按压态用） */
         @JvmStatic
         fun primaryDark(): Int {
-            return if (custom()) cPrimaryDark else if (sDarkMode) 0xFF3DD68C.toInt() else 0xFF07C160.toInt()
+            return if (custom()) cPrimaryDark else if (sDarkMode) 0xFFFFD43B.toInt() else 0xFFF5B301.toInt()
         }
 
         /** 三级文字（弱化）：M3 outline */
@@ -1076,41 +1080,7 @@ class AppColors private constructor() {
         private val D_DIVIDER = D_OUTLINE_VARIANT
         private val D_WHITE_TEXT = 0xFFFFFFFF.toInt()
 
-        // 动态取色 (static final, computed after sDarkMode)
-        @JvmField
-        val BG_GRADIENT_START: Int = if (sDarkMode) D_BG_GRADIENT_START else L_BG_GRADIENT_START
-        @JvmField
-        val BG_GRADIENT_END: Int = if (sDarkMode) D_BG_GRADIENT_END else L_BG_GRADIENT_END
-        @JvmField
-        val CARD_BG: Int = if (sDarkMode) D_CARD_BG else L_CARD_BG
-        @JvmField
-        val INPUT_BG: Int = if (sDarkMode) D_INPUT_BG else L_INPUT_BG
-        @JvmField
-        val TEXT_TITLE: Int = if (sDarkMode) D_TEXT_TITLE else L_TEXT_TITLE
-        @JvmField
-        val TEXT_BODY: Int = if (sDarkMode) D_TEXT_BODY else L_TEXT_BODY
-        @JvmField
-        val TEXT_NOTE: Int = if (sDarkMode) D_TEXT_NOTE else L_TEXT_NOTE
-        @JvmField
-        val ACCENT: Int = if (sDarkMode) D_ACCENT else L_ACCENT
-        @JvmField
-        val SWITCH_ON: Int = if (sDarkMode) D_SWITCH_ON else L_SWITCH_ON
-        @JvmField
-        val SWITCH_OFF: Int = if (sDarkMode) D_SWITCH_OFF else L_SWITCH_OFF
-        @JvmField
-        val CANDY_PINK: Int = if (sDarkMode) D_CANDY_PINK else L_CANDY_PINK
-        @JvmField
-        val CANDY_YELLOW: Int = if (sDarkMode) D_CANDY_YELLOW else L_CANDY_YELLOW
-        @JvmField
-        val ARROW: Int = if (sDarkMode) D_ARROW else L_ARROW
-        @JvmField
-        val DIVIDER: Int = if (sDarkMode) D_DIVIDER else L_DIVIDER
-        @JvmField
-        val WHITE_TEXT: Int = if (sDarkMode) D_WHITE_TEXT else L_WHITE_TEXT
-        @JvmField
-        val candyPink: Int = if (sDarkMode) D_CANDY_PINK else L_CANDY_PINK
-        @JvmField
-        val candyYellow: Int = if (sDarkMode) D_CANDY_YELLOW else L_CANDY_YELLOW
+        // 动态取色 (由 @JvmStatic getter 提供，运行时实时跟随深浅色，见下方 textTitle/textBody/...)
 
         const val SWITCH_WIDTH_DP = 52   // M3 switch: 52×32
         const val SWITCH_HEIGHT_DP = 32
@@ -1240,6 +1210,52 @@ class AppColors private constructor() {
             return if (sDarkMode) D_WHITE_TEXT else L_WHITE_TEXT
         }
 
+        // ===== 动态颜色 getter（替代早期 @JvmField 静态常量，运行时实时跟随深浅色） =====
+        @JvmStatic
+        fun bgGradientStart(): Int {
+            return if (sDarkMode) D_BG_GRADIENT_START else L_BG_GRADIENT_START
+        }
+
+        @JvmStatic
+        fun bgGradientEnd(): Int {
+            return if (sDarkMode) D_BG_GRADIENT_END else L_BG_GRADIENT_END
+        }
+
+        @JvmStatic
+        fun cardBg(): Int {
+            return if (sDarkMode) D_CARD_BG else L_CARD_BG
+        }
+
+        @JvmStatic
+        fun textTitle(): Int {
+            return if (sDarkMode) D_TEXT_TITLE else L_TEXT_TITLE
+        }
+
+        @JvmStatic
+        fun textBody(): Int {
+            return if (sDarkMode) D_TEXT_BODY else L_TEXT_BODY
+        }
+
+        @JvmStatic
+        fun textNote(): Int {
+            return if (sDarkMode) D_TEXT_NOTE else L_TEXT_NOTE
+        }
+
+        @JvmStatic
+        fun switchOn(): Int {
+            return if (sDarkMode) D_SWITCH_ON else L_SWITCH_ON
+        }
+
+        @JvmStatic
+        fun switchOff(): Int {
+            return if (sDarkMode) D_SWITCH_OFF else L_SWITCH_OFF
+        }
+
+        @JvmStatic
+        fun whiteText(): Int {
+            return 0xFFFFFFFF.toInt()
+        }
+
         @JvmStatic
         fun bubbleSelfBg(): Int {
             return if (sDarkMode) D_PRIMARY_CONTAINER else L_PRIMARY_CONTAINER
@@ -1367,6 +1383,75 @@ class AppColors private constructor() {
                 p,   // layers 模板
                 s    // sliders 独立配置
             )
+        }
+
+        // ==================== 玻璃风格 · 材质角色（v3.0.457 实色玻璃 · 明暗双模） ====================
+        // 只增不改：45+ 老页面继续走原有实色角色；玻璃角色为实色（禁渐变），
+        // 全部动态 getter，跟随调色板与明暗模式运行期切换。
+
+        /** 玻璃面板填充-页面浮层（浅色 88% 白 / 暗色 88% 近黑） */
+        @JvmStatic
+        fun glassFill(): Int =
+            if (isDarkMode()) 0xE0121214.toInt() else 0xE0FFFFFF.toInt()
+
+        /** 玻璃实心填充-卡片/对话框/输入框（浅色 92% 白 / 暗色 92% 近黑，保证内容可读） */
+        @JvmStatic
+        fun glassFillSolid(): Int =
+            if (isDarkMode()) 0xEB1A1A1E.toInt() else 0xEBFFFFFF.toInt()
+
+        /** 玻璃行填充（浅色 72% 白 / 暗色 8% 白提亮，嵌在卡片内有层次） */
+        @JvmStatic
+        fun glassRowFill(): Int =
+            if (isDarkMode()) 0x14FFFFFF else 0xB8FFFFFF.toInt()
+
+        /** 玻璃面板描边发丝线（浅色 25% 白 / 暗色 14% 白） */
+        @JvmStatic
+        fun glassStroke(): Int =
+            if (isDarkMode()) 0x24FFFFFF else 0x40FFFFFF.toInt()
+
+        /** 玻璃顶部受光高亮线（浅色 60% 白 / 暗色 20% 白） */
+        @JvmStatic
+        fun glassHighlight(): Int =
+            if (isDarkMode()) 0x33FFFFFF.toInt() else 0x99FFFFFF.toInt()
+
+        /** 磨砂填充-对话框（比面板更实：浅色 95% 白 / 暗色 95% 近黑） */
+        @JvmStatic
+        fun glassDialogFill(): Int =
+            if (isDarkMode()) 0xF21E1E22.toInt() else 0xF2FFFFFF.toInt()
+
+        /** 滑块/进度条轨道（浅色 20% 白 / 暗色 10% 白提亮） */
+        @JvmStatic
+        fun glassTrack(): Int =
+            if (isDarkMode()) 0x1AFFFFFF else 0x33FFFFFF.toInt()
+
+        /** 玻璃面板硬分割线（浅色 12% 黑 / 暗色 12% 白） */
+        @JvmStatic
+        fun glassDivider(): Int =
+            if (isDarkMode()) 0x1FFFFFFF else 0x1F000000
+
+        /** 窗口底帘（实色·浅色深绿衬托白玻璃 / 暗色近黑） */
+        @JvmStatic
+        fun backdropColor(): Int =
+            if (isDarkMode()) 0xFF0B100D.toInt() else 0xFF123F33.toInt()
+
+        /** ARGB 线性混色（0=全 c1，1=全 c2），与 CandyUi#blend 同语义。 */
+        private fun blendArgb(c1: Int, c2: Int, tIn: Float): Int {
+            var t = tIn
+            if (t < 0f) t = 0f
+            if (t > 1f) t = 1f
+            val a1 = (c1 ushr 24) and 0xFF
+            val r1 = (c1 shr 16) and 0xFF
+            val g1 = (c1 shr 8) and 0xFF
+            val b1 = c1 and 0xFF
+            val a2 = (c2 ushr 24) and 0xFF
+            val r2 = (c2 shr 16) and 0xFF
+            val g2 = (c2 shr 8) and 0xFF
+            val b2 = c2 and 0xFF
+            val a = (a1 + (a2 - a1) * t).toInt()
+            val r = (r1 + (r2 - r1) * t).toInt()
+            val g = (g1 + (g2 - g1) * t).toInt()
+            val b = (b1 + (b2 - b1) * t).toInt()
+            return (a shl 24) or (r shl 16) or (g shl 8) or b
         }
     }
 }

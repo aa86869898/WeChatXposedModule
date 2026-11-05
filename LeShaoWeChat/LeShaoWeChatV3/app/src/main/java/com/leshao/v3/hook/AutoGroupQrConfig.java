@@ -16,6 +16,7 @@ import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.ui.AppColors;
 import com.leshao.v3.ui.CandyUi;
+import com.leshao.v3.ui.SubPageActivity;
 
 /**
  * 「自动扫码进群」配置读写与配置弹窗。
@@ -179,7 +180,7 @@ public final class AutoGroupQrConfig {
         et.setPadding(dp(act, 6), dp(act, 4), dp(act, 6), dp(act, 4));
         android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
         g.setColor(AppColors.inputBg());
-        g.setCornerRadius(dp(act, 8));
+        g.setCornerRadius(dp(act, AppColors.SHAPE_INPUT_DP));
         g.setStroke(dp(act, 1), AppColors.divider());
         et.setBackground(g);
         return et;
@@ -294,7 +295,7 @@ public final class AutoGroupQrConfig {
         etWl.setPadding(dp(act, 8), dp(act, 5), dp(act, 8), dp(act, 5));
         android.graphics.drawable.GradientDrawable wg = new android.graphics.drawable.GradientDrawable();
         wg.setColor(AppColors.inputBg());
-        wg.setCornerRadius(dp(act, 10));
+        wg.setCornerRadius(dp(act, AppColors.SHAPE_INPUT_DP));
         wg.setStroke(dp(act, 1), AppColors.divider());
         etWl.setBackground(wg);
         root.addView(etWl, new LinearLayout.LayoutParams(-1, -2));
@@ -305,6 +306,26 @@ public final class AutoGroupQrConfig {
         note.setTextColor(AppColors.text2());
         note.setPadding(0, dp(act, 10), 0, dp(act, 8));
         root.addView(note);
+
+        // v3.0.516: 查看进群记录入口（长按悬浮按钮 → 自动进群设置）
+        final android.app.AlertDialog[] dialogRef = new android.app.AlertDialog[1];
+        TextView linkRecord = new TextView(act);
+        linkRecord.setText("查看进群记录 ›");
+        linkRecord.setTextSize(12);
+        linkRecord.setTextColor(AppColors.accent());
+        linkRecord.setPadding(0, dp(act, 2), 0, dp(act, 10));
+        linkRecord.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                android.app.AlertDialog d = dialogRef[0];
+                if (d != null) d.dismiss();
+                try {
+                    SubPageActivity.open(act, "进群记录", 41);
+                } catch (Throwable t) {
+                    LogWriter.log(AutoGroupQrHook.TAG, "open record page err: " + t.getMessage());
+                }
+            }
+        });
+        root.addView(linkRecord);
 
         LinearLayout btns = new LinearLayout(act);
         btns.setOrientation(LinearLayout.HORIZONTAL);
@@ -327,6 +348,7 @@ public final class AutoGroupQrConfig {
         final android.app.AlertDialog dialog = new android.app.AlertDialog.Builder(act)
                 .setView(root)
                 .create();
+        dialogRef[0] = dialog;
         dialog.setCanceledOnTouchOutside(true);
 
         cancel.setOnClickListener(new View.OnClickListener() {

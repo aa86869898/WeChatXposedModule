@@ -12,6 +12,7 @@ import com.leshao.v3.hook.FakeLocationHook
 import com.leshao.v3.hook.HookConfig
 import com.leshao.v3.hook.MomentsAutoLikeHook
 import com.leshao.v3.hook.MomentsFakeLikeHook
+import com.leshao.v3.hook.ScreenshotFloatBlockerHook
 import com.leshao.v3.hook.WeChatIdInjectHook
 import com.leshao.v3.ui.widgets.M3Page
 
@@ -131,6 +132,24 @@ class MoreFeaturesPageView private constructor() {
                                 + "（重启微信后完全生效）", Toast.LENGTH_SHORT).show()
                     }, null))
             root.addView(cardFaceScan)
+            root.addView(PageKit.divider(ctx))
+
+            // ---- v3.0.515: 屏蔽截图转发浮标 ----
+            root.addView(M3Page.section(ctx, "截图",
+                    "截图后不弹出转发浮标 / 底部遮罩"))
+            root.addView(M3Page.spacer(ctx, 2f))
+
+            val shotOn = ScreenshotFloatBlockerHook.isEnabled()
+            val cardShot = PageKit.makeCard(ctx, d)
+            cardShot.addView(PageKit.switchRow(ctx, d, "屏蔽截图转发浮标",
+                    "截图后不再出现右下角「转发截图」浮标和底部遮罩（重启微信后完全生效）",
+                    shotOn,
+                    { _, on ->
+                        ScreenshotFloatBlockerHook.setEnabled(on)
+                        Toast.makeText(ctx, "屏蔽截图浮标已" + (if (on) "开启" else "关闭")
+                                + "（重启微信后完全生效）", Toast.LENGTH_SHORT).show()
+                    }, null))
+            root.addView(cardShot)
             root.addView(PageKit.divider(ctx))
 
             // v3.0.132: 朋友圈自动点赞配置已迁移至朋友圈右上角「⋮ 自动点赞」菜单，主界面不再保留入口

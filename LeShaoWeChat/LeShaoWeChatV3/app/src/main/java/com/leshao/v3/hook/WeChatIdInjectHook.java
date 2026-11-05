@@ -1,7 +1,10 @@
 package com.leshao.v3.hook;
 
+import android.app.Activity;
+
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.os.Looper;
 
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
@@ -92,6 +95,9 @@ public final class WeChatIdInjectHook {
 
     public static void hook(ClassLoader cl) {
         sCl = cl;
+        // v3.0.472: 启动时打印开关状态，便于诊断（模块设置 -> 更多功能 -> 查看微信wxid）
+        LogWriter.log(TAG, "wxid inject enabled=" + isEnabled()
+                + " (开关在: 模块设置->更多功能->查看微信wxid)");
         load();
         installDataHooks(cl);
         installInjectHook(cl);
@@ -124,7 +130,7 @@ public final class WeChatIdInjectHook {
                 int t = ln.indexOf('\t');
                 if (t <= 0) continue;
                 String u = ln.substring(0, t), a = ln.substring(t + 1);
-                if (!u.isEmpty() && !a.isEmpty()) CACHE.put(u, a);
+                if (!u.isEmpty() && isValidAlias(a)) CACHE.put(u, a);   // v3.0.513: 过滤地区污染
             }
         } catch (Throwable ignored) {}
         try (java.io.BufferedReader r = new java.io.BufferedReader(new java.io.FileReader(FILE_KNOWN))) {
@@ -139,6 +145,7 @@ public final class WeChatIdInjectHook {
 
     static void put(final String user, final String alias) {
         if (user == null || alias == null || user.isEmpty() || alias.isEmpty()) return;
+        if (!isValidAlias(alias)) return;          // v3.0.513: 拒绝地区/昵称等非微信号值
         if (alias.equals(CACHE.get(user))) return;
         CACHE.put(user, alias);
         IO.execute(() -> append(FILE_ALIAS, user + "\t" + alias));
@@ -175,6 +182,21 @@ public final class WeChatIdInjectHook {
         String a = str(contact, "field_alias");
         if (u == null) u = "";
         if (a == null) a = "";
+        // v3.0.469: 字段名可能漂移，用 im.f2 接口方法兜底（O0=alias, r0=username，按需探测）
+        if (u.isEmpty() || a.isEmpty()) {
+            try {
+                for (java.lang.reflect.Method m : contact.getClass().getMethods()) {
+                    if (m.getParameterCount() != 0 || m.getReturnType() != String.class) continue;
+                    String mn = m.getName();
+                    Object v = null;
+                    try { v = m.invoke(contact); } catch (Throwable ignored) {}
+                    if (v == null) continue;
+                    String sv = String.valueOf(v);
+                    if (u.isEmpty() && ("Z0".equals(mn) || "r0".equals(mn) || "getUsername".equals(mn))) u = sv;
+                    if (a.isEmpty() && ("O0".equals(mn) || "getAlias".equals(mn))) a = sv;
+                }
+            } catch (Throwable ignored) {}
+        }
         return new String[]{u, a};
     }
 
@@ -185,6 +207,18 @@ public final class WeChatIdInjectHook {
         } catch (Throwable t) {
             return null;
         }
+    }
+
+    /** 限频诊断日志：每个 key 最多打印 3 次，避免刷屏。 */
+    private static final java.util.Set<String> DIAG_KEYS = new java.util.concurrent.ConcurrentHashMap<String, Boolean>().keySet(true);
+    private static void diag(String msg) {
+        try {
+            String key = msg;
+            if (DIAG_KEYS.size() >= 50) return;
+            if (DIAG_KEYS.add(key)) {
+                LogWriter.log(TAG, msg);
+            }
+        } catch (Throwable ignored) {}
     }
 
     private static void harvest(Object root) {
@@ -268,6 +302,46 @@ public final class WeChatIdInjectHook {
             }
         } catch (Throwable t) {
             LogWriter.log(TAG, "ContactInfoUI hook err: " + t);
+        }
+        // v3.0.467: 兜底——Tinker/类加载时序导致直接 hook 失败时，全局 Activity.onResume
+        // 检测到 ContactInfoUI 即设置 sCurProfileUI（资料页打开必然触发）。
+        try {
+            XposedBridge.hookAllMethods(Activity.class, "onResume", new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam p) {
+                    try {
+                        Object thiz = p.thisObject;
+                        if (thiz == null) return;
+                        String cn = thiz.getClass().getName();
+                        if (!"com.tencent.mm.plugin.profile.ui.ContactInfoUI".equals(cn)
+                                && !cn.endsWith(".ContactInfoUI")) return;
+                        sCurProfileUI = new WeakReference<>(thiz);
+                        Object contact = XposedHelpers.getObjectField(thiz, "n");
+                        String[] id = contactIds(contact);
+                        if (id != null && !id[1].isEmpty()) put(id[0], id[1]);
+                        LogWriter.log(TAG, "ContactInfoUI captured via Activity.onResume: " + cn);
+                        // v3.0.470: 页面首次渲染在 onResume 之前，g0.notifyDataSetChanged 已错过
+                        // sCurProfileUI。这里延迟触发一次 ListView adapter 刷新，让注入执行。
+                        // v3.0.513: 改为主线程 postDelayed（后台线程触碰 ListView 会导致白屏/布局错乱）。
+                        final Object act = thiz;
+                        android.os.Handler h = new android.os.Handler(Looper.getMainLooper());
+                        for (final long delay : new long[]{300L, 800L, 1500L, 3000L, 5000L}) {
+                            h.postDelayed(() -> {
+                                try {
+                                    Object lv = XposedHelpers.callMethod(act, "getListView");
+                                    if (lv == null) return;
+                                    Object adapter = XposedHelpers.callMethod(lv, "getAdapter");
+                                    if (adapter == null) return;
+                                    XposedHelpers.callMethod(adapter, "notifyDataSetChanged");
+                                    LogWriter.log(TAG, "主动触发 adapter 刷新 (delay=" + delay + ")");
+                                } catch (Throwable ignored) {}
+                            }, delay);
+                        }
+                    } catch (Throwable ignored) {}
+                }
+            });
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "Activity.onResume hook err: " + t);
         }
 
         // onGYNetEnd 签名：（int,int,int,String,y0,byte[]）
@@ -426,6 +500,26 @@ public final class WeChatIdInjectHook {
     static final String ANCHOR_HEADER = "contact_profile_header_normal";
     static final String KVC = "com.tencent.mm.ui.base.preference.KeyValuePreference";
     static final ThreadLocal<Boolean> BUSY = ThreadLocal.withInitial(() -> Boolean.FALSE);
+    /** v3.0.514: 突发去重兜底（主幂等已改为 g0.n(INJECT_KEY) 可见性检查）。
+     *  页面数据异步加载会重建适配器列表（g0.g() 清空 e/f/h），永久去重会导致注入行被
+     *  擦掉后无法重新注入 → 资料页看不到 wxid 行。n() 正常时不写这里。 */
+    private static final java.util.concurrent.ConcurrentHashMap<Object, Long> LAST_INJECT_TIME =
+            new java.util.concurrent.ConcurrentHashMap<>();
+    private static final long BURST_GUARD_MS = 1000L;
+
+    /** v3.0.513: 微信号/ID 只能是 ASCII（字母/数字/_-）。含中文（地区/昵称）一律拒绝，
+     *  防止把「广东」「冰岛」等地区字段当微信号写入缓存/展示。 */
+    private static boolean isValidAlias(String s) {
+        if (s == null) return false;
+        s = s.trim();
+        if (s.length() < 2 || s.length() > 64) return false;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c > 0x7F) return false;          // 非 ASCII：中文/emoji/特殊字符
+            if (!(Character.isLetterOrDigit(c) || c == '_' || c == '-' || c == '.')) return false;
+        }
+        return true;
+    }
 
     private static void installInjectHook(ClassLoader cl) {
         try {
@@ -441,7 +535,10 @@ public final class WeChatIdInjectHook {
                     @Override
                     protected void afterHookedMethod(MethodHookParam p) {
                         try {
-                            if (!isEnabled()) return;
+                            if (!isEnabled()) {
+                                diag("g0 notify: isEnabled=false（开关未开？）");
+                                return;
+                            }
                             inject(p.thisObject);
                         } catch (Throwable ignored) {}
                     }
@@ -462,20 +559,56 @@ public final class WeChatIdInjectHook {
             List<Object> list = (List<Object>) XposedHelpers.callMethod(screen, "i");
             if (list == null || list.isEmpty()) return;
 
+            // v3.0.514: 权威幂等——行键已在可见列表 h 中（g0.n(key)=h.indexOf(key)）。
+            // 页面重建清空适配器后 n() 返回 -1，允许重新注入；不再永久屏蔽同一屏幕。
+            try {
+                int vis = (Integer) XposedHelpers.callMethod(screen, "n", INJECT_KEY);
+                if (vis >= 0) return;
+            } catch (Throwable ignored) {}
             for (Object pf : list) {
-                if (INJECT_KEY.equals(XposedHelpers.getObjectField(pf, "q"))) return; // 幂等
+                if (INJECT_KEY.equals(XposedHelpers.getObjectField(pf, "q"))) return; // 兜底幂等
+            }
+            // 兜底突发去重：仅当 n() 不可用时，1s 内同一屏幕不重复注入（防渲染突发双行）
+            long now = System.currentTimeMillis();
+            Long last = LAST_INJECT_TIME.get(screen);
+            if (last != null && now - last < BURST_GUARD_MS) return;
+            LAST_INJECT_TIME.put(screen, now);
+            if (LAST_INJECT_TIME.size() > 200) {   // 简单清理，防地图无限增长
+                long cutoff = now - 10_000L;
+                LAST_INJECT_TIME.entrySet().removeIf(e -> e.getValue() < cutoff);
             }
 
             Object activity = sCurProfileUI.get();
-            if (activity == null) return;
+            if (activity == null) {
+                diag("inject: sCurProfileUI null (ContactInfoUI 未捕获)");
+                return;
+            }
+            // v3.0.514: 防止旧页面引用串数据——页面已销毁时跳过本次注入，
+            // 后续 300/800/1500/3000/5000ms 主线程刷新会带上新页面重试。
+            try {
+                if (activity instanceof android.app.Activity) {
+                    android.app.Activity a = (android.app.Activity) activity;
+                    if (a.isFinishing() || a.isDestroyed()) {
+                        diag("inject: sCurProfileUI 页面已销毁，跳过本次");
+                        return;
+                    }
+                }
+            } catch (Throwable ignored) {}
             String[] id = contactIds(XposedHelpers.getObjectField(activity, "n"));
-            if (id == null) return;
+            if (id == null) {
+                diag("inject: contactIds null");
+                return;
+            }
             String wxid = id[0], alias = id[1];
-            if (wxid.isEmpty() && alias.isEmpty()) return;
+            if (wxid.isEmpty() && alias.isEmpty()) {
+                diag("inject: wxid/alias 均为空");
+                return;
+            }
 
             String mem = get(wxid);
             if (mem == null || mem.isEmpty()) mem = alias;
-            boolean hasAlias = mem != null && !mem.isEmpty();
+            // v3.0.513: 缓存/字段可能被地区污染（广东/冰岛），非 ASCII 一律当无微信号处理
+            boolean hasAlias = mem != null && isValidAlias(mem);
             String value = hasAlias ? mem : wxid;
             String title = hasAlias ? "微信号" : "ID";
 
@@ -508,14 +641,18 @@ public final class WeChatIdInjectHook {
             if (anchorIdx < 0) {
                 anchorIdx = (Integer) XposedHelpers.callMethod(screen, "m", ANCHOR_HEADER);
             }
+            // v3.0.513: 锚点位于列表头/前部时改为在其后插入，绝不插到 0 位（破坏头部布局 → 白屏）
+            if (before && anchorIdx <= 0) before = false;
             int at = (anchorIdx < 0) ? 0 : (before ? anchorIdx : anchorIdx + 1);
+            if (at <= 0 && list != null && !list.isEmpty()) at = 1;
 
             // 行对象（zip 现版）：优先克隆屏幕上真实 KeyValuePreference，否则构造
             Object row = buildRow(list, activity, cl);
             if (row == null) return;
             setLine(row, title, value);
 
-            XposedHelpers.callMethod(screen, "f", row, at);
+            // v3.0.473: 新版 g0(MMPreferenceAdapter) 插入行方法为 d(Preference,int)，旧 f 已删除
+            XposedHelpers.callMethod(screen, "d", row, at);
             XposedHelpers.callMethod(screen, "notifyDataSetChanged");
             LogWriter.log(TAG, "inject at=" + at + " class=" + row.getClass().getName()
                     + " title=" + title + " value=" + value);
@@ -613,6 +750,8 @@ public final class WeChatIdInjectHook {
 
     private static Class<?> loadClass(ClassLoader cl, String name) {
         if (name == null || cl == null) return null;
+        Class<?> c = WxResolver.resolve(cl, name);
+        if (c != null) return c;
         for (ClassLoader l : HookUtil.candidateLoaders(cl)) {
             try {
                 return l.loadClass(name);

@@ -113,8 +113,12 @@ public final class MessageMenuHook {
 
     /** v1127: 菜单构建 after 外发（供语音转发复用同一锚点，免二次 DexKit 扫描 + 保证真实 CL） */
     public interface BuildListener { void onMenuBuilt(Object menu, Object anchorView); }
-    private static volatile BuildListener sBuildListener;
-    public static void setBuildListener(BuildListener l) { sBuildListener = l; }
+    // v3.0.516: 单槽改为多监听器，供 语音转发/语音详情 等多个功能同时复用菜单锚点
+    private static final java.util.concurrent.CopyOnWriteArrayList<BuildListener> sBuildListeners =
+            new java.util.concurrent.CopyOnWriteArrayList<>();
+    public static void setBuildListener(BuildListener l) {
+        if (l != null && !sBuildListeners.contains(l)) sBuildListeners.add(l);
+    }
 
     private MessageMenuHook() {}
 
@@ -168,10 +172,15 @@ public final class MessageMenuHook {
             if (isRealLoader(cm)) return cm;
         } catch (Throwable ignored) {}
         // 分身等非 Tinker 环境取不到 DelegateLastClassLoader, 不能一直返回 null,
-        // 否则 DexKit 无 CL 可扫 → "anchor not found"。第 2 次起退回普通 CL。
-        if (attempt >= 2) {
+        // 否则 DexKit 无 CL 可扫 / Class.forName(...,null) 用 bootstrap CL → "anchor not found"。
+        // v3.0.577: 第 1 次起就退回普通 CL(此前是第 2 次, 首轮 loader=null 导致全部 ClassNotFound)。
+        if (attempt >= 1) {
             try {
                 ClassLoader cm = com.leshao.v3.ContextManager.getClassLoader();
+                if (cm != null) return cm;
+            } catch (Throwable ignored) {}
+            try {
+                ClassLoader cm = com.leshao.v3.ContextManager.getTinkerClassLoader();
                 if (cm != null) return cm;
             } catch (Throwable ignored) {}
             return base;
@@ -202,18 +211,42 @@ public final class MessageMenuHook {
                 }
             }
         } catch (Throwable ignored) {}
+        // v3.0.554: 8.0.79 中 viewitems.o0 已改名，用 DexKit 按 MMMenu 字符串动态搜索候选类
+        // （长按菜单构建器代码必然引用 MMMenu 类型），再经 findBuilder 验证 a 方法签名。
+        try {
+            List<String> mmCands = DexKitHelper.findClassesByString(cl, "MMMenu");
+            if (mmCands != null) {
+                for (String cn : mmCands) {
+                    if (cn == null) continue;
+                    if (cn.contains("viewitems") || cn.contains("chatting")) {
+                        if (!classCands.contains(cn)) classCands.add(cn);
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
         LogWriter.log(TAG, "anchor candidates=" + classCands.size() + " classes=" + classCands
                 + " loader=" + (cl == null ? "null" : cl.getClass().getName()));
         if (classCands.isEmpty()) { sFailReason = "anchor not found"; return false; }
 
         boolean installed = false;
         for (final String className : classCands) {
-            Class<?> builder;
-            try {
-                builder = Class.forName(className, false, cl);
-            } catch (Throwable e) {
-                LogWriter.log(TAG, "load class fail " + className + " -> " + e);
-                continue;
+            Class<?> builder = null;
+            // v3.0.469: 用候选 loader 逐个尝试（Class.forName 在单个 CL 上可能失败）
+            if (cl != null) {
+                for (ClassLoader l : HookUtil.candidateLoaders(cl)) {
+                    try {
+                        builder = Class.forName(className, false, l);
+                        break;
+                    } catch (Throwable ignored) {}
+                }
+            }
+            if (builder == null) {
+                try {
+                    builder = Class.forName(className, false, cl);
+                } catch (Throwable e) {
+                    LogWriter.log(TAG, "load class fail " + className + " -> " + e);
+                    continue;
+                }
             }
             final Method target = findBuilder(builder, "a");
             if (target == null) {
@@ -232,8 +265,7 @@ public final class MessageMenuHook {
                 @Override protected void afterHookedMethod(MethodHookParam p) {
                     try { onMenuBuilt(p.args[0], listField); }
                     catch (Throwable e) { LogWriter.log(TAG, "after err: " + e); }
-                    BuildListener l = sBuildListener;
-                    if (l != null) {
+                    for (BuildListener l : sBuildListeners) {
                         try { l.onMenuBuilt(p.args[0], p.args.length > 1 ? p.args[1] : null); }
                         catch (Throwable e) { LogWriter.log(TAG, "buildListener err: " + e); }
                     }
@@ -331,7 +363,7 @@ public final class MessageMenuHook {
     // ================================================================
     private static void hookClickFunnel(ClassLoader cl) {
         try {
-            Class<?> r0 = Class.forName("com.tencent.mm.ui.chatting.viewitems.r0", false, cl);
+            Class<?> r0 = WxResolver.resolve(cl, "com.tencent.mm.ui.chatting.viewitems.r0");
             Method funnel = null;
             for (Method m : r0.getDeclaredMethods()) {
                 if (!m.getName().equals("onMMMenuItemSelected")) continue;
@@ -369,31 +401,33 @@ public final class MessageMenuHook {
     // ================================================================
     private static void hookDisableAll(ClassLoader cl) {
         try {
-            Class<?> m0 = Class.forName("com.tencent.mm.ui.chatting.viewitems.m0", false, cl);
-            Method g = null;
-            for (Method m : m0.getDeclaredMethods()) {
-                if (!m.getName().equals("g")) continue;
-                if (m.getParameterCount() == 1 && View.class.isAssignableFrom(m.getParameterTypes()[0])) {
-                    g = m;
-                    break;
-                }
+            Class<?> m0 = WxResolver.resolve(cl, "com.tencent.mm.ui.chatting.viewitems.m0");
+            // v3.0.557: 8.0.79 中 m0.g 已改名/迁移，改为扫描「1 参 View 返回 void」的方法作为熄菜入口。
+            // 仅在「所有长按菜单按钮都关闭」时 setResult(null)，误伤影响极小。
+            int hookedC = 0;
+            for (final Method m : m0.getDeclaredMethods()) {
+                if (m.getParameterCount() != 1) continue;
+                if (m.getReturnType() != void.class) continue;
+                if (!View.class.isAssignableFrom(m.getParameterTypes()[0])) continue;
+                try {
+                    m.setAccessible(true);
+                    XposedBridge.hookMethod(m, new XC_MethodHook() {
+                        @Override protected void beforeHookedMethod(MethodHookParam p) {
+                            try {
+                                if (WmPrefs.isMsgMenuEnabled() && WmPrefs.isMsgMenuAllOff()) {
+                                    p.setResult(null);
+                                }
+                            } catch (Throwable ignored) {}
+                        }
+                    });
+                    hookedC++;
+                } catch (Throwable ignored) {}
             }
-            if (g == null) {
-                LogWriter.log(TAG, "C-layer: no g(View) in m0");
+            if (hookedC == 0) {
+                LogWriter.log(TAG, "C-layer: no 1-param View method in m0");
                 return;
             }
-            g.setAccessible(true);
-            final Method finalG = g;
-            XposedBridge.hookMethod(g, new XC_MethodHook() {
-                @Override protected void beforeHookedMethod(MethodHookParam p) {
-                    try {
-                        if (WmPrefs.isMsgMenuEnabled() && WmPrefs.isMsgMenuAllOff()) {
-                            p.setResult(null);
-                        }
-                    } catch (Throwable ignored) {}
-                }
-            });
-            LogWriter.log(TAG, "C-layer: hooked m0.g(View)");
+            LogWriter.log(TAG, "C-layer: hooked " + m0.getName() + " 1-param View methods x" + hookedC);
         } catch (Throwable e) {
             LogWriter.log(TAG, "C-layer: skip (" + e + ")");
         }

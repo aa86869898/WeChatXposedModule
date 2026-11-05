@@ -95,7 +95,7 @@ class FlyingProgressBar(context: Context) : View(context) {
         val density = context.resources.displayMetrics.density
         mBarHeightPx = Math.round(12 * density)
 
-        mTrackPaint.color = AppColors.surfaceContainerHighest()
+        mTrackPaint.color = AppColors.glassTrack()
         mTrackPaint.style = Paint.Style.FILL
 
         mFillPaint.color = AppColors.primary()

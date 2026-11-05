@@ -65,7 +65,7 @@ public class WeChatUpdateBlocker {
 
     public static void updateConfig(SharedPreferences prefs) {
         try {
-            sEnabled = prefs != null && prefs.getBoolean(PREF_ENABLED, true);
+            sEnabled = prefs != null && prefs.getBoolean(PREF_ENABLED, false);
         } catch (Throwable t) {
             sEnabled = true;
         }
@@ -228,9 +228,31 @@ public class WeChatUpdateBlocker {
                 return;
             }
             Class<?> c = cl.loadClass(clsName);
+            if (paramCount < 0) {
+                // 无参数个数约束时：只 hook 返回「引用类型」的方法（避免 setResult(null) 对原始类型拆箱 NPE），
+                // 既保留阻断能力（V4/T2~T6 依赖 -1 覆盖混淆漂移签名），又不整类误伤 int/boolean/long 方法。
+                int hooked = 0;
+                for (Method m : c.getDeclaredMethods()) {
+                    if (m.getReturnType().isPrimitive()) continue;
+                    final Object res = blockResult;
+                    final String t = tag;
+                    XposedBridge.hookMethod(m, new XC_MethodHook() {
+                        @Override protected void beforeHookedMethod(MethodHookParam param) {
+                            try {
+                                LogWriter.log(TAG, "[" + t + "] block " + m.getName());
+                            } catch (Throwable ignored) {}
+                            param.setResult(res);
+                        }
+                    });
+                    hooked++;
+                }
+                LogWriter.log(TAG, "hooked " + clsName + " ref-methods(" + hooked + ") as " + tag
+                        + " (paramCount<0, 原始类型已跳过)");
+                return;
+            }
             int hooked = 0;
             for (Method m : c.getDeclaredMethods()) {
-                if (paramCount >= 0 && m.getParameterCount() != paramCount) continue;
+                if (m.getParameterCount() != paramCount) continue;
                 final Object res = blockResult;
                 final String t = tag;
                 XposedBridge.hookMethod(m, new XC_MethodHook() {
@@ -287,14 +309,14 @@ public class WeChatUpdateBlocker {
         } else {
             hookByGlobalMethodStrings(cl, "MicroMsg.NetSceneGetUpdateInfo", "onGYNetEnd", null, "V2g");
         }
-        // V3: updateRequired = com.tencent.mm.ui.rc.b(Activity,int,int,Intent)Z 静态 4 参(文档 §3)。
+        // V3: updateRequired = com.tencent.mm.ui.uc.b(Activity,int,int,Intent)Z 静态 4 参(文档 §3)。
         // 旧实现经 "MicroMsg.MMErrorProcessor" 锚点误命中 com.tencent.mm.ui.conversation.j6,
         // 先按权威类名 + 精确签名(方法名 b / 4 参 / boolean 返回)安装, 失败再走字符串兜底。
         boolean v3 = hookUpdateRequired(cl);
         if (!v3) {
-            hookByClassStrings(cl, "MicroMsg.MMErrorProcessor", "com.tencent.mm.ui.rc",
+            hookByClassStrings(cl, "MicroMsg.MMErrorProcessor", "com.tencent.mm.ui.uc",
                     "b", 4, Boolean.FALSE, "V3f");
-            hookByClassStrings(cl, "MicroMsg.MMErrorProcessor", "com.tencent.mm.ui.rc",
+            hookByClassStrings(cl, "MicroMsg.MMErrorProcessor", "com.tencent.mm.ui.uc",
                     "b", -1, Boolean.FALSE, "V3");
         }
         // V4: UpdaterManager download/handleCommand (类名缓存优先, 方法字符串搜索仍走 hookByStrings)
@@ -308,13 +330,13 @@ public class WeChatUpdateBlocker {
     }
 
     /**
-     * 按文档 §3 精确匹配 updateRequired: 类 com.tencent.mm.ui.rc,
+     * 按文档 §3 精确匹配 updateRequired: 类 com.tencent.mm.ui.uc,
      * updateRequired = public static b(android.app.Activity, int, int, android.content.Intent) → boolean
      * (文档 §3 明确 4 参: Activity,int,int,Intent)。setResult(FALSE) 阻断后续 Updater.f 进入更新流程。
      */
     private static boolean hookUpdateRequired(ClassLoader cl) {
         try {
-            Class<?> c = cl.loadClass("com.tencent.mm.ui.rc");
+            Class<?> c = WxResolver.resolve(cl, "com.tencent.mm.ui.uc");
             int hooked = 0;
             for (Method m : c.getDeclaredMethods()) {
                 if (!"b".equals(m.getName())) continue;
@@ -332,7 +354,7 @@ public class WeChatUpdateBlocker {
                     }
                 });
                 hooked++;
-                LogWriter.log(TAG, "hooked com.tencent.mm.ui.rc.b(" + m.getParameterCount()
+                LogWriter.log(TAG, "hooked com.tencent.mm.ui.uc.b(" + m.getParameterCount()
                         + ") as V3 exact=" + m.toGenericString());
             }
             if (hooked == 0) LogWriter.log(TAG, "[WARN] V3: rc.b(4参,boolean) 未命中");
@@ -346,43 +368,22 @@ public class WeChatUpdateBlocker {
     // ==================== T. Tinker 热补丁阻断 ====================
 
     private static void blockTinkerHotPatch(ClassLoader cl) {
-        // T1: SubCoreHotpatch.onAccountInitialized
-        // 3180 类名漂移为 ge3.a0, 方法名可能同漂移: 先按类锚点定位,
-        // 再按「方法名=onAccountInitialized 或 单参+参数类型含 Account/Profile」特征识别。
-        String t1cls = firstClassByStrings(cl, "MicroMsg.Tinker.SubCoreHotpatch");
-        if (t1cls == null) t1cls = "ge3.a0";
-        boolean t1 = hookAccountInit(cl, t1cls);
-        if (!t1) {
-            hookByGlobalMethodStrings(cl, "MicroMsg.Tinker.SubCoreHotpatch",
-                    "onAccountInitialized", null, "T1g");
-        }
-        // T2: TinkerBootsActivateListener.callback
-        hookByClassStrings(cl, "MicroMsg.Tinker.TinkerBootsActivateListener",
-                "com.tencent.mm.plugin.hp.model.TinkerBootsActivateListener",
+        // ============ 8.0.79 适配（v3.0.461） ============
+        // 旧 Tinker 组件（SubCoreHotpatch/CTinkerInstaller/TinkerClient）在 8.0.79 已移除，
+        // 保留仍存在的 TinkerBootsActivateListener / MergeHdiffApkService / TinkerPatchResultService，
+        // 改为按方法名 hook（旧字符串锚点已在新版方法中消失）。
+        // T1: TinkerPatchResultService.a(in0.b) —— 热补丁结果应用入口（旧 onHandleIntent 已改版）
+        hookByName(cl, "com.tencent.mm.plugin.hp.tinker.TinkerPatchResultService",
+                "a", 1, null, "T1");
+        // T2: TinkerBootsActivateListener.callback —— 补丁激活回调
+        hookByName(cl, "com.tencent.mm.plugin.hp.model.TinkerBootsActivateListener",
                 "callback", -1, Boolean.FALSE, "T2");
-        // T3: TinkerBootsSysCmdMsgListener.U0
-        hookByClassStrings(cl, ".sysmsg.boots.xmlkey", "ge3.q0",
-                "U0", -1, null, "T3");
-        // T4: TinkerClient.fetchPatchUpdate
-        hookByClassStrings(cl, "Tinker.TinkerClient", "x76.a",
-                null, -1, null, "T4");
-        // T5: MergeHdiffApkService.onHandleIntent
-        hookByClassStrings(cl, "Tinker.MergeHdiffApkService.HdiffApk",
-                "com.tencent.mm.plugin.hp.mmdiff.MergeHdiffApkService",
+        // T3: 旧 .sysmsg.boots.xmlkey 处理器（ge3.q0）已移除，不再尝试
+        // T4: 旧 TinkerClient 已移除，不再尝试
+        // T5: MergeHdiffApkService.onHandleIntent —— 合并差分包服务
+        hookByName(cl, "com.tencent.mm.plugin.hp.mmdiff.MergeHdiffApkService",
                 "onHandleIntent", -1, null, "T5");
-        // T6: CTinkerInstaller.c / f
-        hookByClassStrings(cl, "MicroMsg.Tinker.CTinkerInstaller", "ee3.a",
-                "c", -1, Integer.valueOf(-1), "T6");
-        // T6b: CTinkerInstaller.f (缓存优先, 避免普通重启触发 DexKit 搜索)
-        String ct = DexKitHelper.ngetCtinkerInstaller();
-        if (ct == null || ct.isEmpty()) {
-            ct = firstClassByStrings(cl, "MicroMsg.Tinker.CTinkerInstaller");
-        }
-        boolean t6b = false;
-        if (ct != null) t6b = hookByName(cl, ct, "f", -1, Integer.valueOf(-1), "T6b");
-        // T6bg: 类名/方法名全部漂移时的兜底——按类锚点定位 CTinkerInstaller 类族,
-        // hook 其中全部返回 int 的方法(补丁安装结果码), 替代旧 T6bg 的"全局方法字符串"方式。
-        if (!t6b) hookByClassGlobal(cl, "MicroMsg.Tinker.CTinkerInstaller", "T6bg");
+        // T6/T6b/T6bg: 旧 CTinkerInstaller 已移除，不再尝试
     }
 
     /** 按「方法名=onAccountInitialized 或 单参且参数类型含 Account/Profile」识别账号初始化回调 */

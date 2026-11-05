@@ -16,7 +16,9 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
 import android.view.WindowManager;
+import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.PopupWindow;
 import android.widget.ScrollView;
@@ -73,6 +75,9 @@ public final class AiAssistantPanel {
     private static ConversationConfig.Entry sTemplateDraft;
     /** v996: 「AI回复个性化配置」列表当前 tab(0=全部 1=群聊 2=联系人), 返回时保持。 */
     private static volatile int sConvListTab = 0;
+    /** 套用模板后强制填充到配置页的会话草稿（防止重开配置页未读取到最新模板内容）。 */
+    private static volatile String sConvEditDraftTalker = null;
+    private static volatile ConversationConfig.Entry sConvEditDraft = null;
 
     private AiAssistantPanel() {
     }
@@ -415,7 +420,15 @@ public final class AiAssistantPanel {
     }
 
     private static TextView newTitle(Context ctx, String text) {
-        return M3Page.title(ctx, text);
+        // ★ 二级/三级界面统一顶部标题栏（居中加粗，与首页「乐少AI助手」一致风格）
+        TextView tv = new TextView(ctx);
+        tv.setText(text);
+        tv.setTextSize(20f);
+        tv.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        tv.setTextColor(com.leshao.v3.ui.AppColors.textPrimary());
+        tv.setGravity(Gravity.CENTER);
+        tv.setPadding(0, dp(ctx, 2), 0, dp(ctx, 6));
+        return tv;
     }
 
     /** 内容超出上限才可滚动、否则按内容收缩的 ScrollView(v1047: 支持 min/max 硬性高度约束)。 */
@@ -581,16 +594,24 @@ public final class AiAssistantPanel {
         final AppConfig config = cfg;
 
         LinearLayout root = newRoot(ctx);
-        root.addView(newTitle(ctx, "AI 助手"));
+        // ★ AI 顶部居中标题栏
+        TextView aiTitle = new TextView(ctx);
+        aiTitle.setText("乐少AI助手");
+        aiTitle.setTextSize(20f);
+        aiTitle.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        aiTitle.setTextColor(com.leshao.v3.ui.AppColors.textPrimary());
+        aiTitle.setGravity(Gravity.CENTER);
+        aiTitle.setPadding(0, dp(ctx, 2), 0, dp(ctx, 6));
+        root.addView(aiTitle);
 
         if (config == null) {
             LogWriter.log(TAG, "show: config null, 仅展示提示");
             root.addView(M3Page.note(ctx, "AI 核心尚未初始化, 请稍后重试。"));
         } else {
             LinearLayout list = new LinearLayout(ctx);
-            newScroll(root, list, (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.60f));
+            newScroll(root, list, (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.85f));
 
-            // ---- 1. 功能开关 ----
+            // ---- 1. 功能开关（无 section 标题） ----
             list.addView(newSection(ctx, "功能开关", "修改后即时生效"));
             list.addView(newRow(ctx, AiIconDrawable.G_SPARK, "AI 助手", "总开关,关闭后全部 AI 能力停用")
                     .switchOn(config.isEnabled(), (btn, checked) -> {
@@ -601,6 +622,48 @@ public final class AiAssistantPanel {
                     .switchOn(config.isTtsEnabled(), (btn, checked) -> {
                         LogWriter.log(TAG, "click: 语音消息发送 -> " + checked);
                         persist(ctx, config, c -> c.setTtsEnabled(checked), "语音消息发送已" + (checked ? "开启" : "关闭"));
+                    }));
+            // v2.5: 豆包网页纯文本模型会话（用豆包登录态，不走 OpenAI/Anthropic）
+            list.addView(newRow(ctx, AiIconDrawable.G_CLOUD, "豆包文本模型",
+                    "开=文本对话走豆包网页模型会话（复用傻包登录态）; 关=走原 AI 提供商")
+                    .switchOn(config.isDoubaoTextEnabled(), (btn, checked) -> {
+                        LogWriter.log(TAG, "click: 豆包文本模型 -> " + checked);
+                        persist(ctx, config, c -> c.setDoubaoTextEnabled(checked),
+                                "豆包文本模型已" + (checked ? "开启" : "关闭"));
+                    }));
+            // v2.5: 图片识别回复（收到图片自动识别并回复原会话）
+            list.addView(newRow(ctx, AiIconDrawable.G_LAYERS, "图片识别回复",
+                    "开=收到图片自动识别（可配文字问题）并回复; 关=不处理图片")
+                    .switchOn(config.isImageReplyEnabled(), (btn, checked) -> {
+                        LogWriter.log(TAG, "click: 图片识别回复 -> " + checked);
+                        persist(ctx, config, c -> c.setImageReplyEnabled(checked),
+                                "图片识别回复已" + (checked ? "开启" : "关闭"));
+                    }));
+            // v2.5: 登录傻包刷新 Cookie（网页登录自动获取完整 Cookie，失效时点此刷新）
+            list.addView(newRow(ctx, AiIconDrawable.G_CLOUD, "登录傻包刷新Cookie",
+                    "网页登录豆包并自动保存完整登录 Cookie（图片识别/豆包对话失效时点此刷新）")
+                    .arrow(() -> {
+                        LogWriter.log(TAG, "click: 登录傻包刷新Cookie");
+                        try {
+                            com.leshao.v3.ui.TTSPageView.openDoubaoLoginDialog(activity,
+                                    activity.getResources().getDisplayMetrics().density,
+                                    new kotlin.jvm.functions.Function0<kotlin.Unit>() {
+                                        @Override
+                                        public kotlin.Unit invoke() {
+                                            return kotlin.Unit.INSTANCE;
+                                        }
+                                    });
+                        } catch (Throwable t) {
+                            LogWriter.log(TAG, "打开傻包登录失败: " + t);
+                            toastQuiet(ctx, "打开登录失败：" + t.getMessage());
+                        }
+                    }));
+            // ★ 聊天总结开关：消息含"总结"时拉取该会话聊天记录生成文字总结（不受语音管控）
+            list.addView(newRow(ctx, AiIconDrawable.G_CHIP, "聊天总结",
+                    "发送含「总结」的消息时拉取全部聊天记录生成文字总结")
+                    .switchOn(config.isSummaryEnabled(), (btn, checked) -> {
+                        LogWriter.log(TAG, "click: 聊天总结 -> " + checked);
+                        persist(ctx, config, c -> c.setSummaryEnabled(checked), "聊天总结已" + (checked ? "开启" : "关闭"));
                     }));
             // v1085: 关键词自动回复 (全局开关 + 规则编辑入口)
             list.addView(newRow(ctx, AiIconDrawable.G_BELL, "关键词自动回复",
@@ -617,10 +680,9 @@ public final class AiAssistantPanel {
                         showKeywordRules(activity);
                     }));
 
-            // ---- 2. AI回复个性化配置 ----
+            // ---- 2. AI回复个性化配置（无 section 标题） ----
             // v996: 群聊/联系人二合一, 纯入口(无行内开关); 仅「已配置且启用」的会话触发 AI。
             // 原「群聊/私聊自动回复」「仅被@时回复」全局开关已被会话级个性化配置取代。
-            list.addView(newSection(ctx, "AI回复个性化配置", "仅已配置且启用的会话触发 AI"));
             list.addView(newRow(ctx, AiIconDrawable.G_SLIDERS, "AI回复个性化配置",
                     overrideSub() + " · 点整行进入配置").arrow(() -> {
                 LogWriter.log(TAG, "click: 进入AI回复个性化配置");
@@ -628,8 +690,7 @@ public final class AiAssistantPanel {
                 showConversationList(activity);
             }));
 
-            // ---- 3. 模型与参数(点击进入配置) ----
-            list.addView(newSection(ctx, "模型与参数", "服务商接入与核心参数"));
+            // ---- 3. 模型与参数（无 section 标题） ----
             final String providerSub = providerLabel(providerTypeOf(config.getProviderType()))
                     + (TextUtils.isEmpty(config.getModel()) ? "" : " · " + config.getModel());
             list.addView(newRow(ctx, AiIconDrawable.G_CLOUD, "模型提供商", providerSub)
@@ -686,7 +747,7 @@ public final class AiAssistantPanel {
         root.addView(newTitle(ctx, "关键词问答规则"));
 
         LinearLayout list = new LinearLayout(ctx);
-        newScroll(root, list, (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.55f));
+        newScroll(root, list, (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.85f));
 
         list.addView(newSection(ctx, "规则列表", "命中关键词直接回复, 不送大模型"));
         final EditText etRules = M3Page.input(ctx, "每行一条: 关键词=回复内容");
@@ -793,7 +854,7 @@ public final class AiAssistantPanel {
         LinearLayout root = newRoot(ctx);
         root.addView(newTitle(ctx, "模型提供商"));
         LinearLayout list = new LinearLayout(ctx);
-        newScroll(root, list, (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.60f));
+        newScroll(root, list, (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.85f));
 
         // ---- 服务商 ----
         list.addView(newSection(ctx, "服务商", "API 协议类型"));
@@ -808,6 +869,13 @@ public final class AiAssistantPanel {
                 LogWriter.log(TAG, "click: 服务商 -> " + pt.name());
                 try {
                     config.setProviderType(pt.name().toLowerCase(Locale.US));
+                    // ★ 点击服务商立即持久化，避免只改内存不保存
+                    boolean ok = config.save();
+                    LogWriter.log(TAG, "provider save ok=" + ok + " pt=" + pt);
+                    if (!ok) {
+                        toastQuiet(ctx, "保存失败（磁盘写入失败）");
+                        return;
+                    }
                     for (int j = 0; j < providerRows.length; j++) {
                         providerRows[j].setSub(j == pt.ordinal() ? "当前使用" : "点击选择");
                     }
@@ -1294,25 +1362,331 @@ public final class AiAssistantPanel {
     }
 
     /** v985: 配音魔方音色多选页。选中结果写回 entry.voices 并触发 persist。 */
-    private static void showVoicePicker(final Activity activity, final ConversationConfig.Entry entry,
+private static void showVoicePicker(final Activity activity, final ConversationConfig.Entry entry,
                                         final Runnable persist, final Runnable onBack) {
         if (activity == null || activity.isFinishing()) return;
         final Context ctx = activity;
-        // v985: 音色为异步拉取, 弹窗高度改为固定值, 避免拉取前按空内容测量导致列表被裁剪。
-        final int popupH = (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.62f);
+        // ★ 窗口高度扩展到屏幕 90%
+        final int popupH = (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.90f);
         LinearLayout root = newRoot(ctx);
         root.addView(newTitle(ctx, "选择音色"));
         final LinearLayout list = new LinearLayout(ctx);
-        newScroll(root, list, Math.max(dp(ctx, 160), popupH - dp(ctx, 150)));
+        // 固定搜索框（不随分页重建，点击弹出输入法，实时过滤）
+        final android.widget.EditText searchEt = new android.widget.EditText(ctx);
+        searchEt.setHint("搜索音色名称 / ID");
+        searchEt.setTextSize(14f);
+        searchEt.setSingleLine(true);
+        android.graphics.drawable.GradientDrawable searchBg = new android.graphics.drawable.GradientDrawable();
+        searchBg.setCornerRadius(AppColors.SHAPE_INPUT_DP * ctx.getResources().getDisplayMetrics().density);
+        searchBg.setColor(AppColors.inputBg());
+        searchEt.setBackground(searchBg);
+        searchEt.setTextColor(AppColors.onSurface());
+        searchEt.setHintTextColor(AppColors.onSurfaceVariant());
+        searchEt.setPadding(dp(ctx, 10), dp(ctx, 8), dp(ctx, 10), dp(ctx, 8));
+        root.addView(searchEt);
+        final String[] searchQuery = {""};
+        final List<TTSPageView.VoiceItem>[] baseAllItems = new List[1];
+        baseAllItems[0] = new ArrayList<>();
+        final java.util.function.Consumer<String>[] searchCallback = new java.util.function.Consumer[1];
+        searchEt.setOnClickListener(v -> {
+            searchEt.requestFocus();
+            android.view.inputmethod.InputMethodManager imm = (android.view.inputmethod.InputMethodManager)
+                    ctx.getSystemService(Context.INPUT_METHOD_SERVICE);
+            if (imm != null) imm.showSoftInput(searchEt, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
+        });
+        searchEt.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int st, int c, int a) {}
+            @Override public void onTextChanged(CharSequence s, int st, int b, int c) {}
+            @Override public void afterTextChanged(android.text.Editable s) {
+                if (searchCallback[0] != null) searchCallback[0].accept(s == null ? "" : s.toString());
+            }
+        });
+        newScroll(root, list, Math.max(dp(ctx, 160), popupH - dp(ctx, 120)));
 
-        final TextView loading = M3Page.note(ctx, "正在加载配音魔方音色...");
+        final TextView loading = M3Page.note(ctx, "正在加载音色列表...");
         list.addView(loading);
 
-        final java.util.LinkedHashSet<String> selected = new java.util.LinkedHashSet<>();
+final java.util.LinkedHashSet<String> selected = new java.util.LinkedHashSet<>();
         if (entry.voices != null) selected.addAll(entry.voices);
+
+        final List<TTSPageView.VoiceItem> allItems = new ArrayList<>();
+        final int PAGE = 50;
+        final int[] page = {0};
 
         final Handler h = new Handler(Looper.getMainLooper());
         final String key = WmPrefs.getStr("tts_cube_key", "");
+
+        // 底部栏：全选 | 上页 | 页数 | 下页 | 保存（每页 50）—— 按钮等宽均分，统一模块风格主色
+        LinearLayout bottomBar = new LinearLayout(ctx);
+        bottomBar.setOrientation(LinearLayout.HORIZONTAL);
+        bottomBar.setGravity(Gravity.CENTER_VERTICAL);
+        bottomBar.setPadding(dp(ctx, 12), dp(ctx, 10), dp(ctx, 12), dp(ctx, 10));
+
+        final android.graphics.drawable.Drawable primaryBg =
+                CandyUi.gradientBg(ctx, (float) AppColors.SHAPE_MD_DP);
+        final int onPrimaryColor = AppColors.onPrimary();
+        java.util.function.Function<String, Button> makeBtn2 = (text) -> {
+            Button b = new Button(ctx);
+            b.setText(text);
+            b.setTextSize(13f);
+            b.setAllCaps(false);
+            b.setGravity(Gravity.CENTER);
+            b.setBackground(primaryBg);
+            b.setTextColor(onPrimaryColor);
+            b.setPadding(0, dp(ctx, 8), 0, dp(ctx, 8));
+            return b;
+        };
+        Button selectAllBtn = makeBtn2.apply("全选");
+        Button prevBtn = makeBtn2.apply("上页");
+        TextView pageTv = new TextView(ctx);
+        pageTv.setText("1/1");
+        pageTv.setTextSize(13f);
+        pageTv.setTextColor(AppColors.onSurface());
+        pageTv.setGravity(Gravity.CENTER);
+        Button nextBtn = makeBtn2.apply("下页");
+        Button saveBtn = makeBtn2.apply("保存");
+
+        // 按钮等宽均分整行，间距一致
+        int aiGap = dp(ctx, 4);
+        android.widget.LinearLayout.LayoutParams lpAll = new android.widget.LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        lpAll.setMargins(0, 0, aiGap, 0);
+        bottomBar.addView(selectAllBtn, lpAll);
+        android.widget.LinearLayout.LayoutParams lpPrev = new android.widget.LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        lpPrev.setMargins(aiGap, 0, aiGap, 0);
+        bottomBar.addView(prevBtn, lpPrev);
+        android.widget.LinearLayout.LayoutParams lpPage = new android.widget.LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        lpPage.setMargins(aiGap, 0, aiGap, 0);
+        bottomBar.addView(pageTv, lpPage);
+        android.widget.LinearLayout.LayoutParams lpNext = new android.widget.LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        lpNext.setMargins(aiGap, 0, aiGap, 0);
+        bottomBar.addView(nextBtn, lpNext);
+        android.widget.LinearLayout.LayoutParams lpSave = new android.widget.LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        lpSave.setMargins(aiGap, 0, 0, 0);
+        bottomBar.addView(saveBtn, lpSave);
+        root.addView(bottomBar);
+
+        // 渲染当前页（选中的音色靠前）
+        final Runnable[] renderVoicePage = new Runnable[1];
+        renderVoicePage[0] = () -> {
+            if (activity.isFinishing()) return;
+            list.removeAllViews();
+            // ★ 搜索过滤（基于全量 baseAllItems）
+            final String q = searchQuery[0].trim().toLowerCase();
+            List<TTSPageView.VoiceItem> filtered = new ArrayList<>();
+            for (TTSPageView.VoiceItem vi : baseAllItems[0]) {
+                if (q.isEmpty()) {
+                    filtered.add(vi);
+                } else {
+                    String nm = vi.displayName;
+                    String id = vi.voiceId;
+                    if ((nm != null && nm.toLowerCase().contains(q))
+                            || (id != null && id.toLowerCase().contains(q))) {
+                        filtered.add(vi);
+                    }
+                }
+            }
+            allItems.clear();
+            allItems.addAll(filtered);
+            if (allItems.isEmpty()) {
+                list.addView(M3Page.empty(ctx, "🎵", "未获取到音色"));
+                pageTv.setText("1/1");
+                prevBtn.setEnabled(false);
+                nextBtn.setEnabled(false);
+                relayoutPopup();
+                return;
+            }
+            // ★ 选中音色靠前，方便管理
+            allItems.sort((a, b) -> {
+                boolean sa = selected.contains(a.voiceId);
+                boolean sb = selected.contains(b.voiceId);
+                return sa == sb ? 0 : (sa ? -1 : 1);
+            });
+            int total = (allItems.size() + PAGE - 1) / PAGE;
+            if (page[0] >= total) page[0] = total - 1;
+            if (page[0] < 0) page[0] = 0;
+            int start = page[0] * PAGE;
+            int end = Math.min(start + PAGE, allItems.size());
+            for (int i = start; i < end; i++) {
+                TTSPageView.VoiceItem vi = allItems.get(i);
+                // 竹节跳动音色来源统一显示为「VIP音色」金黄色
+                boolean vip = vi.group != null
+                        && ("竹节跳动".equals(vi.group) || "VIP音色".equals(vi.group));
+                String displayGroup = vip ? "VIP音色" : vi.group;
+                String text = vi.displayName;
+                if (!TextUtils.isEmpty(displayGroup)) text = displayGroup + " · " + text;
+                final String voiceId = vi.voiceId;
+                LinearLayout row = new LinearLayout(ctx);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                row.setGravity(Gravity.CENTER_VERTICAL);
+                row.setPadding(dp(ctx, 12), dp(ctx, 6), dp(ctx, 12), dp(ctx, 6));
+
+                final TextView sel = new TextView(ctx);
+                sel.setText(selected.contains(voiceId) ? "✔" : "");
+                sel.setTextSize(15f);
+                sel.setGravity(Gravity.CENTER);
+                sel.setTextColor(selected.contains(voiceId) ? AppColors.primary() : AppColors.outline());
+                sel.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
+                final android.graphics.drawable.GradientDrawable selBg =
+                        new android.graphics.drawable.GradientDrawable();
+                selBg.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+                selBg.setColor(selected.contains(voiceId) ? AppColors.primaryContainer() : 0x00FFFFFF);
+                selBg.setStroke(dp(ctx, 1), selected.contains(voiceId) ? AppColors.primary() : AppColors.outlineVariant());
+                sel.setBackground(selBg);
+                int selSize = dp(ctx, 28);
+                sel.setLayoutParams(new LinearLayout.LayoutParams(selSize, selSize));
+                row.addView(sel);
+
+                TextView name = new TextView(ctx);
+                if (vip) {
+                    android.text.SpannableString ss = new android.text.SpannableString(text);
+                    ss.setSpan(new android.text.style.ForegroundColorSpan(0xFFFFB300),
+                            0, "VIP音色".length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    name.setText(ss);
+                } else {
+                    name.setText(text);
+                }
+                name.setTextSize(15f);
+                name.setTextColor(AppColors.onSurface());
+                name.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
+                LinearLayout.LayoutParams nameLp = new LinearLayout.LayoutParams(0,
+                        LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+                nameLp.setMargins(dp(ctx, 10), 0, dp(ctx, 8), 0);
+                name.setLayoutParams(nameLp);
+                row.addView(name);
+
+                // 耳机图标颜色跟随音色系：VIP音色=金 / 豆包(傻包)=蓝 / 配音魔方=绿
+                int earColor;
+                if (vip) {
+                    earColor = 0xFFFFB300;
+                } else if (vi.group != null && "豆包音色".equals(vi.group)) {
+                    earColor = 0xFF2196F3;
+                } else {
+                    earColor = 0xFF07C160;
+                }
+                TextView ear = new TextView(ctx);
+                ear.setText("");
+                ear.setGravity(Gravity.CENTER);
+                ear.setBackground(TTSPageView.headphoneIcon(earColor));
+                int earSize = dp(ctx, 28);
+                ear.setLayoutParams(new LinearLayout.LayoutParams(earSize, earSize));
+                final String fVoiceId = voiceId;
+                ear.setOnClickListener(v -> {
+                    LogWriter.log(TAG, "click(音色试听): " + fVoiceId);
+                    toastQuiet(ctx, "正在合成试听...");
+                    new Thread(() -> {
+                        String result;
+                        if (TTSPageView.isBuiltinVoice(fVoiceId)) {
+                            try {
+                                byte[] ogg = com.leshao.v3.service.DoubaoTtsV2Bridge.synthesize(
+                                        "欢迎使用乐少助手", fVoiceId, 30);
+                                java.io.File wav = new java.io.File(ctx.getCacheDir(),
+                                        "ai_preview_" + System.currentTimeMillis() + ".wav");
+                                result = com.leshao.v3.service.DoubaoTtsV2Bridge.writeWav(ogg, wav)
+                                        ? "OK:" + wav.getAbsolutePath() : "解码失败";
+                            } catch (Throwable t) {
+                                result = "试听失败: " + t.getMessage();
+                            }
+                        } else if (com.leshao.v3.service.JianYingTtsClient.resolveVoice(fVoiceId) != null) {
+                            try {
+                                byte[] pcm = com.leshao.v3.service.JianYingTtsClient.synthesize(
+                                        "欢迎使用乐少助手", fVoiceId, 20);
+                                byte[] wavBytes = com.leshao.v3.service.JianYingTtsClient.pcmToWav(pcm, 24000);
+                                java.io.File wav = new java.io.File(ctx.getCacheDir(),
+                                        "ai_preview_" + System.currentTimeMillis() + ".wav");
+                                java.io.FileOutputStream fos = new java.io.FileOutputStream(wav);
+                                try { fos.write(wavBytes); } finally { fos.close(); }
+                                result = "OK:" + wav.getAbsolutePath();
+                            } catch (Throwable t) {
+                                result = "试听失败: " + t.getMessage();
+                            }
+                        } else {
+                            result = TTSPageView.ttsPreviewVoice(key, fVoiceId, "欢迎使用乐少助手");
+                        }
+                        final String r = result;
+                        h.post(() -> {
+                            if (r.startsWith("OK:")) {
+                                try {
+                                    android.media.MediaPlayer mp = new android.media.MediaPlayer();
+                                    mp.setDataSource(r.substring(3));
+                                    mp.prepare();
+                                    mp.start();
+                                    mp.setOnCompletionListener(mp1 -> {
+                                        try { mp1.release(); } catch (Throwable ignored) {}
+                                    });
+                                } catch (Throwable t) {
+                                    toastQuiet(ctx, "播放失败: " + t.getMessage());
+                                }
+                            } else {
+                                toastQuiet(ctx, r);
+                            }
+                        });
+                    }).start();
+                });
+                row.addView(ear);
+
+                row.setOnClickListener(v -> {
+                    if (selected.contains(fVoiceId)) selected.remove(fVoiceId);
+                    else selected.add(fVoiceId);
+                    refreshSel(sel, selBg, ctx, selected.contains(fVoiceId));
+                });
+                sel.setOnClickListener(v -> {
+                    if (selected.contains(fVoiceId)) selected.remove(fVoiceId);
+                    else selected.add(fVoiceId);
+                    refreshSel(sel, selBg, ctx, selected.contains(fVoiceId));
+                });
+
+                list.addView(row);
+                View divider = new View(ctx);
+                divider.setBackgroundColor(AppColors.outlineVariant());
+                LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, dp(ctx, 1)));
+                dlp.setMargins(dp(ctx, 44), 0, 0, 0);
+                list.addView(divider, dlp);
+            }
+            pageTv.setText((page[0] + 1) + "/" + total);
+            prevBtn.setEnabled(page[0] > 0);
+            nextBtn.setEnabled(page[0] < total - 1);
+            relayoutPopup();
+        };
+
+        prevBtn.setOnClickListener(v -> {
+            if (page[0] > 0) {
+                page[0]--;
+                renderVoicePage[0].run();
+            }
+        });
+        nextBtn.setOnClickListener(v -> {
+            int total = Math.max(1, (allItems.size() + PAGE - 1) / PAGE);
+            if (page[0] < total - 1) {
+                page[0]++;
+                renderVoicePage[0].run();
+            }
+        });
+        selectAllBtn.setOnClickListener(v -> {
+            if (allItems.isEmpty()) return;
+            int start = page[0] * PAGE;
+            int end = Math.min(start + PAGE, allItems.size());
+            for (int i = start; i < end; i++) {
+                selected.add(allItems.get(i).voiceId);
+            }
+            renderVoicePage[0].run();
+            toastQuiet(ctx, "已全选本页 " + (end - start) + " 个音色");
+        });
+        saveBtn.setOnClickListener(v -> {
+            entry.voices = new ArrayList<>(selected);
+            LogWriter.log(TAG, "click(音色): 保存 selected=" + entry.voices);
+            if (persist != null) persist.run();
+            toastQuiet(ctx, "已选 " + entry.voices.size() + " 个音色");
+            dismissCurrent();
+            if (onBack != null) onBack.run();
+        });
+
+        // 异步加载数据
         new Thread(() -> {
             List<TTSPageView.VoiceItem> items;
             try {
@@ -1325,53 +1699,31 @@ public final class AiAssistantPanel {
             h.post(() -> {
                 if (activity.isFinishing()) return;
                 list.removeAllViews();
-                if (fi.isEmpty()) {
-                    list.addView(M3Page.empty(ctx, "🎵",
-                            "未获取到音色, 请先在「TTS 语音」页配置配音魔方 API Key"));
-                    relayoutPopup();
-                    return;
-                }
-                for (TTSPageView.VoiceItem vi : fi) {
-                    String text = vi.displayName;
-                    if (!TextUtils.isEmpty(vi.group)) text = vi.group + " · " + text;
-                    final String voiceId = vi.voiceId;
-                    list.addView(M3Page.checkRow(ctx, "🎵", text,
-                            TextUtils.isEmpty(vi.actor) ? null : ("配音: " + vi.actor),
-                            selected.contains(voiceId), on -> {
-                                if (on) selected.add(voiceId);
-                                else selected.remove(voiceId);
-                            }));
-                }
-                relayoutPopup();
+                baseAllItems[0].clear();
+                baseAllItems[0].addAll(fi);
+                allItems.addAll(fi);
+                renderVoicePage[0].run();
             });
         }).start();
 
-        ModernButton btnSave = new ModernButton(ctx, "保存", ModernButton.STYLE_PRIMARY);
-        btnSave.onClick(() -> {
-            entry.voices = new ArrayList<>(selected);
-            LogWriter.log(TAG, "click(音色): 保存 selected=" + entry.voices);
-            if (persist != null) persist.run();
-            toastQuiet(ctx, "已选 " + entry.voices.size() + " 个音色");
-            dismissCurrent();
-            if (onBack != null) onBack.run();
-        });
-        ModernButton btnClear = new ModernButton(ctx, "清空", ModernButton.STYLE_GHOST);
-        btnClear.onClick(() -> {
-            entry.voices = new ArrayList<>();
-            LogWriter.log(TAG, "click(音色): 清空");
-            if (persist != null) persist.run();
-            dismissCurrent();
-            if (onBack != null) onBack.run();
-        });
-        ModernButton btnClose = new ModernButton(ctx, "返回", ModernButton.STYLE_GHOST);
-        btnClose.onClick(() -> {
-            LogWriter.log(TAG, "click(音色): 返回(未改动)");
-            dismissCurrent();
-            if (onBack != null) onBack.run();
-        });
+        // 搜索回调注册（renderVoicePage 定义后）
+        searchCallback[0] = q -> {
+            searchQuery[0] = q;
+            page[0] = 0;
+            renderVoicePage[0].run();
+        };
 
-        root.addView(newBtnRow(ctx, btnSave, btnClear, btnClose));
-        showPopup(activity, root, popupH, "voicepick");
+        showPopup(activity, root, popupH, "voicepick", onBack);
+    }
+
+    /** 刷新音色行勾选状态。 */
+    private static void refreshSel(TextView sel,
+                              android.graphics.drawable.GradientDrawable bg,
+                              Context ctx, boolean on) {
+        sel.setText(on ? "✔" : "");
+        sel.setTextColor(on ? AppColors.primary() : AppColors.outline());
+        bg.setColor(on ? AppColors.primaryContainer() : 0x00FFFFFF);
+        bg.setStroke(dp(ctx, 1), on ? AppColors.primary() : AppColors.outlineVariant());
     }
 
     private static void showConversationList(final Activity activity) {
@@ -1442,7 +1794,7 @@ public final class AiAssistantPanel {
                 "仅「已配置且启用」的会话才触发 AI; 未配置的会话一律不响应。"));
 
         final LinearLayout body = new LinearLayout(ctx);
-        newScroll(root, body, (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.58f));
+        newScroll(root, body, (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.85f));
 
         final int[] curTab = {initial};
         final String[] query = {""};
@@ -1473,31 +1825,46 @@ public final class AiAssistantPanel {
                 ConversationConfig.Entry e = cc.get(talker);
                 boolean isCfg = e != null;
                 boolean active = isCfg && e.isActive();
+                // ★ 简化副标题：不再显示"仅@/全部消息"等复杂内容
                 String sub;
                 if (!isCfg) {
-                    sub = "未配置 · 点击启用 AI 服务";
+                    sub = "未配置";
                 } else if (active) {
-                    sub = "已启用 · " + entrySummary(e);
+                    sub = "已启用";
                 } else {
-                    sub = "已停用 · 点击进入可重新启用";
+                    sub = "已停用";
                 }
                 SettingRow row = newRow(ctx, g ? "👥" : "👤",
                         name, sub)
-                        .avatar(talker)
-                        .arrow(() -> {
-                            LogWriter.log(TAG, "click: 个性化配置 " + talker);
-                            // v1055: 先构建新弹窗(showPopup 内部再关旧窗), 任一环节异常都记录并回退到列表,
-                            // 避免旧的 dismissCurrent 先关列表 + 后续异常被静默吞掉 = 面板全关回到聊天页。
-                            try {
-                                showConvEdit(activity, talker, g);
-                            } catch (Throwable t) {
-                                LogWriter.log(TAG, "打开独立配置失败: "
-                                        + android.util.Log.getStackTraceString(t));
-                                toastQuiet(activity, "打开配置失败");
-                                showConversationList(activity);
-                            }
-                        });
-                if (isCfg) row.subColor(0xFF22C55E);
+                        .avatar(talker);
+                // ★ 只有启用的会话显示"已配置"绿色标签（微信绿背景、白字），置于列表最右侧
+                if (active) {
+                    TextView badge = new TextView(ctx);
+                    badge.setText("已配置");
+                    badge.setTextSize(11f);
+badge.setTextColor(AppColors.onPrimary());
+                    android.graphics.drawable.GradientDrawable badgeBg =
+                            new android.graphics.drawable.GradientDrawable();
+                    badgeBg.setColor(AppColors.primary());
+                    badgeBg.setCornerRadius(dp(ctx, 7));
+                    badge.setPadding(dp(ctx, 5), dp(ctx, 2), dp(ctx, 5), dp(ctx, 2));
+                    badge.setBackground(badgeBg);
+                    row.tail(badge);
+                }
+                // ★ 箭头置于最右侧（在"已配置"标签右侧）
+                row.arrow(() -> {
+                    LogWriter.log(TAG, "click: 个性化配置 " + talker);
+                    // v1055: 先构建新弹窗(showPopup 内部再关旧窗), 任一环节异常都记录并回退到列表,
+                    // 避免旧的 dismissCurrent 先关列表 + 后续异常被静默吞掉 = 面板全关回到聊天页。
+                    try {
+                        showConvEdit(activity, talker, g);
+                    } catch (Throwable t) {
+                        LogWriter.log(TAG, "打开独立配置失败: "
+                                + android.util.Log.getStackTraceString(t));
+                        toastQuiet(activity, "打开配置失败");
+                        showConversationList(activity);
+                    }
+                });
                 body.addView(row);
                 shown++;
             }
@@ -1641,7 +2008,18 @@ public final class AiAssistantPanel {
             toastQuiet(ctx, "AI 核心未初始化");
             return;
         }
-        ConversationConfig.Entry e = cc.get(talker);
+        // ★ 套用模板后优先使用内存草稿（保证模板内容立即填充到当前配置页），用后即清
+        ConversationConfig.Entry e;
+        String draftTalker = sConvEditDraftTalker;
+        ConversationConfig.Entry draft = sConvEditDraft;
+        sConvEditDraftTalker = null;
+        sConvEditDraft = null;
+        if (talker != null && talker.equals(draftTalker) && draft != null) {
+            LogWriter.log(TAG, "showConvEdit: 使用套用模板草稿 talker=" + talker);
+            e = draft;
+        } else {
+            e = cc.get(talker);
+        }
         if (e == null) e = new ConversationConfig.Entry();
         final ConversationConfig.Entry entry = e;
 
@@ -1650,17 +2028,24 @@ public final class AiAssistantPanel {
         root.addView(M3Page.note(ctx, talker));
 
         LinearLayout list = new LinearLayout(ctx);
-        newScroll(root, list, (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.55f));
+        newScroll(root, list, (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.85f));
 
-        list.addView(newSection(ctx, "模板", "一键套用预设"));
+        // 直接使用模板菜单（无 section 标题）
         list.addView(newRow(ctx, AiIconDrawable.G_LAYERS, "套用模板", templateSub())
                 .arrow(() -> {
                     dismissCurrent();
                     showTemplatePicker(activity, talker, isGroup);
                 }));
+        // ★ 记忆重置：清空该群/联系人的 AI 历史记忆
+        list.addView(newRow(ctx, AiIconDrawable.G_DB, "重置本会话记忆",
+                "清空该群/联系人的 AI 历史记忆")
+                .arrow(() -> {
+                    AIBotCore.resetMemory(talker);
+                    toastQuiet(ctx, "已重置本会话记忆");
+                }));
 
         list.addView(newSection(ctx, "AI 服务", "仅已启用且已配置的会话触发 AI"));
-        final Switch swEnabled = makeSwitch(ctx, entry.isActive());
+        final Switch swEnabled = makeSwitch(ctx, Boolean.TRUE.equals(entry.enabled));
         addSwitchRow(list, ctx, swEnabled, AiIconDrawable.G_SPARK, "启用 AI 服务", "关闭后本会话完全不触发 AI");
 
         list.addView(newSection(ctx, "独立开关", "保存后独立于全局"));
@@ -1673,6 +2058,11 @@ public final class AiAssistantPanel {
         boolean effTts = entry.ttsEnabled != null ? entry.ttsEnabled : cfg.isTtsEnabled();
         final Switch swTts = makeSwitch(ctx, effTts);
         addSwitchRow(list, ctx, swTts, AiIconDrawable.G_VOICE, "语音消息发送", "开=转语音发出; 关=发文本");
+        // v2.5: 会话级图片识别回复开关（未配置时跟随全局）
+        boolean effImg = entry.imageReplyEnabled != null ? entry.imageReplyEnabled : cfg.isImageReplyEnabled();
+        final Switch swImg = makeSwitch(ctx, effImg);
+        addSwitchRow(list, ctx, swImg, AiIconDrawable.G_LAYERS, "图片识别回复",
+                "开=本会话收到图片自动识别回复; 关=不识别图片");
         final Switch swOnlyF = swOnly;
         // v1073: 引用回复(群/私聊文本回复均可见)
         boolean effQuote = entry.quoteReply != null ? entry.quoteReply : cfg.isQuoteReply();
@@ -1765,6 +2155,7 @@ public final class AiAssistantPanel {
                     out.onlyWhenMentioned = explicitOrNull(swOnlyF.isChecked(), cfg.isOnlyWhenMentioned());
                 }
                 out.ttsEnabled = explicitOrNull(swTts.isChecked(), cfg.isTtsEnabled());
+                out.imageReplyEnabled = explicitOrNull(swImg.isChecked(), cfg.isImageReplyEnabled());
                 out.quoteReply = Boolean.valueOf(swQuote.isChecked());
                 out.autoAt = (groupFinal && swAtF != null)
                         ? Boolean.valueOf(swAtF.isChecked()) : null;
@@ -1857,7 +2248,7 @@ public final class AiAssistantPanel {
         LinearLayout root = newRoot(ctx);
         root.addView(newTitle(ctx, "套用模板"));
         LinearLayout list = new LinearLayout(ctx);
-        newScroll(root, list, (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.50f));
+        newScroll(root, list, (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.85f));
         for (String name : names) {
             final String tpl = name;
             list.addView(newRow(ctx, AiIconDrawable.G_LAYERS, tpl, entrySummary(cc.getTemplate(tpl)))
@@ -1868,11 +2259,23 @@ public final class AiAssistantPanel {
                             // v996: 套用模板即视为已配置该会话, 显式启用 AI。
                             ConversationConfig.Entry applied = cc.get(talker);
                             if (applied != null) applied.enabled = Boolean.TRUE;
-                            cc.save();
-                            reload();
-                            toastQuiet(ctx, "已套用模板: " + tpl);
+                            // ★ 强制把模板内容写入配置页草稿（重开配置页即显示模板值）
+                            sConvEditDraftTalker = talker;
+                            sConvEditDraft = applied != null
+                                    ? applied : (cc.getTemplate(tpl) == null
+                                    ? new ConversationConfig.Entry() : cc.getTemplate(tpl).copy());
+                            boolean saved = cc.save();
+                            if (!saved) {
+                                LogWriter.log(TAG, "applyTemplate save fail tpl=" + tpl);
+                                toastQuiet(ctx, "套用模板保存失败（磁盘写入失败）");
+                            } else {
+                                // ★ 不调用 reload()（避免磁盘重读覆盖内存），
+                                // 内存 overrides 已是最新模板内容，重开配置界面即显示模板值。
+                                toastQuiet(ctx, "已套用模板: " + tpl);
+                            }
                         } catch (Throwable t) {
                             LogWriter.log(TAG, "applyTemplate err: " + t);
+                            toastQuiet(ctx, "套用模板失败");
                         }
                         dismissCurrent();
                         showConvEdit(activity, talker, isGroup);
@@ -1917,39 +2320,50 @@ public final class AiAssistantPanel {
         root.addView(btnAdd);
 
         LinearLayout list = new LinearLayout(ctx);
-        newScroll(root, list, (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.50f));
+        newScroll(root, list, (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.85f));
         List<String> names = cc.templateNames();
         if (names.isEmpty()) {
             list.addView(M3Page.empty(ctx, "🧩", "暂无模板, 点击上方「新建模板」创建。"));
         } else {
-            final String[] pendingDelete = {null};
             for (String name : names) {
                 final String tpl = name;
                 SettingRow row = newRow(ctx, AiIconDrawable.G_LAYERS, tpl, entrySummary(cc.getTemplate(tpl)));
-                row.arrow(null);
+                // 行主体点击 = 编辑模板
                 row.setOnClickListener(v -> {
-                    if (!tpl.equals(pendingDelete[0])) {
-                        pendingDelete[0] = tpl;
-                        toastQuiet(ctx, "再次点击可删除, 或长按编辑");
-                        return;
-                    }
-                    try {
-                        cc.removeTemplate(tpl);
-                        cc.save();
-                        reload();
-                        toastQuiet(ctx, "已删除模板: " + tpl);
-                    } catch (Throwable t) {
-                        LogWriter.log(TAG, "removeTemplate err: " + t);
-                    }
-                    dismissCurrent();
-                    showTemplateList(activity);
-                });
-                row.setOnLongClickListener(v -> {
-                    LogWriter.log(TAG, "longclick(模板): 编辑 " + tpl);
+                    LogWriter.log(TAG, "click(模板): 编辑 " + tpl);
                     dismissCurrent();
                     showTemplateEdit(activity, tpl);
-                    return true;
                 });
+                // 右侧操作区: 编辑图标 + 删除图标（间距 16dp，避免误点）
+                LinearLayout ops = new LinearLayout(ctx);
+                ops.setOrientation(LinearLayout.HORIZONTAL);
+                ops.setGravity(Gravity.CENTER_VERTICAL);
+                int iconSize = dp(ctx, 36);
+                ImageView ivEdit = new ImageView(ctx);
+                ivEdit.setImageDrawable(AiIconDrawable.of(AiIconDrawable.G_EDIT));
+                ivEdit.setContentDescription("编辑模板");
+                ivEdit.setPadding(dp(ctx, 7), dp(ctx, 7), dp(ctx, 7), dp(ctx, 7));
+                LinearLayout.LayoutParams lpEdit = new LinearLayout.LayoutParams(iconSize, iconSize);
+                lpEdit.rightMargin = dp(ctx, 16);
+                ivEdit.setLayoutParams(lpEdit);
+                ivEdit.setOnClickListener(v -> {
+                    LogWriter.log(TAG, "click(模板): 编辑图标 " + tpl);
+                    dismissCurrent();
+                    showTemplateEdit(activity, tpl);
+                });
+                ops.addView(ivEdit);
+                ImageView ivDel = new ImageView(ctx);
+                ivDel.setImageDrawable(AiIconDrawable.of(AiIconDrawable.G_TRASH));
+                ivDel.setContentDescription("删除模板");
+                ivDel.setPadding(dp(ctx, 7), dp(ctx, 7), dp(ctx, 7), dp(ctx, 7));
+                LinearLayout.LayoutParams lpDel = new LinearLayout.LayoutParams(iconSize, iconSize);
+                ivDel.setLayoutParams(lpDel);
+                ivDel.setOnClickListener(v -> {
+                    LogWriter.log(TAG, "click(模板): 删除图标 " + tpl);
+                    confirmDeleteTemplate(activity, tpl);
+                });
+                ops.addView(ivDel);
+                row.tail(ops);
                 list.addView(row);
             }
         }
@@ -1966,6 +2380,48 @@ public final class AiAssistantPanel {
         root.addView(btnClose);
 
         showPopup(activity, root, 0, "tpllist");
+    }
+
+    /** 删除模板二次确认弹窗。 */
+    private static void confirmDeleteTemplate(final Activity activity, final String tpl) {
+        LogWriter.log(TAG, "confirmDeleteTemplate: " + tpl);
+        if (activity == null || activity.isFinishing()) return;
+        try {
+            final Context ctx = activity;
+            android.app.AlertDialog dlg = new android.app.AlertDialog.Builder(ctx)
+                    .setTitle("删除模板")
+                    .setMessage("确定删除模板「" + tpl + "」吗？\n删除后不可恢复。")
+                    .setPositiveButton("删除", (d, w) -> {
+                        LogWriter.log(TAG, "confirmDeleteTemplate: 确认删除 " + tpl);
+                        try {
+                            ConversationConfig cc = AIBotCore.conversationConfig();
+                            if (cc != null) {
+                                cc.removeTemplate(tpl);
+                                cc.save();
+                                reload();
+                                toastQuiet(ctx, "已删除模板: " + tpl);
+                            }
+                        } catch (Throwable t) {
+                            LogWriter.log(TAG, "removeTemplate err: " + t);
+                        }
+                        dismissCurrent();
+                        showTemplateList(activity);
+                    })
+                    .setNegativeButton("取消", null)
+                    .create();
+            dlg.setOnShowListener(d -> {
+                try {
+                    dlg.getButton(android.app.AlertDialog.BUTTON_POSITIVE)
+                            .setTextColor(AppColors.error());
+                    dlg.getButton(android.app.AlertDialog.BUTTON_NEGATIVE)
+                            .setTextColor(AppColors.primary());
+                } catch (Throwable ignored) {
+                }
+            });
+            dlg.show();
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "confirmDeleteTemplate err: " + t);
+        }
     }
 
     private static void showTemplateEdit(final Activity activity, final String originalName) {
@@ -1986,7 +2442,7 @@ public final class AiAssistantPanel {
         LinearLayout root = newRoot(ctx);
         root.addView(newTitle(ctx, originalName == null ? "新建模板" : "编辑模板"));
         LinearLayout list = new LinearLayout(ctx);
-        newScroll(root, list, (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.55f));
+        newScroll(root, list, (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.85f));
 
         final EditText etName = M3Page.input(ctx, "模板名称");
         etName.setText(safe(originalName));
@@ -2131,6 +2587,11 @@ public final class AiAssistantPanel {
             mutator.apply(config);
             boolean ok = config.save();
             LogWriter.log(TAG, "persist ok=" + ok);
+            if (!ok) {
+                // ★ 保存失败不 reload，避免磁盘旧数据覆盖内存新值
+                toastQuiet(ctx, "保存失败（磁盘写入失败）");
+                return;
+            }
             reload();
             toastQuiet(ctx, toast);
         } catch (Throwable t) {

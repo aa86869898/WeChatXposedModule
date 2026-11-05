@@ -53,13 +53,30 @@ public class AutoForwardHook {
     private static volatile Set<String> sSources = ConcurrentHashMap.newKeySet();
     private static volatile List<String> sTargets = new ArrayList<>();
     private static volatile Set<String> sTypes = ConcurrentHashMap.newKeySet(); // "1","3","49"...
-    private static final Set<Long> sForwarded = ConcurrentHashMap.newKeySet();
+    private static final Set<String> sForwarded = ConcurrentHashMap.newKeySet();
     private static volatile boolean sHooked = false;
+
+    /** v3.0.580: 转发在独立单线程执行，避免在微信 insert 回调线程里长时间阻塞。 */
+    private static final java.util.concurrent.ExecutorService POOL =
+            java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+                Thread t = new Thread(r, "ls-autofw");
+                t.setDaemon(true);
+                return t;
+            });
+    private static final java.util.concurrent.atomic.AtomicBoolean sBusy =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
+    /** 单条转发之间的随机间隔，避免 0.5 秒内连发上千条被微信风控。 */
+    private static final int SEND_GAP_MIN_MS = 180;
+    private static final int SEND_GAP_MAX_MS = 420;
+    /** 连续失败达到该值即中止本批，防止配置失效时对着 500 个群空转。 */
+    private static final int MAX_CONSEC_FAIL = 5;
 
     private AutoForwardHook() {}
 
     public static boolean isEnabled() { return sEnabled; }
     public static void setEnabled(boolean v) { sEnabled = v; }
+    /** 当前转发目标数量（UI 展示 / 熔断提示用）。 */
+    public static int targetCount() { return sTargets.size(); }
 
     public static void updateConfig(SharedPreferences prefs) {
         try {
@@ -70,8 +87,12 @@ public class AutoForwardHook {
             sTargets = split(prefs.getString(PREF_TARGETS, ""));
             sTypes.clear();
             sTypes.addAll(split(prefs.getString(PREF_TYPES, "")));
-            LogWriter.log(TAG, "config: enabled=" + sEnabled + " sources=" + sSources
-                + " targets=" + sTargets + " types=" + sTypes);
+            LogWriter.log(TAG, "config: enabled=" + sEnabled + " sources=" + sSources.size()
+                + " targets=" + sTargets.size() + " types=" + sTypes);
+            if (sTargets.size() > 50) {
+                LogWriter.log(TAG, "⚠ 转发目标数量偏大(" + sTargets.size()
+                    + ")，单条消息会触发同等数量的发送，已启用限速与熔断");
+            }
         } catch (Throwable t) {
             LogWriter.log(TAG, "updateConfig err: " + t.getMessage());
         }
@@ -94,6 +115,8 @@ public class AutoForwardHook {
     /** 消息类型过滤: 匹配指定类型集合或默认识别文本族/图片/AppMsg */
     static boolean typeAllowed(int type) {
         if (!sTypes.isEmpty()) {
+            // 语音族：用户勾选了"语音"(34) 时，一并放行旧格式 228 / 0x42000022（与 forwardOne 的语音识别一致）
+            if ((type == 34 || type == 228 || type == 0x42000022) && sTypes.contains("34")) return true;
             return sTypes.contains(String.valueOf(type));
         }
         // 默认: 文本族 {1,11,21,31,36,0x42000031} | 图片 3 | AppMsg 卡片族 49/0x42000031/0x11000031
@@ -108,10 +131,8 @@ public class AutoForwardHook {
         try {
             SharedPreferences prefs = ContextManager.getPrefs();
             updateConfig(prefs);
-            if (!sEnabled || sTargets.isEmpty()) {
-                LogWriter.log(TAG, "hook: disabled or no targets");
-                return;
-            }
+            // 始终安装消息监听（即使当前 disabled/无目标），这样 UI 开启后立即生效；
+            // 运行时由 onMsgInsert 内的 sEnabled/sSources/sTypes 过滤，避免"开启后不转发"。
             if (sHooked) return;
             sHooked = true;
 
@@ -123,8 +144,11 @@ public class AutoForwardHook {
             }
             int hooked = 0;
             for (java.lang.reflect.Method m : f9.getDeclaredMethods()) {
-                if (!m.getName().equals("Bb") && !m.getName().equals("Db")
-                    && !m.getName().equals("Hb") && !m.getName().equals("yb")) continue;
+                // v3.0.555: 8.0.79 中 Bb 已改名 Nb/Mb，补充方法名数组
+                if (!m.getName().equals("Nb") && !m.getName().equals("Mb")
+                    && !m.getName().equals("Bb") && !m.getName().equals("Db")
+                    && !m.getName().equals("Hb") && !m.getName().equals("yb")
+                    && !m.getName().equals("insertMsgInfo") && !m.getName().equals("processAddMsg")) continue;
                 Class<?>[] pts = m.getParameterTypes();
                 if (pts.length < 1 || pts[0] == null) continue;
                 String p0 = pts[0].getName();
@@ -157,9 +181,16 @@ public class AutoForwardHook {
             String talker = callStr(e9, "N0");
             int type = 0;
             try { type = (Integer) XposedHelpers.callMethod(e9, "getType"); } catch (Throwable ignored) {}
-            int isSend = -1;
-            try { isSend = (Integer) XposedHelpers.callMethod(e9, "z0"); } catch (Throwable ignored) {}
-            if (isSend == 1) return; // 自己发送的不转发
+
+            // ---- v3.0.580: isSend 改为「读不到就不转发」 ----
+            // 旧实现 isSend 初值 -1，getter 一旦抛异常就当作「不是自己发的」放行，
+            // 于是模块自己插入的消息（点歌提示等）会被当成收到的新消息全量群发。
+            int isSend = readIsSend(e9);
+            if (isSend < 0) {
+                LogWriter.log(TAG, "skip: isSend 读取失败(不转发) talker=" + talker + " type=" + type);
+                return;
+            }
+            if (isSend != 0) return; // 自己发送的不转发
 
             if (talker == null || talker.isEmpty()) return;
             // 来源过滤: v3.0.273 起来源名单为空 = 不转发任何来源（必须显式选择才工作）
@@ -167,16 +198,45 @@ public class AutoForwardHook {
 
             if (!typeAllowed(type)) return;
 
-            // 去重: msgSvrId
-            long svrId = 0;
-            try { svrId = (Long) XposedHelpers.callMethod(e9, "F0"); } catch (Throwable ignored) {}
-            if (svrId != 0 && !sForwarded.add(svrId)) return;
-            if (sForwarded.size() > 500) sForwarded.clear();
-
             String content = readContent(e9);
 
+            // ---- v3.0.580: 模块自发消息护栏（本次事故的根因） ----
+            long msgId = 0;
+            try { msgId = (Long) XposedHelpers.callMethod(e9, "getMsgId"); } catch (Throwable ignored) {}
+            if (msgId != 0 && SelfMsgGuard.isSelfMsgId(msgId)) {
+                LogWriter.log(TAG, "skip: 模块自发消息(msgId=" + msgId + ") talker=" + talker);
+                return;
+            }
+            if (SelfMsgGuard.isSelf(talker, type, content)) {
+                LogWriter.log(TAG, "skip: 模块自发消息(内容命中) talker=" + talker
+                        + " content=" + trunc(content, 30));
+                return;
+            }
+
+            // 去重: msgSvrId 优先；svrId 为 0 时用「会话+类型+内容」短窗口兜底
+            // （旧实现 svrId==0 直接放行 → 同一条消息被转发两次，事故里 545 群各收两条）
+            long svrId = 0;
+            try { svrId = (Long) XposedHelpers.callMethod(e9, "H0"); } catch (Throwable ignored) {}
+            long createTime = 0;
+            try { createTime = (Long) XposedHelpers.callMethod(e9, "getCreateTime"); } catch (Throwable ignored) {}
+            String dedupKey = svrId != 0
+                    ? ("s:" + svrId)
+                    : ("c:" + talker + "|" + type + "|" + (content == null ? "" : content.hashCode())
+                        + "|" + (createTime / 10));
+            if (!sForwarded.add(dedupKey)) {
+                LogWriter.log(TAG, "skip: 重复消息 key=" + dedupKey);
+                return;
+            }
+            if (sForwarded.size() > 500) sForwarded.clear();
+
+            // ---- v3.0.580: 群发熔断 ----
+            if (!SelfMsgGuard.allowBroadcast(TAG, sTargets.size())) {
+                LogWriter.log(TAG, "skip: 群发熔断生效，本批目标 " + sTargets.size() + " 未执行");
+                return;
+            }
+
             LogWriter.log(TAG, "fwd trigger: type=" + type + " talker=" + talker
-                + " content=" + trunc(content, 30));
+                + " targets=" + sTargets.size() + " content=" + trunc(content, 30));
             forwardAll(type, talker, content, e9);
             addRecord(talker, type, content);
         } catch (Throwable t) {
@@ -184,18 +244,47 @@ public class AutoForwardHook {
         }
     }
 
+    /**
+     * 读取 isSend：z0() → getIsSend() → field_isSend。
+     * 全部失败返回 -1，调用方据此拒绝转发（失败即不转发，宁可漏转不可乱转）。
+     */
+    private static int readIsSend(Object e9) {
+        try {
+            Object v = XposedHelpers.callMethod(e9, "z0");
+            if (v instanceof Integer) return (Integer) v;
+        } catch (Throwable ignored) {}
+        try {
+            Object v = XposedHelpers.callMethod(e9, "getIsSend");
+            if (v instanceof Integer) return (Integer) v;
+        } catch (Throwable ignored) {}
+        try {
+            return XposedHelpers.getIntField(e9, "field_isSend");
+        } catch (Throwable ignored) {}
+        return -1;
+    }
+
     static String readContent(Object e9) {
-        for (String mn : new String[]{"I0", "j", "N1"}) {
+        // v3.0.580: 8.0.79 实证 F0() = getContent（旧实现未包含，I0/j/N1 在部分版本不存在）
+        for (String mn : new String[]{"F0", "I0", "j", "N1"}) {
             try {
                 Object v = XposedHelpers.callMethod(e9, mn);
                 if (v != null) return v.toString();
             } catch (Throwable ignored) {}
         }
+        // 字段兜底：field_content 声明在父类 im.c8，必须沿继承链查找
         try {
-            java.lang.reflect.Field f = e9.getClass().getDeclaredField("field_content");
-            f.setAccessible(true);
-            Object v = f.get(e9);
-            if (v != null) return v.toString();
+            Class<?> c = e9.getClass();
+            while (c != null && c != Object.class) {
+                try {
+                    java.lang.reflect.Field f = c.getDeclaredField("field_content");
+                    f.setAccessible(true);
+                    Object v = f.get(e9);
+                    if (v != null) return v.toString();
+                    return null;
+                } catch (NoSuchFieldException ignored) {
+                    c = c.getSuperclass();
+                }
+            }
         } catch (Throwable ignored) {}
         return null;
     }
@@ -234,20 +323,77 @@ public class AutoForwardHook {
         }
     }
 
+    /**
+     * v3.0.580: 批量转发改为「单线程异步 + 限速 + 连续失败中止」。
+     *
+     * <p>真实事故（分身leshao_v3_log.txt 07:13:32）里，一次误触发在 0.57 秒内向 545 个群
+     * 连发 1090 条，既造成刷屏，也极易触发微信风控。现在：</p>
+     * <ul>
+     *   <li>同一时刻只允许一批在跑，重复触发直接丢弃并记日志</li>
+     *   <li>每条之间随机间隔 180~420ms</li>
+     *   <li>连续失败 5 条即中止本批</li>
+     * </ul>
+     */
     private static void forwardAll(int type, String fromTalker, String content, Object originalE9) {
-        ClassLoader cl = ContextManager.getClassLoader();
+        final ClassLoader cl = ContextManager.getClassLoader();
         if (cl == null) return;
-        for (String target : sTargets) {
-            try {
-                forwardOne(cl, type, content, target, originalE9);
-                LogWriter.log(TAG, "fwd -> " + target + " ok");
-            } catch (Throwable t) {
-                LogWriter.log(TAG, "fwd -> " + target + " err: " + t.getMessage());
-            }
+        final List<String> targets = new ArrayList<>(sTargets);
+        if (targets.isEmpty()) return;
+        if (!sBusy.compareAndSet(false, true)) {
+            LogWriter.log(TAG, "skip: 上一批转发仍在进行，本次触发丢弃 (" + targets.size() + " 目标)");
+            return;
+        }
+        try {
+            POOL.execute(() -> {
+                int ok = 0, fail = 0, consecFail = 0;
+                try {
+                    for (int i = 0; i < targets.size(); i++) {
+                        String target = targets.get(i);
+                        if (target == null || target.isEmpty()) continue;
+                        boolean sent;
+                        try {
+                            forwardOne(cl, type, content, target, originalE9);
+                            sent = true;
+                        } catch (Throwable t) {
+                            sent = false;
+                            LogWriter.log(TAG, "fwd -> " + target + " err: " + t.getMessage());
+                        }
+                        if (sent) {
+                            ok++;
+                            consecFail = 0;
+                            LogWriter.log(TAG, "fwd -> " + target + " ok (" + ok + "/" + targets.size() + ")");
+                        } else {
+                            fail++;
+                            if (++consecFail >= MAX_CONSEC_FAIL) {
+                                LogWriter.log(TAG, "中止本批: 连续失败 " + consecFail
+                                        + " 条，剩余 " + (targets.size() - i - 1) + " 个目标未发送");
+                                break;
+                            }
+                        }
+                        if (i < targets.size() - 1) {
+                            try {
+                                int gap = SEND_GAP_MIN_MS
+                                        + (int) (Math.random() * (SEND_GAP_MAX_MS - SEND_GAP_MIN_MS));
+                                Thread.sleep(gap);
+                            } catch (InterruptedException ie) {
+                                Thread.currentThread().interrupt();
+                                break;
+                            }
+                        }
+                    }
+                    LogWriter.log(TAG, "本批完成: 成功 " + ok + " 失败 " + fail
+                            + " 目标 " + targets.size());
+                } finally {
+                    sBusy.set(false);
+                }
+            });
+        } catch (Throwable t) {
+            sBusy.set(false);
+            LogWriter.log(TAG, "forwardAll 提交失败: " + t.getMessage());
         }
     }
 
-    private static void forwardOne(ClassLoader cl, int type, String content, String target, Object originalE9) {
+    private static boolean forwardOne(ClassLoader cl, int type, String content, String target, Object originalE9) {
         boolean isTextFamily = (type == 1 || type == 11 || type == 21 || type == 31 || type == 36
             || type == 0x42000031) && type != 0x11000031;
         boolean isImage = type == 3;
@@ -256,29 +402,32 @@ public class AutoForwardHook {
 
         if (isVoice) {
             com.leshao.v3.hook.VoiceForwardHook.forwardVoiceToTarget(target, originalE9);
-            return;
+            return true;
         }
         if (isTextFamily && content != null && !content.isEmpty()) {
             // 纯文本直发
-            com.leshao.v3.wm.utils.WmReflect.sendTextMsg(cl, content, target);
-            return;
+            return com.leshao.v3.wm.utils.WmReflect.sendTextMsg(cl, content, target);
         }
         if (isImage) {
-            // 图片: 取 imgPath 发送原图
-            String path = callStr(originalE9, "x0");
+            // 图片: 取 imgPath 发送原图（8.0.79+ 方法名 u0，旧版 x0）
+            String path = callStr(originalE9, "u0");
+            if ((path == null || path.isEmpty()) && originalE9 != null) {
+                path = callStr(originalE9, "x0");
+            }
             if (path == null || path.isEmpty() || !new java.io.File(path).exists()) {
                 LogWriter.log(TAG, "fwd image: no local path, fallback xml send");
                 sendXmlAsAppMsg(cl, content, target, 3);
-                return;
+                return true;
             }
             sendImage(cl, target, path);
-            return;
+            return true;
         }
         if (isAppMsg) {
             sendXmlAsAppMsg(cl, content, target, 49);
-            return;
+            return true;
         }
         LogWriter.log(TAG, "fwd: unsupported type " + type + " (skip)");
+        return false;
     }
 
     private static void sendImage(ClassLoader cl, String target, String path) {
@@ -576,6 +725,11 @@ public class AutoForwardHook {
         tgtVal.setTextColor(com.leshao.v3.ui.AppColors.onSurfaceVariant());
         tgtVal.setSingleLine(true);
         tgtVal.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        // v3.0.580: 目标数量提示 —— 大批量群发风险要显式可见
+        final TextView tgtCount = new TextView(ctx);
+        tgtCount.setTextSize(12);
+        tgtCount.setPadding((int) (12 * d), (int) (2 * d), (int) (12 * d), (int) (8 * d));
+        updateTargetCountHint(tgtCount, tgtHolder[0]);
         cardTgt.addView(com.leshao.v3.ui.widgets.M3Page.clickRow(ctx, "📤", "选择转发目标",
                 "打开联系人选择器多选(可切好友/群聊)", () -> {
             if (act == null) { Toast.makeText(ctx, "当前上下文不支持选择器", Toast.LENGTH_SHORT).show(); return; }
@@ -585,8 +739,10 @@ public class AutoForwardHook {
                         tgtHolder[0] = wxids == null || wxids.isEmpty() ? ""
                                 : android.text.TextUtils.join(",", wxids);
                         tgtVal.setText(tgtHolder[0].isEmpty() ? "未设置" : displayList(tgtHolder[0]));
+                        updateTargetCountHint(tgtCount, tgtHolder[0]);
                     });
         }));
+        cardTgt.addView(tgtCount);
         cardTgt.addView(com.leshao.v3.ui.widgets.M3Page.clickRow(ctx, "📝", "自动转发记录",
                 "查看转发历史(头像/昵称/内容/时间)", () -> showRecordsDialog(ctx)));
         content.addView(cardTgt);
@@ -682,24 +838,62 @@ public class AutoForwardHook {
                 if (types.length() > 0) types.append(",");
                 types.append(t);
             }
-            prefs.edit()
-                .putBoolean(PREF_ENABLED, swEnabled.isChecked())
-                .putString(PREF_SOURCES, srcHolder[0].trim())
-                .putString(PREF_TARGETS, tgtHolder[0].trim())
-                .putString(PREF_TYPES, types.toString())
-                .apply();
-            updateConfig(prefs);
-            if (sSources.isEmpty()) {
-                Toast.makeText(ctx, "已保存：来源为空，不会转发任何消息", Toast.LENGTH_SHORT).show();
+            final String typesCsv = types.toString();
+            final int tgtN = split(tgtHolder[0]).size();
+            final Runnable doSave = () -> {
+                prefs.edit()
+                    .putBoolean(PREF_ENABLED, swEnabled.isChecked())
+                    .putString(PREF_SOURCES, srcHolder[0].trim())
+                    .putString(PREF_TARGETS, tgtHolder[0].trim())
+                    .putString(PREF_TYPES, typesCsv)
+                    .apply();
+                updateConfig(prefs);
+                if (sSources.isEmpty()) {
+                    Toast.makeText(ctx, "已保存：来源为空，不会转发任何消息", Toast.LENGTH_SHORT).show();
+                } else if (tgtN == 0) {
+                    Toast.makeText(ctx, "已保存：未设置转发目标，不会转发", Toast.LENGTH_SHORT).show();
+                } else {
+                    Toast.makeText(ctx, "已保存" + (sEnabled ? "，自动转发已开启（" + tgtN + " 个目标）" : ""),
+                            Toast.LENGTH_SHORT).show();
+                }
+                dlg.dismiss();
+            };
+            // v3.0.580: 目标数超过 50 时二次确认，避免误选全部群后一次刷屏
+            if (tgtN > 50) {
+                new android.app.AlertDialog.Builder(ctx)
+                        .setTitle("确认大批量群发")
+                        .setMessage("当前已选择 " + tgtN + " 个转发目标。\n\n"
+                                + "每条命中的消息都会被转发到这 " + tgtN + " 个会话，"
+                                + "量大会触发微信风控甚至封号。\n\n确定保存吗？")
+                        .setPositiveButton("确定保存", (dd, w) -> doSave.run())
+                        .setNegativeButton("返回修改", null)
+                        .show();
             } else {
-                Toast.makeText(ctx, "已保存" + (sEnabled ? "，自动转发已开启" : ""),
-                        Toast.LENGTH_SHORT).show();
+                doSave.run();
             }
-            dlg.dismiss();
         });
         com.leshao.v3.ui.InsetsUtil.centerAutoHeight(dlg, 0.9f);
         dlg.show();
         com.leshao.v3.ui.WindowLayer.track(dlg.getWindow());
+    }
+
+    /** v3.0.580: 目标数量与风险提示。 */
+    private static void updateTargetCountHint(TextView tv, String csv) {
+        if (tv == null) return;
+        int n = split(csv).size();
+        if (n == 0) {
+            tv.setText("⚠ 未设置目标，不会转发任何消息");
+            tv.setTextColor(com.leshao.v3.ui.AppColors.onSurfaceVariant());
+        } else if (n > 200) {
+            tv.setText("⚠ 已选 " + n + " 个目标：超大群发，极易触发微信风控，请确认是你要的");
+            tv.setTextColor(0xFFD32F2F);
+        } else if (n > 50) {
+            tv.setText("⚠ 已选 " + n + " 个目标：大批量群发，保存时会二次确认");
+            tv.setTextColor(0xFFF57C00);
+        } else {
+            tv.setText("已选 " + n + " 个目标");
+            tv.setTextColor(com.leshao.v3.ui.AppColors.onSurfaceVariant());
+        }
     }
 
     /** 刷新类型多选按钮态 + 摘要文字 */

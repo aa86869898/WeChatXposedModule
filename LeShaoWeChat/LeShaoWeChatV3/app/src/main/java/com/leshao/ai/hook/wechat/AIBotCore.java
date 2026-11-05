@@ -35,7 +35,7 @@ public final class AIBotCore {
 
     private static final String TAG = "LeshaoAI.Core";
     private static final Object LOCK = new Object();
-    private static final int DEFAULT_MAX_MEMORY = 100;
+    private static final int DEFAULT_MAX_MEMORY = 200;
 
     private static volatile AppConfig config;
     private static volatile ConversationConfig conversationConfig;
@@ -58,6 +58,23 @@ public final class AIBotCore {
             conversationConfig.load();
             memory = new ChatMemory(hostDataDir, DEFAULT_MAX_MEMORY);
             knowledge = new KnowledgeBase(hostDataDir);
+            try {
+                memory.load();
+            } catch (Throwable t) {
+                Log.w(TAG, "memory.load err: " + t);
+            }
+            try {
+                // ★ 按用户配置的记忆条数调整桶上限（默认 200，可更高）
+                if (config != null) {
+                    memory.setMaxPerChat(Math.max(DEFAULT_MAX_MEMORY, config.getMaxHistoryMessages()));
+                }
+            } catch (Throwable ignored) {
+            }
+            try {
+                knowledge.load();
+            } catch (Throwable t) {
+                Log.w(TAG, "knowledge.load err: " + t);
+            }
             int convCount = 0;
             try {
                 convCount = conversationConfig.keys().size();
@@ -108,6 +125,17 @@ public final class AIBotCore {
             if (conversationConfig != null) {
                 conversationConfig.load();
             }
+            // ★ 记忆/知识库也一并重载，保证持久化内容可恢复
+            try {
+                if (memory != null) memory.load();
+            } catch (Throwable t) {
+                Log.w(TAG, "reload memory err: " + t);
+            }
+            try {
+                if (knowledge != null) knowledge.load();
+            } catch (Throwable t) {
+                Log.w(TAG, "reload knowledge err: " + t);
+            }
             Log.i(TAG, "AIBotCore 配置已重载: enabled=" + (config != null && config.isEnabled()));
         } catch (Throwable t) {
             Log.w(TAG, "reload 异常: " + t);
@@ -115,6 +143,11 @@ public final class AIBotCore {
     }
 
     /** 获取当前配置（可能为 null，代表未初始化）。 */
+    /** 访问上下文记忆（豆包对话/图片识别复用模块记忆）。 */
+    public static ChatMemory memory() {
+        return memory;
+    }
+
     public static AppConfig config() {
         if (config == null) {
             return null;
@@ -153,6 +186,36 @@ public final class AIBotCore {
             callback.onResult("配置未初始化");
             return;
         }
+        // ★ 聊天总结：用户消息含"总结"且开关开启 → 直接走总结流程（文字回复，不受语音管控）
+        if (c.isSummaryEnabled() && containsSummary(incoming)) {
+            LogWriter.log(TAG, "ask: 聊天总结触发 chatId=" + chatId
+                    + " incomingLen=" + (incoming == null ? -1 : incoming.length()));
+            executor.execute(new Runnable() {
+                @Override
+                public void run() {
+                    final String summary;
+                    try {
+                        summary = generateSummary(c, chatId, incoming, override);
+                    } catch (Throwable t) {
+                        Log.w(TAG, "生成总结异常: " + t, t);
+                        callback.onResult("聊天总结生成失败");
+                        return;
+                    }
+                    // 总结也回写记忆，便于后续追问
+                    try {
+                        if (memory != null) {
+                            memory.add(chatId, "user", incoming);
+                            memory.add(chatId, "assistant", summary);
+                            memory.persist();
+                        }
+                    } catch (Throwable ignored) {
+                        Log.w(TAG, "总结记忆回写异常: " + ignored);
+                    }
+                    callback.onResult(summary);
+                }
+            });
+            return;
+        }
         LogWriter.log(TAG, "ask: chatId=" + chatId
                 + " incomingLen=" + (incoming == null ? -1 : incoming.length()));
         executor.execute(new Runnable() {
@@ -163,7 +226,11 @@ public final class AIBotCore {
                     reply = generateReply(c, chatId, incoming, queryThread, override);
                 } catch (Throwable t) {
                     Log.w(TAG, "生成回复异常: " + t, t);
-                    callback.onResult("AI 服务暂时不可用");
+                    String msg = t.getMessage();
+                    if (msg == null || msg.trim().isEmpty()) {
+                        msg = t.getClass().getSimpleName();
+                    }
+                    callback.onResult("AI 服务异常: " + msg);
                     return;
                 }
                 // 记忆回写（注意用 api.model.ChatMessage 传给 LLM，memory.ChatMessage 存本地）
@@ -171,8 +238,11 @@ public final class AIBotCore {
                     if (memory != null) {
                         memory.add(chatId, "user", incoming);
                         memory.add(chatId, "assistant", reply);
+                        // ★ 修复"内容保存后没持久化"：回写后立即落盘
+                        memory.persist();
                     }
                 } catch (Throwable ignored) {
+                    Log.w(TAG, "记忆回写/持久化异常: " + ignored);
                 }
                 callback.onResult(reply);
             }
@@ -265,12 +335,25 @@ public final class AIBotCore {
         if (model == null || model.trim().isEmpty()) {
             throw new IllegalStateException("未配置模型名称(请在 AI 助手 - 模型提供商 中填写或点击获取模型)");
         }
+        if (c.getApiKey() == null || c.getApiKey().trim().isEmpty()) {
+            throw new IllegalStateException("未配置 API Key(请在 AI 助手 - 模型提供商 中填写)");
+        }
+        // ★ 设置有效性修复：温度/最大令牌真正传入 LLM；会话级温度覆盖优先
+        double temperature = c.getTemperature();
+        if (override != null && override.temperature != null) {
+            temperature = override.temperature.doubleValue();
+        }
+        int maxTokens = c.getMaxTokens();
 
         switch (provider) {
             case OPENAI_RESPONSES:
             case OPENAI_CHAT: {
                 OpenAIClient client = new OpenAIClient(provider, baseUrl, c.getApiKey(), model);
-                return client.chat(messages, system);
+                client.setTemperature(temperature);
+                client.setMaxTokens(maxTokens);
+                // ★ 必须传组装后的 systemFinal（含会话级 aiName/aiIdentity/systemPrompt），
+                // 传原始 system 会导致 Anthropic/Responses 只使用全局人设，会话级配置失效。
+                return client.chat(messages, systemFinal);
             }
             default: {
                 // Anthropic
@@ -279,8 +362,100 @@ public final class AIBotCore {
                     base = "https://api.anthropic.com";
                 }
                 AnthropicClient client = new AnthropicClient(base, c.getApiKey(), model);
-                return client.chat(messages, system);
+                client.setTemperature(temperature);
+                client.setMaxTokens(maxTokens);
+                return client.chat(messages, systemFinal);
             }
+        }
+    }
+
+    /** 判断消息是否为聊天总结请求（用户发送内容包含"总结"等关键词）。 */
+    public static boolean containsSummary(String incoming) {
+        if (incoming == null || incoming.trim().isEmpty()) return false;
+        String s = incoming.trim();
+        // 排除否定/纠正语境，避免误触发
+        if (s.contains("不要总结") || s.contains("不用总结") || s.contains("别总结")
+                || s.contains("不总结") || s.contains("总结得不对")
+                || s.contains("总结错误") || s.contains("别概括") || s.contains("不用概括")) {
+            return false;
+        }
+        return s.contains("总结一下") || s.contains("帮我总结") || s.contains("聊天总结")
+                || s.contains("总结下") || s.contains("概括一下") || s.contains("帮我概括")
+                || s.contains("做个总结") || s.contains("做总结") || s.contains("总结内容");
+    }
+
+    /** 生成聊天总结：拉取该会话大量聊天记录 → 组装 → LLM 总结（纯文字）。 */
+    private static String generateSummary(AppConfig c, String chatId, String incoming,
+                                          ConversationConfig.Entry override) throws Exception {
+        String chatLog = loadRecentChatLog(chatId, 500);
+        StringBuilder sys = new StringBuilder();
+        String system = (override != null && override.systemPrompt != null
+                && !override.systemPrompt.trim().isEmpty())
+                ? override.systemPrompt : c.getSystemPrompt();
+        if (system == null || system.trim().isEmpty()) {
+            system = "你是一个友好的 AI 助手，名叫" + (c.getBotName() == null ? "小乐" : c.getBotName()) + "。";
+        }
+        sys.append(system)
+                .append("\n你是聊天总结助手，请用简洁清晰的中文总结以下聊天记录的重点内容、主要话题、关键结论。");
+        String systemFinal = sys.toString();
+        List<ChatMessage> messages = new ArrayList<>();
+        messages.add(new ChatMessage("system", systemFinal, 0));
+        if (chatLog.length() > 0) {
+            messages.add(new ChatMessage("system", "以下是聊天记录：\n" + chatLog, 0));
+        } else {
+            messages.add(new ChatMessage("system", "（未能读取到聊天记录，请基于现有上下文总结）", 0));
+        }
+        messages.add(new ChatMessage("user", incoming, 0));
+
+        ProviderType provider = resolveProvider(c.getProviderType());
+        String model = (override != null && override.model != null
+                && !override.model.trim().isEmpty()) ? override.model : c.getModel();
+        String baseUrl = c.getBaseUrl();
+        if (baseUrl == null || baseUrl.trim().isEmpty()) {
+            throw new IllegalStateException("未配置模型接口地址(请在 AI 助手 - 模型提供商 中填写)");
+        }
+        if (model == null || model.trim().isEmpty()) {
+            throw new IllegalStateException("未配置模型名称(请在 AI 助手 - 模型提供商 中填写或点击获取模型)");
+        }
+        if (c.getApiKey() == null || c.getApiKey().trim().isEmpty()) {
+            throw new IllegalStateException("未配置 API Key(请在 AI 助手 - 模型提供商 中填写)");
+        }
+        double temperature = c.getTemperature();
+        if (override != null && override.temperature != null) {
+            temperature = override.temperature.doubleValue();
+        }
+        int maxTokens = c.getMaxTokens();
+        switch (provider) {
+            case OPENAI_RESPONSES:
+            case OPENAI_CHAT: {
+                OpenAIClient client = new OpenAIClient(provider, baseUrl, c.getApiKey(), model);
+                client.setTemperature(temperature);
+                client.setMaxTokens(maxTokens);
+                return client.chat(messages, systemFinal);
+            }
+            default: {
+                String base = c.getBaseUrl();
+                if (base == null || base.trim().isEmpty()) {
+                    base = "https://api.anthropic.com";
+                }
+                AnthropicClient client = new AnthropicClient(base, c.getApiKey(), model);
+                client.setTemperature(temperature);
+                client.setMaxTokens(maxTokens);
+                return client.chat(messages, systemFinal);
+            }
+        }
+    }
+
+    /** 重置某会话的 AI 记忆（清空该群/联系人记忆并落盘）。 */
+    public static void resetMemory(String chatId) {
+        try {
+            if (memory != null) {
+                memory.clear(chatId);
+                memory.persist();
+                LogWriter.log(TAG, "resetMemory: " + chatId);
+            }
+        } catch (Throwable t) {
+            Log.w(TAG, "resetMemory err: " + t);
         }
     }
 
@@ -338,6 +513,10 @@ public final class AIBotCore {
                     Integer isSend = (Integer) XposedHelpers.callMethod(e9, "z0");
                     String content = (String) XposedHelpers.callMethod(e9, "j");
                     if (content == null || content.trim().isEmpty()) {
+                        continue;
+                    }
+                    // ★ 跳过 AI 机器人自己发的消息（零宽水印），避免重复喂给模型
+                    if (com.leshao.ai.hook.wechat.SendGuard.isBotSent(content)) {
                         continue;
                     }
                     String role = (isSend != null && isSend.intValue() == 1) ? "我: " : "对方: ";

@@ -286,11 +286,13 @@ class SubPageActivity {
                 return
             }
             dismissSub()
+            val act = parentAct ?: parentAct()
+            if (act == null) return
             if (!sNavStack.isEmpty()) {
                 val prevPageId = sNavStack.pop()
-                openInternal(parentAct!!, "返回", prevPageId, false)
+                openInternal(act, "返回", prevPageId, false)
             } else if (!sStandalone) {
-                MainActivity.open(parentAct!!)
+                MainActivity.open(act)
             }
             sStandalone = false
         }
@@ -340,34 +342,28 @@ class SubPageActivity {
                     ChatGroupPageView.create(ctx, parentAct)
                 21 -> // 消息长按菜单净化
                     MessageMenuPageView.create(ctx, parentAct)
-                23 -> // 消息伪装
-                    MsgForgePageView.create(ctx, parentAct)
+                23 -> // v3.0.557: 消息伪装功能已移除，返回空视图占位
+                    View(ctx)
                 24 -> // 自动抢红包
                     RedPacketPageView.create(ctx, parentAct)
                 25 -> // 数据库直读
                     WeChatDbPageView.create(ctx, parentAct)
                 26 -> // 输入框快捷按钮
                     ChatFooterBarPageView.create(ctx, parentAct)
-                27 -> // 自定义气泡
-                    BubblePageView.create(ctx, parentAct)
-                15 -> // 批量加好友记录
-                    BatchAddRecordPageView.create(ctx, parentAct)
-                28 -> // 更多功能（去广告等）
-                    MoreFeaturesPageView.create(ctx, parentAct)
-                29 -> // 定位伪装
-                    FakeLocationPageView.create(ctx, parentAct)
-                30 -> // 朋友圈自动点赞
-                    MomentsLikePageView.create(ctx, parentAct)
-                31 -> // 朋友圈秒集赞
-                    MomentsFakeLikePageView.create(ctx, parentAct)
-                32 -> // 查看微信wxid
-                    WxIdViewPageView.create(ctx, parentAct)
-                33 -> // 微信美化
+33 -> // 微信美化（仅群成员头衔标签）
                     WeChatBeautyPageView.create(ctx, parentAct)
-                34 -> // 快捷菜单
-                    QuickMenuPageView.create(ctx, parentAct)
-                35 -> // 聊天时间修改（微信美化 → 聊天时间修改）
-                    TimeModifyPageView.create(ctx, parentAct)
+                28 -> // 更多功能（去广告 / 定位伪装 / 朋友圈自动点赞 / 面对面扫码 / 查看wxid）
+                    MoreFeaturesPageView.create(ctx, parentAct)
+                36 -> // 红包转账
+                    RedPacketPageView.create(ctx, parentAct)
+                37 -> // 红包排行榜单
+                    RedPacketRankPageView.create(ctx, parentAct)
+                38 -> // 红包回复语设置
+                    RedPacketReplyPageView.create(ctx, parentAct)
+                39 -> // 红包TTS语音回复语设置
+                    RedPacketReplyPageView.create(ctx, parentAct, true)
+                41 -> // 自动扫码进群记录
+                    JoinRecordPageView.create(ctx, parentAct)
                 else ->
                     makePlaceholder(ctx, parentAct)
             }

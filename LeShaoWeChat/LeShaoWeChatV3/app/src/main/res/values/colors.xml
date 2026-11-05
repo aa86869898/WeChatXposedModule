@@ -1,14 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="colorPrimary">#8B5CF6</color>
-    <color name="colorPrimaryDark">#7C3AED</color>
-    <color name="colorAccent">#D8B4FE</color>
-    <color name="ic_launcher_background">#8B5CF6</color>
+    <!-- v3.0.459 品牌色板：闲鱼黄（浅色模式） -->
+    <color name="colorPrimary">#F5B301</color>
+    <color name="colorPrimaryDark">#C89400</color>
+    <color name="colorAccent">#4E6544</color>
+    <color name="ic_launcher_background">#F5B301</color>
 
-    <color name="background">#FFFFFFFF</color>
-    <color name="section_title">#8B5CF6</color>
-    <color name="divider">#E0E0E0</color>
-    <color name="text_primary">#DE000000</color>
-    <color name="text_secondary">#8A000000</color>
-    <color name="input_background">#FAFAFA</color>
+    <color name="background">#FFFBF2</color>
+    <color name="section_title">#F5B301</color>
+    <color name="divider">#F3DCAB</color>
+    <color name="text_primary">#FF1F1B10</color>
+    <color name="text_secondary">#FF4C4636</color>
+    <color name="input_background">#FFEFE0BE</color>
 </resources>

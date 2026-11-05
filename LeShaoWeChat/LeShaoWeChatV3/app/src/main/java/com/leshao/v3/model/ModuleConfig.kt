@@ -12,7 +12,7 @@ import java.util.HashSet
 open class ModuleConfig {
 
     @JvmField
-    var masterSwitch = true
+    var masterSwitch = false
 
     @JvmField
     var peiyinApiKey = ""
@@ -27,49 +27,49 @@ open class ModuleConfig {
     var wusoundPromptId = "default"
 
     @JvmField
-    var announceText = true
+    var announceText = false
 
     @JvmField
-    var announceImage = true
+    var announceImage = false
 
     @JvmField
-    var announceVideo = true
+    var announceVideo = false
 
     @JvmField
-    var announceCard = true
+    var announceCard = false
 
     @JvmField
-    var announceFile = true
+    var announceFile = false
 
     @JvmField
-    var announceLocation = true
+    var announceLocation = false
 
     @JvmField
     var announceSticker = false
 
     @JvmField
-    var announceCall = true
+    var announceCall = false
 
     @JvmField
-    var announceNickname = true
+    var announceNickname = false
 
     @JvmField
     var announceGroup = false
 
     @JvmField
-    var announceQuote = true
+    var announceQuote = false
 
     @JvmField
-    var announceAt = true
+    var announceAt = false
 
     @JvmField
-    var announceMiniProgram = true
+    var announceMiniProgram = false
 
     @JvmField
-    var announceVideoChannel = true
+    var announceVideoChannel = false
 
     @JvmField
-    var announceChatHistory = true
+    var announceChatHistory = false
 
     @JvmField
     var customAnnounceFormat = "{sender}: {content}"
@@ -81,7 +81,7 @@ open class ModuleConfig {
     var textCutoffLen = 150
 
     @JvmField
-    var textTruncateEnabled = true
+    var textTruncateEnabled = false
 
     @JvmField
     var announceWhitelist: MutableSet<String> = HashSet()
@@ -90,7 +90,7 @@ open class ModuleConfig {
     var announceBlacklist: MutableSet<String> = HashSet()
 
     @JvmField
-    var whitelistStrict = true
+    var whitelistStrict = false
 
     @JvmField
     var quietEnabled = false
@@ -168,64 +168,64 @@ open class ModuleConfig {
     var antiRecall = false
 
     @JvmField
-    var antiDetection = true
+    var antiDetection = false
 
     @JvmField
-    var typingIndicatorEnabled = true
+    var typingIndicatorEnabled = false
 
     @JvmField
-    var chatFooterEnhanceEnabled = true
+    var chatFooterEnhanceEnabled = false
 
     @JvmField
-    var chatUICustomEnabled = true
+    var chatUICustomEnabled = false
 
     @JvmField
-    var batchMessageEnabled = true
+    var batchMessageEnabled = false
 
     @JvmField
-    var autoRemarkEnabled = true
+    var autoRemarkEnabled = false
 
     @JvmField
-    var searchEnhanceEnabled = true
+    var searchEnhanceEnabled = false
 
     @JvmField
-    var autoReplyEnabled = true
+    var autoReplyEnabled = false
 
     @JvmField
-    var snsFeaturesEnabled = true
+    var snsFeaturesEnabled = false
 
     @JvmField
-    var privacyFeaturesEnabled = true
+    var privacyFeaturesEnabled = false
 
     @JvmField
-    var loginMonitorEnabled = true
+    var loginMonitorEnabled = false
 
     @JvmField
-    var hideContactFieldsEnabled = true
+    var hideContactFieldsEnabled = false
 
     @JvmField
-    var deleteDetectEnabled = true
+    var deleteDetectEnabled = false
 
     @JvmField
-    var stickyEnhanceEnabled = true
+    var stickyEnhanceEnabled = false
 
     @JvmField
-    var unreadBadgeEnabled = true
+    var unreadBadgeEnabled = false
 
     @JvmField
-    var tabCustomEnabled = true
+    var tabCustomEnabled = false
 
     @JvmField
-    var callFeaturesEnabled = true
+    var callFeaturesEnabled = false
 
     @JvmField
-    var shakeCustomEnabled = true
+    var shakeCustomEnabled = false
 
     @JvmField
-    var voiceForwardEnabled = true
+    var voiceForwardEnabled = false
 
     @JvmField
-    var blockWechatUpdate = true
+    var blockWechatUpdate = false
 
     @JvmField
     var cacheDir: String? = null
@@ -337,30 +337,30 @@ open class ModuleConfig {
             if (prefs == null) return cfg
             purgeLegacyKeys(prefs)
 
-            cfg.masterSwitch = prefs.getBoolean("ls_master_switch", true)
+            cfg.masterSwitch = prefs.getBoolean("ls_master_switch", false)
             cfg.peiyinApiKey = prefs.getStr("ls_peiyin_apikey", "")
             cfg.peiyinVoiceId = prefs.getStr("ls_peiyin_voiceid", "")
             cfg.wusoundVoiceId = prefs.getStr("ls_wusound_voiceid", "")
             cfg.wusoundPromptId = prefs.getStr("ls_wusound_promptid", "default")
 
-            cfg.announceText = prefs.getBoolean("ls_announce_text", true)
-            cfg.announceImage = prefs.getBoolean("ls_announce_image", true)
-            cfg.announceVideo = prefs.getBoolean("ls_announce_video", true)
-            cfg.announceCard = prefs.getBoolean("ls_announce_card", true)
-            cfg.announceFile = prefs.getBoolean("ls_announce_file", true)
-            cfg.announceLocation = prefs.getBoolean("ls_announce_location", true)
+            cfg.announceText = prefs.getBoolean("ls_announce_text", false)
+            cfg.announceImage = prefs.getBoolean("ls_announce_image", false)
+            cfg.announceVideo = prefs.getBoolean("ls_announce_video", false)
+            cfg.announceCard = prefs.getBoolean("ls_announce_card", false)
+            cfg.announceFile = prefs.getBoolean("ls_announce_file", false)
+            cfg.announceLocation = prefs.getBoolean("ls_announce_location", false)
             cfg.announceSticker = prefs.getBoolean("ls_announce_sticker", false)
-            cfg.announceCall = prefs.getBoolean("ls_announce_call", true)
-            cfg.announceQuote = prefs.getBoolean("ls_announce_quote", true)
-            cfg.announceNickname = prefs.getBoolean("ls_announce_nickname", true)
+            cfg.announceCall = prefs.getBoolean("ls_announce_call", false)
+            cfg.announceQuote = prefs.getBoolean("ls_announce_quote", false)
+            cfg.announceNickname = prefs.getBoolean("ls_announce_nickname", false)
             cfg.announceGroup = prefs.getBoolean("ls_announce_group", false)
-            cfg.announceAt = prefs.getBoolean("ls_announce_at", true)
-            cfg.announceMiniProgram = prefs.getBoolean("ls_announce_miniprogram", true)
-            cfg.announceVideoChannel = prefs.getBoolean("ls_announce_videochannel", true)
-            cfg.announceChatHistory = prefs.getBoolean("ls_announce_chathistory", true)
+            cfg.announceAt = prefs.getBoolean("ls_announce_at", false)
+            cfg.announceMiniProgram = prefs.getBoolean("ls_announce_miniprogram", false)
+            cfg.announceVideoChannel = prefs.getBoolean("ls_announce_videochannel", false)
+            cfg.announceChatHistory = prefs.getBoolean("ls_announce_chathistory", false)
 
             cfg.announceIntervalMs = parseInt(prefs.getStr("ls_announce_interval_ms", "0"), 0L)
-            cfg.textTruncateEnabled = prefs.getBoolean("ls_text_truncate", true)
+            cfg.textTruncateEnabled = prefs.getBoolean("ls_text_truncate", false)
             cfg.textCutoffLen = parseInt(prefs.getStr("ls_text_truncate_len", "150"), 150)
 
             cfg.quietEnabled = prefs.getBoolean("ls_quiet_enabled", false)
@@ -387,24 +387,24 @@ open class ModuleConfig {
             cfg.deepseekModel = prefs.getStr("ls_ds_model", "deepseek-chat")
             cfg.deepseekPersona = prefs.getStr("ls_ds_persona", "")
 
-            cfg.typingIndicatorEnabled = prefs.getBoolean("ls_wp_typing", true)
-            cfg.chatFooterEnhanceEnabled = prefs.getBoolean("ls_wp_chatfooter", true)
-            cfg.chatUICustomEnabled = prefs.getBoolean("ls_wp_chatui", true)
-            cfg.batchMessageEnabled = prefs.getBoolean("ls_wp_batchmsg", true)
-            cfg.autoRemarkEnabled = prefs.getBoolean("ls_wp_autoremark", true)
-            cfg.searchEnhanceEnabled = prefs.getBoolean("ls_wp_search", true)
-            cfg.autoReplyEnabled = prefs.getBoolean("ls_wp_autoreply", true)
-            cfg.snsFeaturesEnabled = prefs.getBoolean("ls_wp_sns", true)
-            cfg.privacyFeaturesEnabled = prefs.getBoolean("ls_wp_privacy", true)
-            cfg.loginMonitorEnabled = prefs.getBoolean("ls_wp_loginmon", true)
-            cfg.hideContactFieldsEnabled = prefs.getBoolean("ls_wp_hidecontact", true)
-            cfg.deleteDetectEnabled = prefs.getBoolean("ls_wp_deldetect", true)
-            cfg.stickyEnhanceEnabled = prefs.getBoolean("ls_wp_sticky", true)
-            cfg.unreadBadgeEnabled = prefs.getBoolean("ls_wp_unread", true)
-            cfg.tabCustomEnabled = prefs.getBoolean("ls_wp_tabcustom", true)
-            cfg.callFeaturesEnabled = prefs.getBoolean("ls_wp_call", true)
-            cfg.shakeCustomEnabled = prefs.getBoolean("ls_wp_shake", true)
-            cfg.blockWechatUpdate = prefs.getBoolean("ls_wp_blockupdate", true)
+            cfg.typingIndicatorEnabled = prefs.getBoolean("ls_wp_typing", false)
+            cfg.chatFooterEnhanceEnabled = prefs.getBoolean("ls_wp_chatfooter", false)
+            cfg.chatUICustomEnabled = prefs.getBoolean("ls_wp_chatui", false)
+            cfg.batchMessageEnabled = prefs.getBoolean("ls_wp_batchmsg", false)
+            cfg.autoRemarkEnabled = prefs.getBoolean("ls_wp_autoremark", false)
+            cfg.searchEnhanceEnabled = prefs.getBoolean("ls_wp_search", false)
+            cfg.autoReplyEnabled = prefs.getBoolean("ls_wp_autoreply", false)
+            cfg.snsFeaturesEnabled = prefs.getBoolean("ls_wp_sns", false)
+            cfg.privacyFeaturesEnabled = prefs.getBoolean("ls_wp_privacy", false)
+            cfg.loginMonitorEnabled = prefs.getBoolean("ls_wp_loginmon", false)
+            cfg.hideContactFieldsEnabled = prefs.getBoolean("ls_wp_hidecontact", false)
+            cfg.deleteDetectEnabled = prefs.getBoolean("ls_wp_deldetect", false)
+            cfg.stickyEnhanceEnabled = prefs.getBoolean("ls_wp_sticky", false)
+            cfg.unreadBadgeEnabled = prefs.getBoolean("ls_wp_unread", false)
+            cfg.tabCustomEnabled = prefs.getBoolean("ls_wp_tabcustom", false)
+            cfg.callFeaturesEnabled = prefs.getBoolean("ls_wp_call", false)
+            cfg.shakeCustomEnabled = prefs.getBoolean("ls_wp_shake", false)
+            cfg.blockWechatUpdate = prefs.getBoolean("ls_wp_blockupdate", false)
 
             cfg.sensitiveFilterEnabled = prefs.getBoolean("ls_sensitive_enabled", false)
             cfg.sensitiveWords.clear()
@@ -429,7 +429,7 @@ open class ModuleConfig {
             cfg.keywordRules.addAll(KeywordRule.fromJson(prefs.getStr("ls_kwreply_rules", "[]")))
             cfg.customAnnounceFormat = prefs.getStr("ls_announce_fmt", "{sender}: {content}")
             cfg.antiRecall = prefs.getBoolean("ls_recall_enabled", false)
-            cfg.antiDetection = prefs.getBoolean("ls_anti_detection", true)
+            cfg.antiDetection = prefs.getBoolean("ls_anti_detection", false)
 
             cfg.announceWhitelist.clear()
             val wlStr = prefs.getStr("ls_tts_whitelist", "")
@@ -448,7 +448,7 @@ open class ModuleConfig {
                     if (t.isNotEmpty()) cfg.announceBlacklist.add(t)
                 }
             }
-            cfg.whitelistStrict = prefs.getBoolean("ls_tts_whitelist_strict", true)
+            cfg.whitelistStrict = prefs.getBoolean("ls_tts_whitelist_strict", false)
 
             return cfg
         }

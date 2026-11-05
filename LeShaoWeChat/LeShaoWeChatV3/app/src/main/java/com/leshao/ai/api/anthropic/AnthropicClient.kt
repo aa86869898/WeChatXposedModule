@@ -62,13 +62,22 @@ class AnthropicClient {
         if (temperature != null) {
             body.put("temperature", temperature)
         }
-        if (system != null && !system.isEmpty()) {
-            body.put("system", system)
-        }
+        val sysParts = StringBuilder()
+        if (system != null && !system.isEmpty()) sysParts.append(system)
 
         val arr = JSONArray()
         if (messages != null) {
             for (m in messages) {
+                // ★ Anthropic Messages API 只允许 user/assistant：把所有 system 消息合并进顶层 system 字段，
+                // 保证知识库/记忆/聊天记录对模型可见（不能直接丢弃）
+                if ("system".equals(m.role, ignoreCase = true)) {
+                    val sc = m.content
+                    if (!sc.isNullOrEmpty()) {
+                        if (sysParts.isNotEmpty()) sysParts.append("\n\n")
+                        sysParts.append(sc)
+                    }
+                    continue
+                }
                 val msg = JSONObject()
                 msg.put("role", m.role)
                 val contentArr = JSONArray()
@@ -79,6 +88,9 @@ class AnthropicClient {
                 msg.put("content", contentArr)
                 arr.put(msg)
             }
+        }
+        if (sysParts.isNotEmpty()) {
+            body.put("system", sysParts.toString())
         }
         body.put("messages", arr)
 

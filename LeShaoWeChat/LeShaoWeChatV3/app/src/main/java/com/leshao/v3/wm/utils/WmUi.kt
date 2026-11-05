@@ -105,7 +105,7 @@ class WmUi private constructor() {
 
             val gd = GradientDrawable()
             gd.setColor(AppColors.surfaceContainerHigh())
-            gd.setCornerRadius(dp(act, AppColors.SHAPE_MD_DP).toFloat())
+            gd.setCornerRadius(dp(act, AppColors.SHAPE_LG_DP).toFloat())
             btn.background = gd
 
             val lp = LinearLayout.LayoutParams(
@@ -125,9 +125,11 @@ class WmUi private constructor() {
             btn.setTextColor(AppColors.onPrimary())
             val gd = GradientDrawable()
             gd.setColor(C_ACCENT)
-            gd.setCornerRadius(dp(act, AppColors.SHAPE_FULL_DP).toFloat())
+            gd.setCornerRadius(dp(act, AppColors.SHAPE_MD_DP).toFloat())
             btn.background = gd
             btn.gravity = Gravity.CENTER
+            btn.layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(act, 44))
             return btn
         }
 

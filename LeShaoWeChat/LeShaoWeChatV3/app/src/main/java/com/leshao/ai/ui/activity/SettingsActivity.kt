@@ -56,6 +56,14 @@ class SettingsActivity : Activity() {
 
     private fun buildContentView(): View {
         val root = M3Page.root(this)
+        // 独立 Activity 边到边：顶部追加状态栏高度，避免标题被状态栏/刘海遮挡
+        try {
+            val resId = resources.getIdentifier("status_bar_height", "dimen", "android")
+            if (resId > 0) {
+                val sb = resources.getDimensionPixelSize(resId)
+                root.setPadding(root.paddingLeft, root.paddingTop + sb, root.paddingRight, root.paddingBottom)
+            }
+        } catch (ignored: Throwable) {}
         root.addView(M3Page.title(this, "AI 助手设置"))
 
         root.addView(M3Page.section(this, "功能开关", "修改后即时生效"))
@@ -199,11 +207,19 @@ class SettingsActivity : Activity() {
         for (j in rows.indices) {
             rows[j]?.setSub(if (j == providerIndex) "当前使用" else "点击选择")
         }
+        // ★ 先写入配置再立即持久化（避免只更新 UI 不落盘）
+        saveFieldsToConfig()
+        config?.save()
+        com.leshao.ai.data.AiDataProvider.pushRefresh(this)
     }
 
     private fun resetToDefaults() {
         config?.reset()
         populateViews()
+        // ★ 恢复默认后立即持久化，避免依赖 onPause
+        val ok = config?.save() == true
+        com.leshao.ai.data.AiDataProvider.pushRefresh(this)
+        Toast.makeText(this, if (ok) "已恢复默认并保存" else "保存失败", Toast.LENGTH_SHORT).show()
     }
 
     private fun saveAndNotify() {

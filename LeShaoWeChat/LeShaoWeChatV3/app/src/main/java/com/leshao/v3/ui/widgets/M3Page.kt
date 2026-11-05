@@ -59,6 +59,8 @@ class M3Page private constructor() {
             val root = LinearLayout(ctx)
             root.orientation = LinearLayout.VERTICAL
             root.background = CandyUi.pageGradient()
+            // v3.0.456 玻璃浮层： elevation 投影让玻璃板"浮"在液态底帘之上
+            CandyUi.elevate(root)
             InsetsUtil.clipRounded(root)
             val m = dp(ctx, 12)
             // 全局规范: 页面左右边距 12dp，底部留白 12dp，避免页面根圆角区裁切底部按钮/圆角描边
@@ -111,14 +113,14 @@ class M3Page private constructor() {
             return v
         }
 
-        /** M3 内分割线（左侧留出图标宽度） */
+                /** M3 内分割线 · v3.0.457 玻璃硬分割（左侧留出图标宽度） */
         @JvmStatic
         fun divider(ctx: Context): View {
             val v = View(ctx)
             val lp = LinearLayout.LayoutParams(-1, 1)
             lp.setMargins(dp(ctx, 16), 0, 0, 0)
             v.layoutParams = lp
-            v.setBackgroundColor(AppColors.outlineVariant())
+            v.setBackgroundColor(AppColors.glassDivider())
             return v
         }
 
@@ -369,8 +371,8 @@ class M3Page private constructor() {
             return tv
         }
 
-        /**
-         * M3 滑杆：糖果粉纯色进度 + 圆形滑块 + surfaceContainerHighest 轨道
+                /**
+         * M3 滑杆 · v3.0.457 玻璃液态：玻璃轨道 + 液态渐变填充 + 玻璃泡滑块
          * （framework SeekBar，避免 appcompat 属性碰撞）。
          */
         @JvmStatic
@@ -383,11 +385,13 @@ class M3Page private constructor() {
                     sb.thumbTintList = null
                     sb.progressBackgroundTintList = null
                 }
+                // 轨道：玻璃半透明槽
                 val track = GradientDrawable()
                 track.shape = GradientDrawable.RECTANGLE
                 track.cornerRadius = h / 2f
-                track.setColor(AppColors.surfaceContainerHighest())
+                track.setColor(AppColors.glassTrack())
 
+                // 填充：主色实底（ClipDrawable 裁切）
                 val fill = GradientDrawable()
                 fill.shape = GradientDrawable.RECTANGLE
                 fill.cornerRadius = h / 2f
@@ -397,12 +401,14 @@ class M3Page private constructor() {
                 val clip = ClipDrawable(fill, Gravity.START, ClipDrawable.HORIZONTAL)
                 clip.level = 5000
 
+                // 滑块：白色玻璃泡 + 主色描边环
                 val thumbSize = dp(ctx, 24)
                 val thumb = GradientDrawable()
                 thumb.shape = GradientDrawable.OVAL
                 thumb.cornerRadius = thumbSize / 2f
                 thumb.setSize(thumbSize, thumbSize)
-                thumb.setColor(AppColors.primary())
+                thumb.setColor(0xFFFFFFFF.toInt())
+                thumb.setStroke(dp(ctx, 3), AppColors.primary())
 
                 sb.background = track
                 sb.progressDrawable = clip
@@ -414,7 +420,7 @@ class M3Page private constructor() {
                 try {
                     sb.progressTintList = ColorStateList.valueOf(AppColors.primary())
                     sb.thumbTintList = ColorStateList.valueOf(AppColors.primary())
-                    sb.progressBackgroundTintList = ColorStateList.valueOf(AppColors.surfaceContainerHighest())
+                    sb.progressBackgroundTintList = ColorStateList.valueOf(AppColors.glassTrack())
                 } catch (ignored: Throwable) {
                 }
             }

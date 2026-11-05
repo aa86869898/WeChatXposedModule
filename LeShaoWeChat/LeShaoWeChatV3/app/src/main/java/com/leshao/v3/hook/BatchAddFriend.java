@@ -252,10 +252,10 @@ private static void injectButton(final Activity act) {
         final float d = act.getResources().getDisplayMetrics().density;
         final SharedPreferences sp = ContextManager.getPrefs();
 
-        boolean exOwner = sp != null && sp.getBoolean("ls_batch_add_exclude_owner", true);
-        boolean exAdmin = sp != null && sp.getBoolean("ls_batch_add_exclude_admin", true);
-        boolean exSelf = sp != null && sp.getBoolean("ls_batch_add_exclude_self", true);
-        boolean exFriend = sp != null && sp.getBoolean("ls_batch_add_exclude_friend", true);
+        boolean exOwner = sp != null && sp.getBoolean("ls_batch_add_exclude_owner", false);
+        boolean exAdmin = sp != null && sp.getBoolean("ls_batch_add_exclude_admin", false);
+        boolean exSelf = sp != null && sp.getBoolean("ls_batch_add_exclude_self", false);
+        boolean exFriend = sp != null && sp.getBoolean("ls_batch_add_exclude_friend", false);
         int delayMin = sp != null ? sp.getInt("ls_batch_add_delay_min", 2) : 2;
         int delayMax = sp != null ? sp.getInt("ls_batch_add_delay_max", 5) : 5;
         String greeting = sp != null ? sp.getString("ls_batch_add_greeting", "") : "";
@@ -267,7 +267,7 @@ private static void injectButton(final Activity act) {
         TextView title = new TextView(act);
         title.setText("批量加好友");
         title.setTextSize(16);
-        title.setTextColor(AppColors.TEXT_TITLE);
+        title.setTextColor(AppColors.textTitle());
         title.setTypeface(null, Typeface.BOLD);
         title.setGravity(Gravity.CENTER);
         title.setPadding(dp(act, 16), dp(act, 16), dp(act, 16), dp(act, 10));
@@ -277,7 +277,7 @@ private static void injectButton(final Activity act) {
         final List<Member> members = new ArrayList<>();
         final TextView countTv = new TextView(act);
         countTv.setTextSize(13);
-        countTv.setTextColor(AppColors.TEXT_NOTE);
+        countTv.setTextColor(AppColors.textNote());
         countTv.setText("尚未选择群成员");
 
         LinearLayout rowPick = new LinearLayout(act);
@@ -291,14 +291,14 @@ private static void injectButton(final Activity act) {
         TextView tvPick = new TextView(act);
         tvPick.setText("选择群成员");
         tvPick.setTextSize(15);
-        tvPick.setTextColor(AppColors.TEXT_TITLE);
+        tvPick.setTextColor(AppColors.textTitle());
         tvPick.setTypeface(null, Typeface.BOLD);
         pickTextCol.addView(tvPick);
         countTv.setPadding(0, dp(act, 3), 0, 0);
         pickTextCol.addView(countTv);
         rowPick.addView(pickTextCol);
 
-        TextView btnPick = pillBtn(act, d, "选择成员", AppColors.ACCENT, AppColors.WHITE_TEXT);
+        TextView btnPick = pillBtn(act, d, "选择成员", AppColors.accent(), AppColors.onPrimary());
         rowPick.addView(btnPick);
         root.addView(rowPick);
 
@@ -328,19 +328,19 @@ private static void injectButton(final Activity act) {
         TextView tvDelay = new TextView(act);
         tvDelay.setText("随机延迟");
         tvDelay.setTextSize(13);
-        tvDelay.setTextColor(AppColors.TEXT_BODY);
+        tvDelay.setTextColor(AppColors.textBody());
         tvDelay.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
         rowDelay.addView(tvDelay);
         final EditText etMin = numInput(act, d, String.valueOf(delayMin));
         TextView tvTilde = new TextView(act);
         tvTilde.setText("~");
-        tvTilde.setTextColor(AppColors.TEXT_NOTE);
+        tvTilde.setTextColor(AppColors.textNote());
         tvTilde.setPadding(dp(act, 8), 0, dp(act, 8), 0);
         final EditText etMax = numInput(act, d, String.valueOf(delayMax));
         TextView tvSec = new TextView(act);
         tvSec.setText("秒");
         tvSec.setTextSize(13);
-        tvSec.setTextColor(AppColors.TEXT_BODY);
+        tvSec.setTextColor(AppColors.textBody());
         tvSec.setPadding(dp(act, 8), 0, 0, 0);
         rowDelay.addView(etMin, new LinearLayout.LayoutParams(dp(act, 56), -2));
         rowDelay.addView(tvTilde);
@@ -357,7 +357,7 @@ private static void injectButton(final Activity act) {
         TextView tvGreeting = new TextView(act);
         tvGreeting.setText("打招呼语");
         tvGreeting.setTextSize(13);
-        tvGreeting.setTextColor(AppColors.TEXT_BODY);
+        tvGreeting.setTextColor(AppColors.textBody());
         tvGreeting.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
         rowGreeting.addView(tvGreeting);
         final EditText etGreeting = textInput(act, d, greeting);
@@ -373,13 +373,13 @@ private static void injectButton(final Activity act) {
         TextView tvRecord = new TextView(act);
         tvRecord.setText("添加记录");
         tvRecord.setTextSize(13);
-        tvRecord.setTextColor(AppColors.TEXT_BODY);
+        tvRecord.setTextColor(AppColors.textBody());
         tvRecord.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
         rowRecord.addView(tvRecord);
         TextView btnRecord = new TextView(act);
         btnRecord.setText("查看记录");
         btnRecord.setTextSize(13);
-        btnRecord.setTextColor(AppColors.ACCENT);
+        btnRecord.setTextColor(AppColors.accent());
         btnRecord.setPadding(dp(act, 10), 0, 0, 0);
         btnRecord.setPaintFlags(btnRecord.getPaintFlags() | Paint.UNDERLINE_TEXT_FLAG);
         btnRecord.setOnClickListener(v -> {
@@ -399,8 +399,8 @@ private static void injectButton(final Activity act) {
         bottom.setGravity(Gravity.CENTER);
         bottom.setPadding(dp(act, 16), dp(act, 8), dp(act, 16), dp(act, 16));
 
-        TextView cancel = pillBtn(act, d, "取消", AppColors.DIVIDER, AppColors.TEXT_BODY);
-        TextView start = pillBtn(act, d, "开始添加", AppColors.ACCENT, AppColors.WHITE_TEXT);
+        TextView cancel = pillBtn(act, d, "取消", AppColors.divider(), AppColors.textBody());
+        TextView start = pillBtn(act, d, "开始添加", AppColors.accent(), AppColors.onPrimary());
         LinearLayout.LayoutParams bLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         bLp.leftMargin = dp(act, 8);
@@ -545,7 +545,7 @@ private static void injectButton(final Activity act) {
         // 标题
         final TextView title = new TextView(act);
         title.setTextSize(16);
-        title.setTextColor(AppColors.TEXT_TITLE);
+        title.setTextColor(AppColors.textTitle());
         title.setTypeface(null, Typeface.BOLD);
         title.setGravity(Gravity.CENTER);
         title.setPadding(dp(act, 16), dp(act, 14), dp(act, 16), dp(act, 10));
@@ -554,12 +554,12 @@ private static void injectButton(final Activity act) {
         // 搜索框（粗边框）
         final EditText search = new EditText(act);
         search.setHint("搜索群成员");
-        search.setHintTextColor(AppColors.TEXT_NOTE);
+        search.setHintTextColor(AppColors.textNote());
         search.setTextSize(14);
-        search.setTextColor(AppColors.TEXT_TITLE);
+        search.setTextColor(AppColors.textTitle());
         search.setSingleLine(true);
         search.setPadding(dp(act, 14), dp(act, 8), dp(act, 14), dp(act, 8));
-        search.setBackground(roundBg(act, d, AppColors.INPUT_BG, dp(act, 20), dp(act, 1f), AppColors.DIVIDER));
+        search.setBackground(roundBg(act, d, AppColors.inputBg(), dp(act, 20), dp(act, 1f), AppColors.divider()));
         LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         slp.setMargins(dp(act, 16), 0, dp(act, 16), dp(act, 8));
@@ -613,9 +613,9 @@ private static void injectButton(final Activity act) {
         bottom.setGravity(Gravity.CENTER);
         bottom.setPadding(dp(act, 12), dp(act, 8), dp(act, 12), dp(act, 16));
 
-        TextView cancel = pillBtn(act, d, "取消", AppColors.DIVIDER, AppColors.TEXT_BODY);
-        TextView toggle = pillBtn(act, d, "全选", AppColors.CANDY_PINK, AppColors.WHITE_TEXT);
-        TextView confirm = pillBtn(act, d, "确定", AppColors.ACCENT, AppColors.WHITE_TEXT);
+        TextView cancel = pillBtn(act, d, "取消", AppColors.divider(), AppColors.textBody());
+        TextView toggle = pillBtn(act, d, "全选", AppColors.candyPink(), AppColors.onPrimaryContainer());
+        TextView confirm = pillBtn(act, d, "确定", AppColors.accent(), AppColors.onPrimary());
 
         final boolean[] allOn = {false};
         toggle.setOnClickListener(v -> {
@@ -712,14 +712,14 @@ private static void injectButton(final Activity act) {
         TextView name = new TextView(act);
         name.setText(m.displayName);
         name.setTextSize(14);
-        name.setTextColor(AppColors.TEXT_TITLE);
+        name.setTextColor(AppColors.textTitle());
         textCol.addView(name);
 
         if (!m.username.equals(m.displayName)) {
             TextView wxid = new TextView(act);
             wxid.setText(m.username);
             wxid.setTextSize(11);
-            wxid.setTextColor(AppColors.TEXT_NOTE);
+            wxid.setTextColor(AppColors.textNote());
             wxid.setPadding(0, dp(act, 2), 0, 0);
             textCol.addView(wxid);
         }
@@ -986,7 +986,7 @@ private static void injectButton(final Activity act) {
         TextView tv = new TextView(act);
         tv.setText(label);
         tv.setTextSize(14);
-        tv.setTextColor(AppColors.TEXT_BODY);
+        tv.setTextColor(AppColors.textBody());
         tv.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
         row.addView(tv);
 
@@ -1035,10 +1035,10 @@ private static void injectButton(final Activity act) {
         et.setInputType(InputType.TYPE_CLASS_NUMBER);
         et.setText(value);
         et.setTextSize(13);
-        et.setTextColor(AppColors.TEXT_TITLE);
+        et.setTextColor(AppColors.textTitle());
         et.setGravity(Gravity.CENTER);
         et.setPadding(dp(act, 6), dp(act, 4), dp(act, 6), dp(act, 4));
-        et.setBackground(roundBg(act, d, AppColors.INPUT_BG, dp(act, 12), dp(act, 1f), AppColors.DIVIDER));
+        et.setBackground(roundBg(act, d, AppColors.inputBg(), dp(act, 12), dp(act, 1f), AppColors.divider()));
         return et;
     }
 
@@ -1049,10 +1049,10 @@ private static void injectButton(final Activity act) {
         et.setHint("选填，留空则不发送验证语");
         et.setText(value);
         et.setTextSize(13);
-        et.setTextColor(AppColors.TEXT_TITLE);
-        et.setHintTextColor(AppColors.TEXT_NOTE);
+        et.setTextColor(AppColors.textTitle());
+        et.setHintTextColor(AppColors.textNote());
         et.setPadding(dp(act, 10), dp(act, 6), dp(act, 10), dp(act, 6));
-        et.setBackground(roundBg(act, d, AppColors.INPUT_BG, dp(act, 12), dp(act, 1f), AppColors.DIVIDER));
+        et.setBackground(roundBg(act, d, AppColors.inputBg(), dp(act, 12), dp(act, 1f), AppColors.divider()));
         return et;
     }
 
@@ -1063,7 +1063,8 @@ private static void injectButton(final Activity act) {
         tv.setTextColor(fg);
         tv.setGravity(Gravity.CENTER);
         tv.setPadding(dp(act, 22), dp(act, 8), dp(act, 22), dp(act, 8));
-        tv.setBackground(roundBg(act, d, bg, dp(act, 20), 0, 0));
+        tv.setMinimumHeight(dp(act, 38));
+        tv.setBackground(roundBg(act, d, bg, AppColors.SHAPE_MD_DP, 0, 0));
         return tv;
     }
 
@@ -1073,7 +1074,7 @@ private static void injectButton(final Activity act) {
                 LinearLayout.LayoutParams.MATCH_PARENT, 1);
         lp.setMargins(dp(act, 16), dp(act, 8), dp(act, 16), dp(act, 6));
         v.setLayoutParams(lp);
-        v.setBackgroundColor(AppColors.DIVIDER);
+        v.setBackgroundColor(AppColors.divider());
         return v;
     }
 
@@ -1089,17 +1090,15 @@ private static void injectButton(final Activity act) {
     }
 
     private static Drawable makeCheckbox(Activity act, float d, boolean checked) {
-        int size = dp(act, 22);
+        int size = dp(act, 28);
         Bitmap bm = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bm);
         if (checked) {
             Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
-            fill.setShader(new android.graphics.LinearGradient(0, 0, size, size,
-                    new int[]{AppColors.gradientStart(), AppColors.gradientMid(), AppColors.gradientEnd()},
-                    null, android.graphics.Shader.TileMode.CLAMP));
+            fill.setColor(AppColors.primary());
             canvas.drawCircle(size / 2f, size / 2f, size / 2f - 1, fill);
             Paint check = new Paint(Paint.ANTI_ALIAS_FLAG);
-            check.setColor(Color.WHITE);
+            check.setColor(AppColors.onPrimary());
             check.setStrokeWidth(dp(act, 2.2f));
             check.setStyle(Paint.Style.STROKE);
             check.setStrokeCap(Paint.Cap.ROUND);
@@ -1109,7 +1108,7 @@ private static void injectButton(final Activity act) {
         } else {
             Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG);
             stroke.setStyle(Paint.Style.STROKE);
-            stroke.setColor(AppColors.DIVIDER);
+            stroke.setColor(AppColors.outline());
             stroke.setStrokeWidth(dp(act, 2));
             canvas.drawCircle(size / 2f, size / 2f, size / 2f - 1, stroke);
         }

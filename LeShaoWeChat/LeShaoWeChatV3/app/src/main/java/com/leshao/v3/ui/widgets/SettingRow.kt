@@ -155,26 +155,17 @@ class SettingRow(ctx: Context, icon: String?, title: String?, sub: String?) : Li
     /** v974: 用联系人/群真实头像替换图标位(加载失败回退首字母底色块)。 */
     fun avatar(username: String?): SettingRow {
         try {
-            if (mIcon == null || TextUtils.isEmpty(username)) return this
+            if (TextUtils.isEmpty(username)) return this
             val d = resources.displayMetrics.density
-            val size = (36 * d).toInt()
+            val size = (40 * d).toInt()
             val iv = ImageView(context)
             iv.scaleType = ImageView.ScaleType.CENTER_CROP
             val fallback = AvatarHelper.letterAvatar(
                 username!!.substring(0, Math.min(1, username.length)), size)
             AvatarHelper.loadAvatarAsync(iv, username, size, fallback)
-            var lp = mIcon!!.layoutParams as? LayoutParams
-            if (lp == null) {
-                lp = LayoutParams(size, size)
-                lp.marginEnd = (12 * d).toInt()
-            }
-            val idx = indexOfChild(mIcon)
-            if (idx >= 0) {
-                removeView(mIcon)
-                addView(iv, idx, lp)
-            } else {
-                addView(iv, 0, lp)
-            }
+            val lp = LayoutParams(size, size)
+            lp.marginEnd = (12 * d).toInt()
+            addView(iv, 0, lp)
         } catch (ignored: Throwable) {}
         return this
     }

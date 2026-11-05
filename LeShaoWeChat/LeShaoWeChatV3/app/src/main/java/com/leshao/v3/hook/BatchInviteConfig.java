@@ -38,8 +38,8 @@ public final class BatchInviteConfig {
     public static final String K_REASON = "ls_batch_invite_reason";
 
     public static final boolean DEFAULT_ENABLED = false;
-    public static final int DEFAULT_DELAY_MIN = 2;
-    public static final int DEFAULT_DELAY_MAX = 5;
+    public static final int DEFAULT_DELAY_MIN = 4;
+    public static final int DEFAULT_DELAY_MAX = 8;
     /** 默认邀请理由：非好友/强校验群留空可能被拒，给一个中性默认值。 */
     public static final String DEFAULT_REASON = "邀请你加入群聊";
     /** 延迟上限的安全封顶（秒），避免误填造成长时间占用。 */
@@ -230,7 +230,7 @@ public final class BatchInviteConfig {
         bottom.setGravity(Gravity.CENTER);
 
         TextView cancel = pillBtn(act, "取消", AppColors.text2(), false);
-        TextView save = pillBtn(act, "保存", AppColors.whiteTextOnAccent(), true);
+        TextView save = pillBtn(act, "保存", AppColors.onPrimary(), true);
         LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(-2, -2);
         blp.leftMargin = dp(act, 10);
         blp.rightMargin = dp(act, 10);
@@ -270,7 +270,7 @@ public final class BatchInviteConfig {
         et.setPadding(dp(act, 6), dp(act, 5), dp(act, 6), dp(act, 5));
         android.graphics.drawable.GradientDrawable gd = new android.graphics.drawable.GradientDrawable();
         gd.setColor(AppColors.inputBg());
-        gd.setCornerRadius(dp(act, 10));
+        gd.setCornerRadius(dp(act, AppColors.SHAPE_INPUT_DP));
         gd.setStroke(dp(act, 1), AppColors.divider());
         et.setBackground(gd);
         return et;
@@ -282,17 +282,18 @@ public final class BatchInviteConfig {
         tv.setTextSize(14);
         tv.setGravity(Gravity.CENTER);
         tv.setPadding(dp(act, 26), dp(act, 8), dp(act, 26), dp(act, 8));
+        tv.setMinimumHeight(dp(act, 38));
         if (filled) {
             tv.setTextColor(color);
             android.graphics.drawable.GradientDrawable gd = new android.graphics.drawable.GradientDrawable();
             gd.setColor(AppColors.accent());
-            gd.setCornerRadius(dp(act, 20));
+            gd.setCornerRadius(dp(act, AppColors.SHAPE_MD_DP));
             tv.setBackground(gd);
         } else {
             tv.setTextColor(color);
             android.graphics.drawable.GradientDrawable gd = new android.graphics.drawable.GradientDrawable();
             gd.setColor(AppColors.inputBg());
-            gd.setCornerRadius(dp(act, 20));
+            gd.setCornerRadius(dp(act, AppColors.SHAPE_MD_DP));
             gd.setStroke(dp(act, 1), AppColors.divider());
             tv.setBackground(gd);
         }

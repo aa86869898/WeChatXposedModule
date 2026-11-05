@@ -56,6 +56,7 @@ public final class PlusMenuInjector {
 
     /** 兜底锚点：锚点字符串扫描失败时直接尝试的控制器类名（文档 §6.3 锚点表）。 */
     private static final String[] CONTROLLER_FALLBACK = {
+            "com.tencent.mm.ui.zg",   // 8.0.79 实测宿主（含 PlusSubMenuHelper 字符串）
             "com.tencent.mm.ui.wg"
     };
 
@@ -576,7 +577,7 @@ public final class PlusMenuInjector {
         } else {
             tv.setTextSize(15);
         }
-        tv.setTextColor(sNativeTextColor != 0 ? sNativeTextColor : Color.parseColor("#1A1A1A"));
+        tv.setTextColor(sNativeTextColor != 0 ? sNativeTextColor : AppColors.onSurface());
         tv.setTypeface(Typeface.DEFAULT);
         LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,

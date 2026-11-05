@@ -2386,7 +2386,7 @@ class AudioMixEditorPage private constructor(
         val tv = TextView(ctx)
         tv.text = "▶"
         tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
-        tv.setTextColor(AppColors.whiteTextOnAccent())
+        tv.setTextColor(AppColors.onPrimary())
         tv.gravity = Gravity.CENTER
         val bg = GradientDrawable()
         bg.shape = GradientDrawable.OVAL
@@ -2519,7 +2519,7 @@ class AudioMixEditorPage private constructor(
             }
         }, "ls-amix-voice").start()
 
-        AlertDialog.Builder(ctx)
+        val ttsDlg = AlertDialog.Builder(ctx)
                 .setTitle("文字转语音")
                 .setView(box)
                 .setPositiveButton("生成并加入") { _, _ ->
@@ -2554,7 +2554,15 @@ class AudioMixEditorPage private constructor(
                     }, "ls-amix-tts").start()
                 }
                 .setNegativeButton("取消", null)
-                .show()
+                .create()
+        // 统一弹窗按钮颜色：主按钮主题色，取消按钮 onSurfaceVariant
+        ttsDlg.setOnShowListener {
+            try {
+                ttsDlg.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(AppColors.primary())
+                ttsDlg.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(AppColors.onSurfaceVariant())
+            } catch (ignored: Throwable) {}
+        }
+        ttsDlg.show()
     }
 
     private fun onAddRec() {
@@ -2602,6 +2610,13 @@ class AudioMixEditorPage private constructor(
                 .setNegativeButton("停止并加入", null)
                 .setPositiveButton("取消", null)
                 .create()
+        // 统一弹窗按钮颜色：主按钮主题色，取消按钮 onSurfaceVariant
+        recDialog.setOnShowListener {
+            try {
+                recDialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(AppColors.primary())
+                recDialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(AppColors.onSurfaceVariant())
+            } catch (ignored: Throwable) {}
+        }
 
         recording = true
         recorder?.startRecording()

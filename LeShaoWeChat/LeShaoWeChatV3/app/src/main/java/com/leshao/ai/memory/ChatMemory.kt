@@ -15,7 +15,8 @@ import java.util.concurrent.ConcurrentHashMap
 
 class ChatMemory {
     private val file: File
-    private val maxPerChat: Int
+    @Volatile
+    private var maxPerChat: Int
     private val buckets = ConcurrentHashMap<String, MutableList<ChatMessage>>()
 
     constructor(hostDataDir: String, maxPerChat: Int) : this(File(hostDataDir, DEFAULT_FILE), maxPerChat)
@@ -90,6 +91,7 @@ class ChatMemory {
 
     @Synchronized
     fun setMaxPerChat(n: Int) {
+        maxPerChat = if (n < 1) 1 else n
     }
 
     @Synchronized
@@ -113,13 +115,22 @@ class ChatMemory {
                 chats.put(e.key, arr)
             }
             root.put("chats", chats)
-            FileOutputStream(file, false).use { out ->
+            val tmp = File(parent, file.name + ".tmp")
+            FileOutputStream(tmp, false).use { out ->
                 out.write(root.toString(2).toByteArray(StandardCharsets.UTF_8))
+            }
+            // ★ 原子替换，防止进程被杀留下半截 JSON
+            if (!tmp.renameTo(file)) {
+                tmp.delete()
+                com.leshao.v3.LogWriter.log("ChatMemory", "persist renameTo fail")
+                return false
             }
             return true
         } catch (e: IOException) {
+            com.leshao.v3.LogWriter.log("ChatMemory", "persist err: " + e)
             return false
         } catch (e: JSONException) {
+            com.leshao.v3.LogWriter.log("ChatMemory", "persist json err: " + e)
             return false
         }
     }
@@ -132,15 +143,20 @@ class ChatMemory {
         try {
             FileInputStream(file).use { fis ->
                 val data = ByteArray(file.length().toInt())
-                val read = fis.read(data)
-                if (read <= 0) {
-                    return
+                var off = 0
+                while (off < data.size) {
+                    val n = fis.read(data, off, data.size - off)
+                    if (n < 0) break
+                    off += n
                 }
-                val root = JSONObject(String(data, 0, read, StandardCharsets.UTF_8))
+                if (off <= 0) return
+                val root = JSONObject(String(data, 0, off, StandardCharsets.UTF_8))
                 val chats = root.optJSONObject("chats")
                 if (chats == null) {
                     return
                 }
+                // 清空现有桶再填充，避免设置页保存触发 load() 时重复追加（记忆重复）
+                buckets.clear()
                 val it = chats.keys()
                 while (it.hasNext()) {
                     val chatId = it.next() as String
@@ -159,7 +175,9 @@ class ChatMemory {
                 }
             }
         } catch (e: IOException) {
+            com.leshao.v3.LogWriter.log("ChatMemory", "load err: " + e)
         } catch (e: JSONException) {
+            com.leshao.v3.LogWriter.log("ChatMemory", "load json err: " + e)
         }
     }
 

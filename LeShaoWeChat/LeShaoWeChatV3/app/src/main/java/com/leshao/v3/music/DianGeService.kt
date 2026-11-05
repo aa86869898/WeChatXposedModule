@@ -183,22 +183,35 @@ final class DianGeService private constructor() {
             }
         }
 
-        /** 发送点歌受理提示: 优先微信原生引用(引用点歌原消息), 失败回退普通文本。 */
+        /**
+         * 发送点歌受理提示。
+         *
+         * v3.0.579: 改为「纯文本优先」——8.0.79 真实 dex 复核确认原生引用链
+         * (MsgQuoteItem / dx0.r / k0.I) 的字段与静态方法已全部失效，引用链必然失败，
+         * 而它失败前可能已经占用了发送时机，导致受理提示整体发不出。
+         * 现在直接走已验证的文本链 (SendMsgMgr.Jj → Builder → e9)，并把真实结果写日志。
+         */
         private fun sendAcceptNotice(cl: ClassLoader?, talker: String, song: String?,
                                      quoted: Any?, ahead: Int) {
             val text = buildNoticeText(song, ahead)
-            var quotedOk = false
-            if (quoted != null) {
-                try {
-                    quotedOk = WeChatMessenger.sendQuoteAndAt(quoted, talker, "", text, cl)
-                } catch (t: Throwable) {
-                    LogWriter.log(TAG, "原生引用受理提示失败: " + t.message)
-                }
-            }
-            if (quotedOk) {
-                LogWriter.log(TAG, "受理提示(引用): " + text)
+            val ok = reply(cl, talker, text)
+            if (ok) {
+                LogWriter.log(TAG, "受理提示已发送: " + text)
             } else {
-                reply(cl, talker, text)
+                // 二次兜底：直接调用 SendMsgMgr（绕过 GroupFeatures 的其它链路）
+                val loader = cl
+                val ok2 = if (loader == null) {
+                    LogWriter.log(TAG, "受理提示二次兜底跳过: ClassLoader 为空")
+                    false
+                } else {
+                    try {
+                        com.leshao.v3.wm.utils.WmReflect.sendTextMsg(loader, text, talker)
+                    } catch (t: Throwable) {
+                        LogWriter.log(TAG, "受理提示二次兜底异常: " + t.message)
+                        false
+                    }
+                }
+                LogWriter.log(TAG, "受理提示" + (if (ok2) "二次兜底成功: " else "发送失败: ") + text)
             }
         }
 
@@ -574,12 +587,14 @@ final class DianGeService private constructor() {
             return text
         }
 
-        private fun reply(cl: ClassLoader?, talker: String, text: String) {
-            try {
-                GroupFeatures.sendTextMessage(cl, talker, text)
-                LogWriter.log(TAG, "回复: " + text)
+        private fun reply(cl: ClassLoader?, talker: String, text: String): Boolean {
+            return try {
+                val ok = GroupFeatures.sendTextMessage(cl, talker, text)
+                LogWriter.log(TAG, "回复(" + (if (ok) "OK" else "FAIL") + "): " + text)
+                ok
             } catch (t: Throwable) {
                 LogWriter.log(TAG, "回复失败: " + t.message)
+                false
             }
         }
 

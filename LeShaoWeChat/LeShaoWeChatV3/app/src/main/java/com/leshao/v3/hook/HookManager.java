@@ -65,6 +65,7 @@ public class HookManager {
             int idx = 0;
             int ok = 0;
             int fail = 0;
+            List<String> failedNames = new java.util.ArrayList<>();
             for (NamedTask task : tasks) {
                 if (runTask(task, idx + 1, total)) {
                     ok++;
@@ -72,10 +73,12 @@ public class HookManager {
                 } else {
                     fail++;
                     failCount.incrementAndGet();
+                    failedNames.add(task.name);
                 }
                 idx++;
             }
-            LogWriter.log(TAG, "activateAll DONE: " + ok + " OK, " + fail + " FAIL");
+            LogWriter.log(TAG, "activateAll DONE: " + ok + " OK, " + fail + " FAIL"
+                    + (failedNames.isEmpty() ? "" : " failed=" + failedNames));
         }, "leshao-hook-activate");
         // v1131: 守护线程, 避免常驻线程阻止进程退出
         t.setDaemon(true);

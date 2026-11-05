@@ -35,6 +35,7 @@ import android.widget.SeekBar;
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.db.VoiceHistoryDbHelper;
 import com.leshao.v3.hook.TtsVoiceSender;
+import com.leshao.v3.hook.WxResolver;
 import com.leshao.v3.ui.AppColors;
 import com.leshao.v3.ui.CandyUi;
 import com.leshao.v3.ui.FlyingProgressBar;
@@ -2644,6 +2645,10 @@ public class ChatFooterLongPressMenu {
     }
 
     private static Class<?> findClassIfExists(String className, ClassLoader loader) {
+        try {
+            Class<?> resolved = WxResolver.resolve(loader, className);
+            if (resolved != null) return resolved;
+        } catch (Throwable ignored) {}
         try {
             return Class.forName(className, false, loader);
         } catch (ClassNotFoundException e) {

@@ -58,10 +58,18 @@ public final class MomentsAutoLikeHook {
 
     private static final String UI_CLASS = "com.tencent.mm.plugin.sns.ui.improve.ImproveSnsTimelineUI";
     private static final String BIND_CLASS = "lk4.g";
-    private static final String BEAN_CLASS = "jk4.p";
+    // v3.0.467: 新版本 ImproveSnsInfo 为 dl4.p（旧 jk4.p 已迁移），getSnsInfo 由 Z0 改为 Y0
+    private static final String BEAN_CLASS = "dl4.p";
     private static final String SERVER_CLASS = "com.tencent.mm.plugin.sns.model.h6";
     private static final String SNS_INFO = "com.tencent.mm.plugin.sns.storage.SnsInfo";
-    private static final String DATA_UIC = "com.tencent.mm.plugin.sns.ui.improve.ImproveDataUIC";
+    // v3.0.529: 8.0.79 的 ImproveDataUIC 迁移到 improve.component.data 子包（旧 improve.ImproveDataUIC 已删除）。
+    // 旧版微信（8.0.78 及更早）仍走旧类名，新版优先新类名，再由 DexKit 字符串锚点兜底。
+    private static final String DATA_UIC_OLD = "com.tencent.mm.plugin.sns.ui.improve.ImproveDataUIC";
+    private static final String DATA_UIC_NEW = "com.tencent.mm.plugin.sns.ui.improve.component.data.ImproveDataUIC";
+    // v3.0.529: 8.0.79 中 ImproveInteractionUtil 被 R8 合并（gl4.r/gl4.w），SnsMethodCalculate 的源名
+    // "com.tencent.mm.plugin.sns.ui.improve.util.ImproveInteractionUtil" 仍是精准字符串锚点。
+    private static final String IUI_OLD = "com.tencent.mm.plugin.sns.ui.improve.util.ImproveInteractionUtil";
+    private static final String IUI_ANCHOR = "com.tencent.mm.plugin.sns.ui.improve.util.ImproveInteractionUtil";
     private static final int DEFAULT_REFRESH_MIN = 5;
 
     private static volatile ClassLoader sCl;
@@ -279,10 +287,10 @@ public final class MomentsAutoLikeHook {
         try {
             Class<?> bean = loadClass(cl, BEAN_CLASS);
             if (bean != null) {
-                // ① jk4.p.Z0()(getSnsInfo) after —— 渲染每行必取一次真实绑定后的 SnsInfo
+                // ① dl4.p.Y0()(getSnsInfo) after —— 渲染每行必取一次真实绑定后的 SnsInfo（旧 jk4.p.Z0 已改 Y0）
                 int z0hooked = 0;
                 for (Method z : bean.getDeclaredMethods()) {
-                    if (!"Z0".equals(z.getName()) || z.getParameterCount() != 0) continue;
+                    if (!"Y0".equals(z.getName()) || z.getParameterCount() != 0) continue;
                     Class<?> rt = z.getReturnType();
                     if (rt == null || !rt.getName().endsWith("storage.SnsInfo")) continue;
                     z.setAccessible(true);
@@ -297,7 +305,7 @@ public final class MomentsAutoLikeHook {
                     });
                     z0hooked++;
                 }
-                LogWriter.log(TAG, "hooked jk4.p.Z0 x" + z0hooked);
+                LogWriter.log(TAG, "hooked dl4.p.Y0 x" + z0hooked);
             } else {
                 LogWriter.log(TAG, "jk4.p not found (enum main off)");
             }
@@ -372,9 +380,28 @@ public final class MomentsAutoLikeHook {
 
         // v3.0.160: 手动正常点赞诊断 —— 真实 UI 入口 ImproveInteractionUtil.changeLikeStatus
         // （mk4.r/mk4.s.onClick 最终都走这里；日志确认原生赞路由与模块互不干扰，只读不拦截）
+        // v3.0.529: 8.0.79 该类被 R8 合并（gl4.r/gl4.w），用 SnsMethodCalculate 源名字符串锚点定位。
         try {
-            Class<?> iu = loadClass(cl, "com.tencent.mm.plugin.sns.ui.improve.util.ImproveInteractionUtil");
-            if (iu != null) {
+            Class<?> iu = loadClass(cl, IUI_OLD);
+            if (iu == null) {
+                // 新版：字符串锚点兜底（SnsMethodCalculate 源名包含完整旧类名）
+                try {
+                    List<String> classes = DexKitHelper.findMethodDeclClassByString(cl, IUI_ANCHOR);
+                    if (classes != null && !classes.isEmpty()) {
+                        for (String cn : classes) {
+                            if (cn == null || cn.indexOf('.') <= 0) continue;
+                            iu = loadClass(cl, cn);
+                            if (iu != null) {
+                                LogWriter.log(TAG, "ImproveInteractionUtil resolved via string anchor -> " + cn);
+                                break;
+                            }
+                        }
+                    }
+                } catch (Throwable ignored) {}
+            }
+            if (iu == null) {
+                LogWriter.log(TAG, "ImproveInteractionUtil not found (manual like diag off)");
+            } else {
                 int n = 0;
                 for (Method m : iu.getDeclaredMethods()) {
                     if (!"changeLikeStatus".equals(m.getName())) continue;
@@ -397,8 +424,6 @@ public final class MomentsAutoLikeHook {
                 }
                 if (n > 0) LogWriter.log(TAG, "hooked changeLikeStatus x" + n);
                 else LogWriter.log(TAG, "changeLikeStatus not found on ImproveInteractionUtil");
-            } else {
-                LogWriter.log(TAG, "ImproveInteractionUtil not found (manual like diag off)");
             }
         } catch (Throwable t) {
             LogWriter.log(TAG, "hook changeLikeStatus err: " + t);
@@ -453,14 +478,12 @@ public final class MomentsAutoLikeHook {
     }
 
     /** v3.0.160：安装 ImproveDataUIC.J7() 枚举 hook。类在 hook() 时可能尚未加载
-     *  （日志 "ImproveDataUIC not found"），时间线 onCreate 后会再次调用补装；已装则跳过。 */
-    /** v3.0.160：安装 ImproveDataUIC.J7() 枚举 hook。类在 hook() 时可能尚未加载
      *  （日志 "ImproveDataUIC not found"），时间线 onCreate 后会再次调用补装；已装则跳过。
      *  同时捕获 ImproveDataUIC.<init> 实例供文档 §7 定时原生刷新使用。 */
     private static void tryHookJ7(final ClassLoader cl) {
         if (sJ7Hooked) return;
         try {
-            final Class<?> duic = loadClass(cl, DATA_UIC);
+            final Class<?> duic = loadDataUIC(cl);
             if (duic == null) {
                 LogWriter.log(TAG, "ImproveDataUIC not found (enum J7 off, will retry on timeline open, refresh disabled)");
                 return;
@@ -486,7 +509,8 @@ public final class MomentsAutoLikeHook {
             }
             int n = 0;
             for (Method m : duic.getDeclaredMethods()) {
-                if (!"J7".equals(m.getName()) || m.getParameterCount() != 0) continue;
+                // v3.0.467: getLiveList 已由 J7 改为 M7()
+                if (!"M7".equals(m.getName()) || m.getParameterCount() != 0) continue;
                 m.setAccessible(true);
                 XposedBridge.hookMethod(m, new XC_MethodHook() {
                     @Override
@@ -686,9 +710,39 @@ public final class MomentsAutoLikeHook {
 
     private static Class<?> loadClass(ClassLoader cl, String name) {
         if (name == null) return null;
+        Class<?> c = WxResolver.resolve(cl, name);
+        if (c != null) return c;
         for (ClassLoader l : HookUtil.candidateLoaders(cl)) {
             try { return l.loadClass(name); } catch (Throwable ignored) {}
         }
+        return null;
+    }
+
+    /** v3.0.529：8.0.79 起 ImproveDataUIC 迁移到 improve.component.data 子包。 */
+    private static Class<?> loadDataUIC(ClassLoader cl) {
+        // 新版优先新类名；旧版优先旧类名；最后字符串锚点兜底。
+        String first = WeChatVersion.isNew() ? DATA_UIC_NEW : DATA_UIC_OLD;
+        Class<?> c = loadClass(cl, first);
+        if (c != null) return c;
+        String second = WeChatVersion.isNew() ? DATA_UIC_OLD : DATA_UIC_NEW;
+        c = loadClass(cl, second);
+        if (c != null) {
+            LogWriter.log(TAG, "ImproveDataUIC resolved via fallback name -> " + second);
+            return c;
+        }
+        try {
+            List<String> classes = DexKitHelper.findClassesByString(cl, "ImproveDataUIC");
+            if (classes != null && !classes.isEmpty()) {
+                for (String cn : classes) {
+                    if (cn == null || cn.indexOf('.') <= 0) continue;
+                    c = loadClass(cl, cn);
+                    if (c != null) {
+                        LogWriter.log(TAG, "ImproveDataUIC resolved via string anchor -> " + cn);
+                        return c;
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
         return null;
     }
 

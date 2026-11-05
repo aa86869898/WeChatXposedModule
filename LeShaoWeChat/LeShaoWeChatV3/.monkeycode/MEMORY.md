@@ -1,7 +1,3 @@
-# 用户指令记忆
-
-## 格式
-
 ### 用户指令条目
 [用户指令摘要]
 - Date: [YYYY-MM-DD]
@@ -22,19 +18,6 @@
   - 编译成功后必须给出 APK 下载链接（URL，不是文件路径），通过 deploy-website 部署 download.html 页面获取预览地址
   - 禁止 `git add -A`（工作区存在大量历史遗留删除项，易误提交）；每次提交前先 `git status --porcelain` 确认范围，提交范围需用户确认
   - 工作区 git 仓库根为 /workspace（上层），V3 路径前缀为 LeShaoWeChat/LeShaoWeChatV3/
-
-### v959 构建与发布流程
-- Date: 2026-09-22
-- Context: Agent 在执行 LeshaoAI 模块 v959 修复发布时总结
-- Category: 构建编译
-- Instructions:
-  - 编译命令: `cd /workspace/LeShaoWeChat/LeShaoWeChatV3 && ANDROID_HOME=/opt/android-sdk ./gradlew :app:assembleRelease --console=plain`（无 local.properties，必须 ANDROID_HOME；大改动后先 `./gradlew clean`）
-  - 版本号三处同步: app/build.gradle.kts(versionCode/versionName) + MainHook.java(MODULE_BUILD/MODULE_VERSION_CODE)
-  - APK 产物名规则: `LeShaoWeChat-v<versionCode>.apk`，需拷贝到 `download/` 与项目根目录两处
-  - 两个 index.html（根目录与 download/）必须同步且 diff 一致: 新版置顶为"最新版"，原最新版降级为"上一版"
-  - 验证: md5sum 一致 + 公网直链 `https://8899-796f33fc01a6a82b.monkeycode-ai.online/download/<apk>` 返回 200 且下载 md5 相同（8899 为 http.server，cwd=LeShaoWeChatV3）
-  - gradle.properties 的 aapt2 override 已指 /opt/android-sdk/build-tools/35.0.1/aapt2，勿改回
-  - 发布后校验: dexdump 确认新类已进 DEX（`/opt/android-sdk/build-tools/35.0.1/dexdump <apk> | rg "Lcom/leshao/ai/<类>;"`）
 
 ### 语音自动播放调试经验
 - Date: 2026-08-01
@@ -131,6 +114,8 @@
   - 发布：更新根目录 `index.html` 的下载链接与版本描述；启动下载服务器 `cd /workspace/LeShaoWeChat/LeShaoWeChatV3 && python3 upload_server.py`（8899 端口，同时提供 APK 下载与日志上传）
   - 用户侧日志回传位置：`/workspace/leshao_v3_log.txt`（微信日志通过 8899 上传服务器写入）
 
+  - 无 local.properties 时需 ANDROID_HOME=/opt/android-sdk（gradle.properties 的 aapt2 override 已指 /opt/android-sdk/build-tools/35.0.1/aapt2，勿改回）
+  - 大改动后先 `./gradlew clean`；发布后校验 dexdump 确认新类已进 DEX
 ### 交付规则：不生成源码包 + 16线程池断点续传下载服务器（固定）
 - Date: 2026-10-10
 - Context: 用户明确要求写死为固定规则，后续每次交付必须遵守
@@ -142,3 +127,94 @@
   - **交付只给「超高速下载页」一个链接**：`https://<端口>-796f33fc01a6a82b.monkeycode-ai.online/turbo-download.html`（页面内 JS 自动 16 线程分段并发下载并本地合并，实测约 3.6MB/s，是普通下载的 6 倍+）；**不要给发布主页（`/`）链接、不要给原始 APK 直链、不要给 aria2 命令、不要给任何其他下载入口**
   - `download/index.html` 与根 `index.html` 精简为：只保留「超高速下载」按钮 + 质检文档链接；**移除普通 APK 直链与源码 zip 链接**
   - 每次交付后验证 `turbo-download.html` 返回 200、`Range: bytes=0-1023` 返回 206、普通请求返回 200
+
+### Tinker 双 ClassLoader 根因（v3.0.577 关键经验）
+- Date: 2026-11-03
+- Context: TTS 播报失效/联系人获取失败/红包异常/长按菜单不显示，日志显示 hook 零捕获与存储链 Kernel not initialized
+- Category: 排错调试 / Hook 架构
+- Instructions:
+  - 根因：DexKit 扫描返回的 Class 来自 base.apk 平行副本 CL（`PathClassLoader`），微信运行时真实类由 Tinker `DelegateLastClassLoader` 加载；两套 CL 静态单例不通 → `pp0.i1` 副本未初始化 → `Kernel not initialized by MMApplication!`；hook 挂副本类上运行时零捕获
+  - 判据：`MsgReceiveHook` 打印「使用 Tinker 真实 CL DelegateLastClassLoader」=正常；`MessageHook` 未打印该行=挂错 CL
+  - 通用解法：**所有 Class 按类名在真实 CL 上重新解析**（`resolveOn`/`resolveInterfaceOr`）；`findTinkerClassLoader` 有 10s 冷却且启动早期常 null → 不能一次性调用，必须 base CL 先挂 + 后台 50×800ms 等真实 CL 补挂（`scheduleRealClRehook`）
+  - 存储绑定（8.0.79）：服务键必须用**接口** `po3.c4`（`h2 implements c4`），不能用实现类 f9（`pp0.i1.v(f9)` 恒 null）；`h2.Jj()→f9`（implements `ro3.m0`）、`h2.Aj()→j4`（implements `d8`）；服务定位器 `pp0.i1`（旧 gp0.j1 已删）
+  - f9 插入入口 `Mb(e9)`/`Nb(e9,boolean)`；MsgInfo 实体=`com.tencent.mm.storage.e9`，Storage=`f9`，RContact=`j4`
+  - 红包 scene `n6` 构造内部依赖 `pp0.i1` 内核 → 必须真实 CL 解析，且需在 grab 前守卫/后台覆盖 base CL 解析到的错误类
+  - 去重：base/real 双 CL 补挂用 `synchronizedSet` 记录已挂 Class，防回调翻倍；长按菜单 `pickRealClassLoader` 需 `attempt>=1` 就回退普通 CL（否则 `loader=null` → Class.forName bootstrap → 全 ClassNotFound）
+
+### 傻包TTS V2 引擎升级（v3.0.405→v3.0.409，与 v2.4-r1 文档对齐）
+- Date: 2026-10-17
+- Context: 按《豆包TTS免登录全套》v2.3/r2/v2.4-r1 逐版升级并修复问题
+- Category: 构建编译 / 环境配置 / 排错调试
+- Instructions:
+  - V2 引擎：`service/DoubaoTtsPool.kt`（与 v2.4-r1 参考 08_icl_multivoice/xposed/DoubaoTtsPool.kt 除 package 外逐行一致）；桥接 `service/DoubaoTtsV2Bridge.kt`（synthesize 流式收集 / ensureInit 幂等 / writeWav 通用解码 OGG+AAC）
+  - 格式以 client_stream 文件为准：samantha 主车道 = AAC（client_stream_samantha.py），voicegenie 兜底 = OGG（client_stream_voicegenie.py）；不要 WAV
+  - v3.0.409 新增 `service/DoubaoTtsGateway.kt`（HTTP 网关流式客户端，POST {base}/tts，对齐 client_stream 请求格式）；桥接车道顺序 = samantha 网关→Cookie 进程内直连（SamanthaTtsClient.kt）→voicegenie 网关→进程内池；设置页「豆包TTS 网关/Cookie 配置」（tts_samantha_base / tts_voicegenie_base / tts_samantha_cookie）
+  - 网关部署：gateway_samantha.py:8398（登录 Cookie）+ gateway_icl_fast.py:8399；手机填电脑局域网 IP；免登录 voicegenie 直连会被静默限流（no audio server silent），必须走 samantha 主车道
+  - r2 特性：DeviceProfile 指纹参数化+失败自动迁号，FIRST_FRAME_MS=30s；参考包只给 DEFAULT 一套实测指纹，第二套需用户提供（随机化会 session auth）
+  - 依赖：okhttp3:4.12.0 + okio:3.9.0 + kotlinx-coroutines-core:1.8.1（**必须在线构建**下载）；MainHook onReady 后台 ensureInit
+  - 调用点：CubeTtsPlayer / TTSPageView / TtsVoiceSender / AiAssistantPanel 全走 DoubaoTtsV2Bridge.writeWav；v1 DoubaoTtsClient.java 已移出源码（备份 /tmp/opencode/cleanup_backup/v1_src/）
+  - v3.0.408/409：voicegenie 桥接总预算 timeoutSec+35s（引擎 2 次重试不误判）；AutoGroupQr 过滤 isAbstract；MessageMenuHook 回退 A 层失败不提前装 B/C 层（防启动期类加载风险）
+  - 二次复检：引擎 diff + 格式对齐 + 版本号五处同步 + debug/release 编译 + 公网 206/200；工作区压缩包仅保留 v2.4-r1
+
+### 语音转发误转发修复：授权闸门 armed gate（v3.0.578 关键经验）
+- Date: 2026-11-04
+- Context: 群聊转发压缩包时，模块把私聊里别人发的旧语音一起转发进群（隐私外泄）
+- Category: 排错调试 / Hook 架构
+- Instructions:
+  - 现象日志：`[FwdFix][A] finish picked=[...@chatroom]` → 立即 `VF: doForward msgId=<旧语音>` → `TtsVoiceSender SceneVoice talker=...@chatroom`；真实意图是转发压缩包；事故前无 INJECT/VOICE_MARK
+  - 根因：`WxForwardReplaceHook` 的 `[FwdFix][A]`(MvvmContactListUI.finish) 与 `[FwdFix][B]`(MsgRetransmitUI.onActivityResult) 在**任意普通转发**时都会发送缓存语音；且 `pendingVoiceE9()` 对 `sVoiceMsgs` 取"最新一条"**无 TTL** → 旧语音被无限期复用
+  - 修复：引入**授权闸门** `sVoiceFwdArmed`/`sVoiceFwdArmedAt`/`VOICE_ARM_TTL=90s`；`voiceForwardArmed()`/`disarmVoiceForward()`
+  - 置位授权仅两处真实点击：`launchNativeVoiceForward`（模块「语音转发」项）与 `BQ_Q_142`（原生「转发」142 项点击处理器 `viewitems.yb#R(MenuItem,...)`，**仅 type==34 语音**才授权，非语音忽略）
+  - `[A]`/`[B]` 严格以 armed 为准（`pendMsgF = armed ? sVoicePendingMsg : null`），未授权直接放行不发送；发送完成/取消/目标过滤后立即 disarm
+  - 删除 `pendingVoiceE9()` 对 `sVoiceMsgs` 的无 TTL 兜底（旧语音无限复用根因）；`markVoiceForwardPending` 仅缓存不再构成可发送 pending
+  - 反编译佐证：`com.tencent.mm.ui.chatting.viewitems.yb#R(MenuItem,d,ym5.d)` 存在（classes87）；`MSG_TYPE_VOICE=34`
+  - 红线：未反射写微信字段、未激活原生语音发送链；语音仍走「微信原生选人 + 模块 TtsVoiceSender」
+  - 分身诊断文件说明：`dexkit_baseline.json` 仅全新健康扫描后导出、`signature_dump.txt` 仅 Debug 生成；配置在 prefs(`xposed_wechat_iso`)，非文件；提升 `CURRENT_MODULE_VERSION` 会令分身缓存失效并重扫
+  - 版本 v3.0.578 / 30578；`assembleRelease` 通过；公网 200 / Range 206
+
+### 8.0.79 真实 dex 权威签名表 + 发送/防撤回/红包链路修复（v3.0.579 关键经验）
+- Date: 2026-11-04
+- Context: 用户要求对 v3.0.579 做系统级全量审查；上一轮域审查提出「发送链全部失效/防撤回锚点不存在/红包 sendId 取错」三条高风险结论需真实 dex 复核
+- Category: Hook 架构 / 反编译核查
+- Instructions:
+  - **dex 定位方法**：`/tmp/opencode/wechat_dex/com.tencent.mm` 有 94 dex 且**存在同名类跨 dex 重复定义**（classes52-55 与 classes74-79 两套），`grep`/jadx 全目录会串味；必须用 class_defs 解析器精确定位类归属，再对单个 dex 做 `jadx --single-class`
+  - **文本发送真相**：`ni5.n0.c(no3.c1)` → `rt5.i5`（classes55，implements `no3.c1`）；`rt5.i5.Jj(String,String,II)V` → `Kj` → `Lj` 是官方入口，**有效**。`Lj` 内部走 `f61.t1.a(talker)` → `f61.s1`(Builder) → `o1=s1.a(); o1.a(); MsgRetransmitUI.l7(o1)`
+  - **f61.s1 字段语义**：`b`=talker、`d`=content、`e`=msgType、`f`=flag、`i`=scene(4 普通/5 特殊)、`l`=`f61.q1` 枚举（TEXT 常量字段名 `d`，不设则 `c()` 空转）、`j`=`l41.k7`；工厂 `f61.t1.a(String)`/`b(String,q1,int,Object)`
+  - **已删除**：`v51.r1`/`x51.b0`/`x51.a0`/`v51.r0`(仅 abstract 壳)/`f9.Bb`/`f9.O3`/`f9.Qc`/`f9.N3`/`e9.b1`/`e9.S1`
+  - **e9 实体**：`com.tencent.mm.storage.e9`(119 方法) extends `nx0.q3`，而 `nx0.q3` 就是 `im.c8`(59 方法，字段 getter/setter 全在此)。setter 实证：`setMsgId(J)`/`n1(J)`=svrId/`setType(I)`/`s1(I)`=status/`i1(I)`=isSend/`a1(J)`=createTime/`t1(String)`=talker/`Z0(String)`=content/`u1(I)`=talkerId；getter：`getMsgId()`/`H0()`=svrId/`getType()`/`M0()`=status/`z0()`=isSend/`getCreateTime()`/`N0()`=talker/`F0()`=content/`O0()`=talkerId。**F0 不是 svrId**（多处代码误用）
+  - **f9 存储**：`com.tencent.mm.storage.f9`(135 方法)：`k4(String,J)`=getBySvrId、`ud(J,e9,Z)`=update+notify、`td(J,e9)`=`ud(...,true)`、`Nb(e9,Z)J`/`Mb(e9)J`=insert、`Ra(String)`=getTable、`q8(String)`=getByMsgId
+  - **红包 h6/n6/e1**：`h6.i`=sendId、`h6.m`=nativeUrl、`h6.n`=sessionUserName、`h6.h`=e1；`n6.m`=sendId、`n6.n`=nativeUrl、`n6.h`=msgType(int)、`n6.i`=channel(int)、`n6.P`=timingIdentifier、`n6.s`=hbStatus、`n6.t`=receiveStatus、`n6.u`=statusMess；e1(`i5.e` 解析)：`q`=amount(分)、`r`=recNum、`t`=totalNum、`u`=totalAmount、`i`=sendNick、`Q`=sendUserName、`f`=statusMess、`A`=receiveStatus、`n`=sendId
+  - **双 CL 陷阱**：`RedPacketHook.scheduleSceneResolveRetry` 用真实 Tinker CL 重解析 n6/h6 后**必须重装 onGYNetEnd hook**，否则 hook 留在 base CL 旧类上永不触发（本轮修复，用 `sEndHooked` 幂等）
+  - **原生引用链已废**：`ou5.c1` 只剩 `<init>/invoke`（lambda）、`xp3.i` 只剩 `<init>/callback`、`dx0.r` 只剩 `requestRender/t` → `sendQuoteAndAt` 必然失败；且旧实现在读不到 msgId 时返回 true 造成"假成功不回退"，已改 false
+  - 点歌受理提示：改「纯文本优先」+ 二次兜底直调 `WmReflect.sendTextMsg` + `LsDianGe: 回复(OK/FAIL)` 结果日志
+  - 版本 v3.0.579 / 30579；APK 10,480,814 字节；公网 200 / Range 206
+
+### 「模块自发消息被乱转发 / 全量群发」根因与护栏（v3.0.580 关键经验）
+- Date: 2026-11-04
+- Context: 用户报告「乱转发、群发哪都是了」，要求用旧日志确认该链路是否仍在；日志 `分身leshao_v3_log.txt` 07:13:32 定量证实：一条点歌受理提示在 0.571 秒内被转发到 545 个群、约 1090 条（同一条内容触发两轮）
+- Category: 消息外发域 / 缺陷链分析
+- Instructions:
+  - **缺陷链 4 层叠加**（缺一不可，必须全堵）：① 模块没有「这条是我自己发的」概念；② `AutoForwardHook.onMsgInsert` 里 `isSend=-1` 且 getter 异常即放行；③ 去重 `if(svrId!=0 && !add(svrId)) return;` → svrId 为 0 时不去重；④ `forwardAll` 对目标列表裸循环，无节流无熔断
+  - **关键：事故发生在分身环境**，各分身 prefs 目录独立（`UnifiedPrefs` 各身份读写各自 prefs），A 分身发出的消息同步到 B 分身时是 `isSend=0` + 真实 `msgSvrId` 的「别人发来的消息」，**本地账本拦不住** → 必须有「只看内容」的识别规则（`isModuleNoticeText()` 用配置的点歌提示模板，`{song}` → `.*`）
+  - **`Pattern.quote` 陷阱**：不能「先 quote 整串再 replace `{song}`」，`\Q...\E` 块内无法替换；必须按占位符 `split` 后逐段 quote 再拼接 `.*`
+  - `SelfMsgGuard`（`v3/hook/SelfMsgGuard.java`）：账本 `talker|type|hash(content)`(120s) + `hash(content)`(20s) + `talker|type` 通配(45s，语音/图片) + `msgId` 账本；`consume()` 一次性、`isSelf()` 只读（**接收侧统一用 `isSelf`**，否则第一个 hook 消费掉会导致其它 hook 漏判）；`allowBroadcast()` 熔断（>600 直接拒；≥20 条 60 秒 ≤6 次、间隔 ≥3s）
+  - 发送入口打标点（全项目 `sendTextMsg(` 10 处全部收敛到 `WmReflect.sendTextMsg`）：`WmReflect.sendTextMsg` / `GroupFeatures.sendTextMessage` / `WeChatMessenger.sendText` / `TtsVoiceSender.sendVoiceData`(type 34)
+  - `GroupFeatures.insertViaMsgInfo`：`i1(1)` 后**必须回读 isSend**，≠1 放弃入库（否则产生一条「看起来是别人发来」的消息，源头就脏了）
+  - `MsgReceiveHook` / `MessageHook` 的 `isSend != 1` 分支前都要加 `SelfMsgGuard.isSelf` 拦截，否则提示语会触发关键词自动回复/语音播报再发消息（自我循环）
+  - 内容读取：8.0.79 用 `F0()`；`field_content` 声明在父类 `im.c8`，`getDeclaredField` 在 e9 上取不到，必须沿继承链找
+  - 批量发送：独立单线程 + `AtomicBoolean` 单批互斥 + 每条 180~420ms 随机间隔 + 连续失败 5 条中止；绝不能在微信 insert 回调线程里裸循环
+  - UI：自动转发目标数实时显示，>50 二次确认，>200 红色告警
+  - 版本 v3.0.580 / 30580；APK 10,489,025 字节，MD5 `53155c333df61718485176b224ea877f`；公网 200 / Range 206
+
+### 自发消息跨分身识别升级为零宽水印（v3.0.581 关键经验）
+- Date: 2026-11-05
+- Context: v3.0.580 遗留「动态文案跨分身同步仍靠本地账本」漏拦风险，本轮以内容水印封堵
+- Category: Hook 架构 / 排错调试
+- Instructions:
+  - 水印常量 `SelfMsgGuard.MARK = "\u200B\u200C"`；`watermark()` 幂等、`hasWatermark()` 扫描正文起点或 @ 前缀后 96 字符内
+  - **@ 兼容红线**：@ 高亮依赖 content 以 `@昵称\u2005` 开头，水印必须插在提及前缀之后，绝不能加在 `@` 前；只有 @ 无正文时追加末尾
+  - 接入点只需收敛 4 个函数：`WmReflect.sendTextMsg`、`GroupFeatures.sendTextMessage`、`WeChatMessenger.sendText`、`WeChatMessenger.sendQuoteAndAt`，其余调用点自动覆盖
+  - 接收侧统一 `isSelf` / `SendGuard.isBotSent`（改为 `hasWatermark`），禁止再写裸 `startsWith(MARK)`
+  - `norm()` 负责剥离零宽字符，保证账本键与去重键在打水印后仍一致
+  - 消息伪装走 UI 链不经这些函数、无固定水印（isSend=1 本机安全，跨分身仍靠账本）
+- 版本 v3.0.581 / 30581；`assembleRelease` 通过；公网 200 / Range 206

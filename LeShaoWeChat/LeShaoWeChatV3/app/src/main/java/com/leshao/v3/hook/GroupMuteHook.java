@@ -23,8 +23,8 @@ public final class GroupMuteHook {
 
     private static final String TAG = "GroupMute";
 
-    // 当前版本符号（换版本见文档"DexKit 字符串锚点"重新定位）
-    private static final String C_MUTELOG  = "b41.d2";                              // ContactStorageLogic
+    // 当前版本符号（v3.0.467: b41.d2 已迁移至 l41.d2）
+    private static final String C_MUTELOG  = "l41.d2";                              // ContactStorageLogic
     private static final String C_CTENTITY = "com.tencent.mm.storage.y3";          // MMContact 实体
     private static final String C_FACADE   = "tn3.c4";                              // IM 存储门面接口
     private static final String C_H2       = "com.tencent.mm.plugin.messenger.foundation.h2";
@@ -60,7 +60,8 @@ public final class GroupMuteHook {
             kMuteLog = XposedHelpers.findClass(C_MUTELOG, cl);
             Class<?> kEnt = XposedHelpers.findClass(C_CTENTITY, cl);
             mSetMute = findStaticMethod(kMuteLog, "s0", kEnt, boolean.class);
-            mUnMute  = findStaticMethod(kMuteLog, "C0", kEnt, boolean.class);
+            // v3.0.467: 新版 C0 仅一个参数(contact)，旧版 (contact, boolean) 已改
+            mUnMute  = findStaticMethod(kMuteLog, "C0", kEnt);
             if (mSetMute == null || mUnMute == null) {
                 LogWriter.log(TAG, "ensureReady: s0/C0 未定位");
                 return false;
@@ -103,7 +104,11 @@ public final class GroupMuteHook {
             Object contact = XposedHelpers.callMethod(storage, "n", username, true);
             if (contact == null) return false;
             Method m = mute ? mSetMute : mUnMute;
-            m.invoke(null, contact, true);
+            if (m.getParameterTypes().length == 1) {
+                m.invoke(null, contact);
+            } else {
+                m.invoke(null, contact, true);
+            }
             return true;
         } catch (Throwable t) {
             LogWriter.log(TAG, "applyMute fail user=" + username + " err=" + t);
@@ -159,6 +164,9 @@ public final class GroupMuteHook {
      */
     private static Object contactStorage() {
         try {
+            // v3.0.467: 新版本直接复用 StorageHub 已绑定的联系人存储（l41.h9.b().r() → j4）
+            Object rc = com.leshao.ai.hook.wechat.StorageHub.get().rcontactStorage();
+            if (rc != null) return rc;
             ClassLoader cl = ContextManager.getClassLoader();
             if (cl == null) return null;
             ClassLoader tkCL = VersionCompat.findTinkerClassLoader(cl);

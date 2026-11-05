@@ -37,8 +37,19 @@ public class ConversationFilter {
     private static int sGetCountCall = 0;
     private static int sGetViewCall = 0;
     private static volatile boolean sJustAppliedFilter = false;
-    // 切换分类标签时直接回顶，避免用旧锚点 setSelectionFromTop 造成可见跳动
+    // 切换分类标签时保持视觉位置（锚点恢复，v3.0.530 起不再强制回顶）
     private static volatile boolean sResetToTop = false;
+    // 本次恢复是否已完成（单次恢复守卫，避免反复 setSelection 触发微信下拉小程序面板）
+    private static volatile boolean sResetDone = false;
+    // v3.0.530：捕获时的像素滚动偏移（computeVerticalScrollOffset），过滤后若像素偏移
+    // 未变化则完全不动列表（索引重排不算跳动），只有真正漂移时才按锚点恢复
+    private static volatile int sAnchorPixelOffset = 0;
+    // 过滤代次：快速连续点击标签时，旧 800ms 定时器不得复位新一代的状态
+    private static volatile int sFilterGeneration = 0;
+    // 统一恢复去重：同一帧内所有触发源（restoreScrollLater / layoutChildren / scrollToPosition）只 post 一次恢复
+    private static volatile boolean sRestorePosted = false;
+    // RV 防重入：restoreAnchorPositionRecyclerView 内部 scrollToPosition 会再次触发钩子
+    private static volatile boolean sRestoringRV = false;
     // 锚定：首个可见会话的 username（跨过滤切换时 position 会错位，username 不会）+ 该行 top
     private static String sAnchorUsername;
     private static int sAnchorRawPos = -1;
@@ -50,6 +61,13 @@ public class ConversationFilter {
         // 8.0.78+ 会话列表为 RecyclerView，需要走 RecyclerView 适配路径
         if (convList != null && convList.getClass().getName().contains("RecyclerView")) {
             LogWriter.log(TAG, "convList is RecyclerView (" + convList.getClass().getSimpleName() + "), using RecyclerView filter path");
+            sIsRecyclerView = true;
+        }
+        // v3.0.566: convList 可能为 null（微信 8.0.79 用 RecyclerView），改从 adapter 类型判断
+        if (!sIsRecyclerView && adapterInstance != null
+                && adapterInstance instanceof androidx.recyclerview.widget.RecyclerView.Adapter) {
+            LogWriter.log(TAG, "adapter is RecyclerView.Adapter (" + adapterInstance.getClass().getName()
+                    + "), using RecyclerView filter path");
             sIsRecyclerView = true;
         }
 
@@ -77,9 +95,13 @@ public class ConversationFilter {
         } catch (Throwable ignored) {}
         if (realAdapter == null) { LogWriter.log(TAG, "realAdapter null after unwrap"); return; }
 
-        // 防御: realAdapter 不是 Adapter 实例时跳过
-        if (!(realAdapter instanceof android.widget.Adapter)) {
+        // 防御: realAdapter 不是预期 Adapter 实例时跳过
+        if (!sIsRecyclerView && !(realAdapter instanceof android.widget.Adapter)) {
             LogWriter.log(TAG, "realAdapter is not an Adapter: " + realAdapter.getClass().getName());
+            return;
+        }
+        if (sIsRecyclerView && !(realAdapter instanceof androidx.recyclerview.widget.RecyclerView.Adapter)) {
+            LogWriter.log(TAG, "realAdapter is not RecyclerView.Adapter: " + realAdapter.getClass().getName());
             return;
         }
 
@@ -154,18 +176,30 @@ public class ConversationFilter {
             });
 
             // layoutChildren 内部会调用 handleDataChanged -> lookForSelectablePosition(0,true)
-            // 在 Android 14 上 lookForSelectablePosition 已移除，需要直接拦截 layoutChildren
-            // 过滤刚应用时按锚定恢复滚动位置（用户期望：切标签后保持原滚动位置，不跳回顶部）
+            // 在 Android 14 上 lookForSelectablePosition 已移除，需要直接拦截 layoutChildren。
+            // v3.0.530：切标签「保持视觉位置」（锚点恢复），不再强制回顶。过滤后微信按
+            // 自己保存的滚动位置重排时索引会变（日志 getView hooked: 0->1 但 childTop 不变），
+            // 因此用像素偏移（computeVerticalScrollOffset）判断视口是否真的漂移：
+            // 像素偏移没变 -> 完全不动；偏移明显变化（微信把列表拉到别处）才 post 恢复。
             try {
                 java.lang.reflect.Method lc = android.widget.AbsListView.class.getDeclaredMethod("layoutChildren");
                 XposedBridge.hookMethod(lc, new XC_MethodHook() {
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) {
-                        if (sJustAppliedFilter && param.thisObject == sConvList) {
-                            try {
-                                restoreAnchorPosition((AbsListView) param.thisObject);
-                            } catch (Throwable ignored) {}
-                        }
+                        if (!sJustAppliedFilter || param.thisObject != sConvList) return;
+                        if (sAnchorPixelOffset <= 0 && sAnchorRawPos <= 0) return; // 无有效锚点
+                        try {
+                            AbsListView lv = (AbsListView) param.thisObject;
+                            int curOffset = listViewScrollOffset(lv);
+                            // 偏移明显漂移（阈值 10px）才恢复；避免微小测量抖动反复 setSelection
+                            if (Math.abs(curOffset - sAnchorPixelOffset) > 10) {
+                                // 不能在 layoutChildren 期间同步 setSelection（会重入布局、
+                                // 短列表被顶到边缘触发微信下拉面板），统一 post 到下一帧执行
+                                postRestoreOnce();
+                                LogWriter.log(TAG, "layoutChildren detect offset=" + curOffset
+                                        + " anchor=" + sAnchorPixelOffset + ", post restore");
+                            }
+                        } catch (Throwable ignored) {}
                     }
                 });
                 LogWriter.log(TAG, "layoutChildren hook installed");
@@ -240,8 +274,13 @@ public class ConversationFilter {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
                     try {
-                        if (sJustAppliedFilter && param.thisObject == sConvList) {
-                            restoreAnchorPositionRecyclerView((androidx.recyclerview.widget.RecyclerView) param.thisObject);
+                        if (sJustAppliedFilter && !sResetToTop && param.thisObject == sConvList && !sRestoringRV) {
+                            sRestoringRV = true;
+                            try {
+                                restoreAnchorPositionRecyclerView((androidx.recyclerview.widget.RecyclerView) param.thisObject);
+                            } finally {
+                                sRestoringRV = false;
+                            }
                         }
                     } catch (Throwable ignored) {}
                 }
@@ -252,8 +291,13 @@ public class ConversationFilter {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
                     try {
-                        if (sJustAppliedFilter && param.thisObject == sConvList) {
-                            restoreAnchorPositionRecyclerView((androidx.recyclerview.widget.RecyclerView) param.thisObject);
+                        if (sJustAppliedFilter && !sResetToTop && param.thisObject == sConvList && !sRestoringRV) {
+                            sRestoringRV = true;
+                            try {
+                                restoreAnchorPositionRecyclerView((androidx.recyclerview.widget.RecyclerView) param.thisObject);
+                            } finally {
+                                sRestoringRV = false;
+                            }
                         }
                     } catch (Throwable ignored) {}
                 }
@@ -429,10 +473,15 @@ public class ConversationFilter {
             androidx.recyclerview.widget.RecyclerView.LayoutManager lm = rv.getLayoutManager();
             if (lm == null) return;
 
-            if (sResetToTop) {
-                rv.scrollToPosition(0);
-                return;
-            }
+            // v3.0.530：不再强制回顶。像素偏移未变化 -> 视口本来就没动，完全不动列表。
+            try {
+                int curOffset = rv.computeVerticalScrollOffset();
+                if (Math.abs(curOffset - sAnchorPixelOffset) <= 5) {
+                    LogWriter.log(TAG, "restoreAnchorRV: pixel offset preserved ("
+                            + curOffset + "), skip scroll");
+                    return;
+                }
+            } catch (Throwable ignored) {}
 
             int target = -1;
             if (sAnchorUsername != null) {
@@ -444,13 +493,26 @@ public class ConversationFilter {
                 target = sAnchorRawPos;
             }
             if (target < 0) {
-                rv.scrollToPosition(0);
+                // 无任何锚点信息 -> 完全不动列表（绝不强制回顶）
+                LogWriter.log(TAG, "restoreAnchorRV: no anchor, stay still");
                 return;
             }
             int itemCount = rv.getAdapter() != null ? rv.getAdapter().getItemCount() : 0;
             if (target >= itemCount) target = Math.max(0, itemCount - 1);
 
             if (lm instanceof androidx.recyclerview.widget.LinearLayoutManager) {
+                // 已在目标位置且偏移在阈值内 -> 完全不动列表（消除“已就位仍滚动”造成的抖动）
+                try {
+                    androidx.recyclerview.widget.LinearLayoutManager llm =
+                            (androidx.recyclerview.widget.LinearLayoutManager) lm;
+                    int firstPos = llm.findFirstVisibleItemPosition();
+                    View firstChild = llm.getChildCount() > 0 ? llm.getChildAt(0) : null;
+                    int top = firstChild != null ? llm.getDecoratedTop(firstChild) : 0;
+                    if (firstPos == target && Math.abs(top - sAnchorChildTop) <= 5) {
+                        LogWriter.log(TAG, "restoreAnchorRV: already at target, skip scroll (pos=" + target + ")");
+                        return;
+                    }
+                } catch (Throwable ignored) {}
                 ((androidx.recyclerview.widget.LinearLayoutManager) lm).scrollToPositionWithOffset(target, sAnchorChildTop);
                 LogWriter.log(TAG, "restoreAnchor RV -> pos=" + target + " offset=" + sAnchorChildTop + " user=" + sAnchorUsername);
             } else {
@@ -714,8 +776,13 @@ public class ConversationFilter {
         }
 
         sJustAppliedFilter = true;
-        sResetToTop = true;
+        // v3.0.530：切标签「保持视觉位置」，绝不强制回顶（强制 setSelectionFromTop(0,0)
+        // 会把列表顶到边缘触发微信下拉「最近/小程序面板」，造成页面上下跳动）
+        sResetToTop = false;
+        sResetDone = false;
+        sRestorePosted = false; // 新一代恢复开始，允许重新 post
         sFilterActive = true;
+        final int gen = ++sFilterGeneration;
 
         // 数据层优先（文档核心）：已缓存全量且数据层 hook 生效时直接重建数据列表（新路径 I.r /
         // 旧路径 jo5.f.a 参数替换），并关闭 View 层 position 兜底避免双重过滤；
@@ -748,9 +815,10 @@ public class ConversationFilter {
         notifyAdapterChanged();
         restoreScrollLater();
         new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+            if (gen != sFilterGeneration) return;
             sJustAppliedFilter = false;
-            sResetToTop = false;
-        }, 800);
+            sResetToTop = false; // 保持 false：切标签后不强制回顶
+        }, 3000);
         LogWriter.log(TAG, "ON rule=" + sFilterRule + " filtered=" + sFilteredPositions.size() + " dataLayer=" + applied);
     }
 
@@ -785,11 +853,23 @@ public class ConversationFilter {
      *  必须在任何状态变更（sFilterActive/sFilteredPositions）之前调用。
      *  getChildAt(0) 在顶部下拉刷新等场景可能是已滚出屏幕的复用 view(top<0)，
      *  因此扫描第一个 top>=0 的真正可见 child 作为锚点。 */
+    // AbsListView.computeVerticalScrollOffset 是 protected，跨类调用走反射
+    private static int listViewScrollOffset(AbsListView lv) {
+        try {
+            java.lang.reflect.Method m = AbsListView.class.getMethod("computeVerticalScrollOffset");
+            m.setAccessible(true);
+            return (Integer) m.invoke(lv);
+        } catch (Throwable t) {
+            return Integer.MIN_VALUE;
+        }
+    }
+
     private static void captureAnchor() {
         int oldRaw = sAnchorRawPos;
         sAnchorRawPos = -1;
         sAnchorChildTop = 0;
         sAnchorUsername = null;
+        sAnchorPixelOffset = 0;
         View v = sConvList;
         if (v == null) { LogWriter.log(TAG, "captureAnchor: sConvList null"); return; }
         try {
@@ -812,13 +892,40 @@ public class ConversationFilter {
                     }
                     // 取锚定行对应的会话 username（header 位置跳过）
                     username = usernameAtPosition(lv, raw);
+                    // 首个可见行可能是 header（取不到 username），向后扫描可见行找有效锚点
+                    if (username == null) {
+                        int base = lv.getFirstVisiblePosition();
+                        for (int i = 0; i < lv.getChildCount(); i++) {
+                            View c = lv.getChildAt(i);
+                            if (c == null) continue;
+                            int pos = base + i;
+                            String u = usernameAtPosition(lv, pos);
+                            if (u != null) {
+                                username = u;
+                                raw = pos;
+                                childTop = c.getTop();
+                                break;
+                            }
+                        }
+                    }
                 }
             } catch (Throwable ignored) {}
             sAnchorRawPos = raw;
             sAnchorChildTop = childTop;
             sAnchorUsername = username;
+            try {
+                // v3.0.530：像素偏移作为「视口是否移动」的判据（比 first 索引稳定，
+                // 过滤后索引重排但像素不变时视为未移动）
+                sAnchorPixelOffset = listViewScrollOffset(lv);
+            } catch (Throwable ignored) {}
+            boolean attached = false;
+            int convCount = -1;
+            try { attached = v.isAttachedToWindow(); } catch (Throwable ignored) {}
+            try { convCount = lv.getCount(); } catch (Throwable ignored) {}
             LogWriter.log(TAG, "captureAnchor raw=" + raw + " childTop=" + childTop
-                + " user=" + username + " rule=" + sFilterRule + " (old=" + oldRaw + ")");
+                + " user=" + username + " rule=" + sFilterRule + " (old=" + oldRaw + ")"
+                + " pixelOffset=" + sAnchorPixelOffset
+                + " attached=" + attached + " count=" + convCount);
         } catch (Throwable e) {
             LogWriter.log(TAG, "captureAnchor err: " + e.getMessage());
         }
@@ -841,7 +948,8 @@ public class ConversationFilter {
                 item = itemAt(dataPos);
             }
             if (item == null) return null;
-            return idOf(item);
+            // 用 usernameOf（d.i1）而不是 idOf（仅群/服务号），普通好友也能锚定
+            return usernameOf(item);
         } catch (Throwable ignored) {}
         return null;
     }
@@ -865,20 +973,57 @@ public class ConversationFilter {
         return 0;
     }
 
-    /** 过滤后：按锚定 rawPos 恢复滚动位置（clamp 到新列表范围），保持视觉原位 */
+    /** 过滤后：按锚定 rawPos 恢复滚动位置（clamp 到新列表范围），保持视觉原位。
+     *  v3.0.524: 微信会在过滤后 ~2s 再次重排列表（日志 17.095 处仍触发 getCount），
+     *  旧 0/150ms 两次恢复 + 800ms 窗口不足以覆盖。
+     *  v3.0.526/527: 六次 setSelection(0) + layoutChildren 中同步 setSelection 会把短列表
+     *  （服务分类仅 5 条，内容短于视口）反复顶到边缘，触发微信「下拉小程序面板」。
+     *  v3.0.530: 改为「保持视觉位置」——切标签/恢复全量均不强制回顶，仅当列表漂移到
+     *  锚点下方或同位置偏移漂移时做单次恢复，且一帧只 post 一次；列表已在锚点位置时
+     *  完全不调用 setSelection，从根上消除页面上下跳动与下拉面板误触。 */
     private static void restoreScrollLater() {
+        postRestoreOnce(80);
+    }
+
+    /** 统一恢复入口（一帧一次）：所有触发源共用，消除多 post 竞态抖动。
+     *  sRestorePosted 在同一帧内去重；执行体在下一帧运行，避免在布局期间同步 setSelection。 */
+    private static void postRestoreOnce() {
+        postRestoreOnce(0);
+    }
+
+    private static void postRestoreOnce(long delayMs) {
+        if (sRestorePosted) return;
+        sRestorePosted = true;
         final View v = sConvList;
-        if (v == null) return;
-        v.post(() -> {
-            try { restoreAnchorPosition((AbsListView) v); } catch (Throwable ignored) {}
-        });
-        v.postDelayed(() -> {
-            try { restoreAnchorPosition((AbsListView) v); } catch (Throwable ignored) {}
-        }, 150);
+        if (v == null) {
+            sRestorePosted = false;
+            return;
+        }
+        if (delayMs > 0) {
+            v.postDelayed(() -> runRestore(v), delayMs);
+        } else {
+            v.post(() -> runRestore(v));
+        }
+    }
+
+    private static void runRestore(View v) {
+        sRestorePosted = false;
+        try {
+            if (v instanceof AbsListView) {
+                restoreAnchorPosition((AbsListView) v);
+            } else if (v instanceof androidx.recyclerview.widget.RecyclerView) {
+                restoreAnchorPositionRecyclerView((androidx.recyclerview.widget.RecyclerView) v);
+            }
+        } catch (Throwable ignored) {}
     }
 
     /** 依据锚定信息恢复 AbsListView 滚动位置（兼容 layoutChildren 回调）
-     *  优先按 username 定位（跨过滤切换 position 会错位）；username 不在当前列表时回退顶部/raw */
+     *  优先按 username 定位（跨过滤切换 position 会错位）；username 不在当前列表时保持
+     *  raw 位置（clamp 到新列表范围），保证视觉位置不跳——绝不强制回顶。
+     *  v3.0.524: 微信会在过滤后 ~2s 再次重排列表（日志 17.095 处仍触发 getCount）。
+     *  v3.0.530: 锚点落在 header 区（原位置就是顶部）时完全不动列表；列表因新列表更短
+     *  而自然 clamp（first < raw）时也不恢复，消除「已就位仍 setSelection」造成的抖动，
+     *  更不会把短列表顶到边缘触发微信下拉「最近/小程序面板」。 */
     private static void restoreAnchorPosition(AbsListView lv) {
         if (lv == null) return;
         int count;
@@ -889,7 +1034,37 @@ public class ConversationFilter {
         }
         if (count <= 0) return;
 
-        if (sResetToTop) {
+        // v3.0.530：像素偏移未变化 -> 视口本来就没动（过滤后索引重排但像素不变），
+        // 完全不动列表。这是消除「切标签跳动」的关键判据。
+        try {
+            int curOffset = listViewScrollOffset(lv);
+            if (Math.abs(curOffset - sAnchorPixelOffset) <= 5) {
+                LogWriter.log(TAG, "restoreAnchor: pixel offset preserved ("
+                        + curOffset + "), skip setSelection");
+                return;
+            }
+        } catch (Throwable ignored) {}
+
+        int headerCount = 0;
+        try {
+            Object adapter = lv.getAdapter();
+            if (adapter != null) headerCount = headerCountOf(adapter);
+        } catch (Throwable ignored) {}
+
+        // 锚点落在 header 区（原位置就是顶部）且没有有效会话锚点 -> 保持顶部，绝不多余 setSelection
+        if (sAnchorUsername == null && sAnchorRawPos >= 0 && sAnchorRawPos < headerCount) {
+            try {
+                int first = lv.getFirstVisiblePosition();
+                boolean atTop = first <= 0;
+                if (atTop && lv.getChildCount() > 0) {
+                    View c0 = lv.getChildAt(0);
+                    if (c0 != null && Math.abs(c0.getTop()) > 5) atTop = false;
+                }
+                if (atTop) {
+                    LogWriter.log(TAG, "restoreAnchor: header anchor, already top, skip setSelection");
+                    return;
+                }
+            } catch (Throwable ignored) {}
             try { lv.setSelection(0); } catch (Throwable ignored) {}
             return;
         }
@@ -900,15 +1075,27 @@ public class ConversationFilter {
             if (pos >= 0) target = pos;
         }
         if (target < 0 && sAnchorRawPos >= 0) {
+            // username 已不在当前列表（跨分类过滤）或为空：保持原始 raw 位置（clamp），视觉不跳
             target = sAnchorRawPos;
         }
         if (target < 0) {
-            // username 已不在当前列表（跨分类过滤）且无 raw 锚点 -> 顶部
-            LogWriter.log(TAG, "restoreAnchor: user absent, goto top user=" + sAnchorUsername);
-            try { lv.setSelection(0); } catch (Throwable ignored) {}
+            // 无任何锚点信息 -> 完全不动列表
+            LogWriter.log(TAG, "restoreAnchor: no anchor, stay still (user=" + sAnchorUsername + ")");
             return;
         }
         if (target >= count) target = count - 1;
+        if (target < 0) return;
+        // 已在目标位置且偏移在阈值内 -> 完全不动列表（消除“已就位仍 setSelection”造成的抖动）
+        try {
+            int first = lv.getFirstVisiblePosition();
+            if (first == target && lv.getChildCount() > 0) {
+                View c0 = lv.getChildAt(0);
+                if (c0 != null && Math.abs(c0.getTop() - sAnchorChildTop) <= 5) {
+                    LogWriter.log(TAG, "restoreAnchor: already at target, skip setSelection (pos=" + target + ")");
+                    return;
+                }
+            }
+        } catch (Throwable ignored) {}
         try {
             lv.setSelectionFromTop(target, sAnchorChildTop);
             LogWriter.log(TAG, "restoreAnchor -> pos=" + target + " (raw=" + sAnchorRawPos
@@ -940,7 +1127,7 @@ public class ConversationFilter {
                     Object item = itemAt(sFilteredPositions.get(i));
                     if (item == null) continue;
                     try {
-                        Object u = idOf(item);
+                        Object u = usernameOf(item);
                         if (u instanceof String && username.equals(u)) return i;
                     } catch (Throwable ignored) {}
                 }
@@ -951,7 +1138,7 @@ public class ConversationFilter {
                     Object item = dataList.get(i);
                     if (item == null) continue;
                     try {
-                        Object u = idOf(item);
+                        Object u = usernameOf(item);
                         if (u instanceof String && username.equals(u)) return i;
                     } catch (Throwable ignored) {}
                 }
@@ -969,7 +1156,11 @@ public class ConversationFilter {
         sAllowedUsernames = Collections.emptySet();
         sFilteredPositions = Collections.emptyList();
         sJustAppliedFilter = true;
-        sResetToTop = true;
+        // v3.0.530：恢复全量同样保持视觉位置（锚点恢复），不强制回顶
+        sResetToTop = false;
+        sResetDone = false;
+        sRestorePosted = false; // 新一代恢复开始，允许重新 post
+        final int gen = ++sFilterGeneration;
 
         // 数据层优先：恢复全量缓存，关闭数据层过滤；否则走 View 层兜底
         boolean useDataLayer = sDataLayerReady && sFullCache != null && !sFullCache.isEmpty();
@@ -986,9 +1177,10 @@ public class ConversationFilter {
         notifyAdapterChanged();
         restoreScrollLater();
         new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+            if (gen != sFilterGeneration) return;
             sJustAppliedFilter = false;
-            sResetToTop = false;
-        }, 800);
+            sResetToTop = false; // 保持 false：恢复全量后不强制回顶
+        }, 3000);
         LogWriter.log(TAG, "OFF dataLayer=" + restored);
     }
 
@@ -1019,6 +1211,21 @@ public class ConversationFilter {
     public static int getUnreadForLabel(int labelId) {
         Integer c = sUnreadByLabel.get(labelId);
         return c != null ? c : 0;
+    }
+
+    /** v3.0.488: 强制刷新会话列表 adapter（系统消息落库后调用，让会话列表显示新消息/未读）。 */
+    public static void refreshIfInstalled() {
+        try {
+            Object ad = sRecyclerAdapter != null ? sRecyclerAdapter : sAdapter;
+            if (ad == null) {
+                LogWriter.log(TAG, "refreshIfInstalled: adapter null");
+                return;
+            }
+            XposedHelpers.callMethod(ad, "notifyDataSetChanged");
+            LogWriter.log(TAG, "refreshIfInstalled: notified " + ad.getClass().getName());
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "refreshIfInstalled err: " + t.getMessage());
+        }
     }
 
     static boolean scanUnreadCounts() {

@@ -211,7 +211,20 @@ class DatabaseProvider {
                             if (owner == null) return
                             if (!sProbedCLs.add(owner)) return
                             LogWriter.log(TAG, "CL discovered: " + owner)
-                            probeClassLoader(owner)
+                            // ★ 不能在类加载器锁内再次 loadClass（BaseDexClassLoader.findClass
+                            // 在 loadClass 的 synchronized 块内调用，回调中同步 loadClass 可能与其他
+                            // 线程形成锁顺序死锁 → 微信启动卡在地球页）。延迟到后台线程执行。
+                            try {
+                                val ownerRef = owner
+                                Thread {
+                                    try {
+                                        probeClassLoader(ownerRef)
+                                    } catch (t: Throwable) {
+                                        LogWriter.log(TAG, "probeClassLoader bg err: " + t.message)
+                                    }
+                                }.start()
+                            } catch (ignored: Throwable) {
+                            }
                         }
                     })
                     LogWriter.log(TAG, "hookClassLoaderDiscovery: findClass hooked")

@@ -84,12 +84,12 @@ public class VoiceAutoPlay {
 
         // v3.0.272: 反编译确认 com.tencent.mm.app.k0 仅为插件框架基类（死代码），
         // com.tencent.mm.model.k0 / com.tencent.mm.k0 在 3180 不存在，去掉三级兜底。
-        try { sK0Class = XposedHelpers.findClass("com.tencent.mm.app.k0", cl); }
+        try { sK0Class = WxResolver.get("app_k0", cl); }
         catch (Throwable t) { sK0Class = null; }
         if (sK0Class == null) {
             LogWriter.log(TAG, "k0 class NOT found in any of the 4 alternatives");
         }
-        try { sSoClass = XposedHelpers.findClass("com.tencent.mm.ui.chatting.component.so", cl); }
+        try { sSoClass = WxResolver.get("ui_chatting_component_so", cl); }
         catch (Throwable t) { LogWriter.log(TAG, "so class NOT found: " + t.getMessage()); }
 
         // 8.0.78(3180): 微信旧 CDN 流式类 y21.u0/y21.x0/y21.j 已全部失效, 不再加载。
@@ -109,13 +109,13 @@ public class VoiceAutoPlay {
 
     private static void hookX0AutoPlay(ClassLoader cl) {
         try {
-            sX0Class = XposedHelpers.findClass("com.tencent.mm.ui.chatting.x0", cl);
+            sX0Class = WxResolver.get("ui_chatting_x0", cl);
         } catch (Throwable t) {
             LogWriter.log(TAG, "x0 class NOT found: " + t.getMessage());
             return;
         }
         try {
-            Class<?> e9Class = XposedHelpers.findClass("com.tencent.mm.storage.e9", cl);
+            Class<?> e9Class = WxResolver.get("storage_e9", cl);
             java.lang.reflect.Method qMethod = sX0Class.getDeclaredMethod("q", e9Class);
             XposedBridge.hookMethod(qMethod, new XC_MethodHook() {
                 @Override
@@ -143,17 +143,16 @@ public class VoiceAutoPlay {
                         LogWriter.log(TAG, "x0.q(before) id=" + msgId + " talker=" + talker
                                 + " enabled=" + sEnabled + " play=" + shouldAutoPlay(talker));
 
-                        if (!sEnabled || !shouldAutoPlay(talker)) return;
+                        // v3.0.576: 反编译确认 x0.g 是 e9 引用（public e9 g），不是 boolean 抑制位，
+                        // 旧 setBooleanField("g") 必然失败且无意义。微信 x0.q() 满足条件即自动播放，
+                        // 开关关闭时必须吞掉调用（param.setResult(null)）阻止微信原生播放。
+                        if (!sEnabled || !shouldAutoPlay(talker)) {
+                            param.setResult(null);
+                            return;
+                        }
                         if (msgId == sX0HandledMsgId) {
                             LogWriter.log(TAG, "x0.q(before) skip handled id=" + msgId);
                             return;
-                        }
-
-                        // 放开微信内部抑制标记 g (false = 不抑制), 允许微信原生自动播放
-                        try {
-                            XposedHelpers.setBooleanField(self, "g", false);
-                        } catch (Throwable t) {
-                            LogWriter.log(TAG, "x0.q(before) set g fail: " + t.getMessage());
                         }
                     } catch (Throwable e) {
                         LogWriter.log(TAG, "x0.q(before) err: " + e.getMessage());
@@ -241,7 +240,7 @@ public class VoiceAutoPlay {
                 LogWriter.log(TAG, "forceX0Play: already playing id=" + msgId);
                 return;
             }
-            XposedHelpers.setBooleanField(self, "g", false);
+            // v3.0.576: 反编译确认 x0.g 是 e9 引用，不是 boolean 抑制位；不再写 g。
             XposedHelpers.callMethod(self, "f", e9);
             XposedHelpers.callMethod(self, "t");
             sX0HandledMsgId = msgId;
@@ -340,7 +339,7 @@ public class VoiceAutoPlay {
             android.content.Context ctx = com.leshao.v3.ContextManager.getAppContext();
             if (ctx != null) {
                 boolean prefsOn = com.leshao.v3.UnifiedPrefs.get(ctx, "wm_prefs")
-                        .getBoolean("auto_voice", true);
+                        .getBoolean("auto_voice", false);
                 if (!prefsOn) return false;
             }
         } catch (Throwable ignored) {}
@@ -356,7 +355,7 @@ public class VoiceAutoPlay {
             if (cfg.announceWhitelist != null && !cfg.announceWhitelist.isEmpty()) {
                 return cfg.announceWhitelist.contains(talker);
             }
-            if (cfg.whitelistStrict) return false;
+            // 白名单为空 = 不限制（与 FilterManager 保持一致）
         } catch (Throwable t) {
             LogWriter.log(TAG, "shouldAutoPlay cfg err: " + t.getMessage());
         }
@@ -368,6 +367,17 @@ public class VoiceAutoPlay {
             android.util.Log.e(TAG, ">>> onVoiceMsg ENTER msgId=" + msgId + " enabled=" + sEnabled + " lastPlayed=" + sLastPlayedMsgId);
             if (!sEnabled) {
                 android.util.Log.e(TAG, ">>> onVoiceMsg: DISABLED");
+                return;
+            }
+
+            // v3.0.576: 防御性检查——任何入口都必须过 auto_voice 开关/黑白名单
+            String earlyTalker = null;
+            try { earlyTalker = (String) XposedHelpers.callMethod(e9, "N0"); }
+            catch (Throwable ignored) {}
+            if (earlyTalker == null) try { earlyTalker = (String) XposedHelpers.getObjectField(e9, "field_talker"); }
+            catch (Throwable ignored) {}
+            if (earlyTalker == null || !shouldAutoPlay(earlyTalker)) {
+                android.util.Log.e(TAG, ">>> onVoiceMsg: SWITCH OFF (talker=" + earlyTalker + ")");
                 return;
             }
 
@@ -748,9 +758,13 @@ public class VoiceAutoPlay {
             LogWriter.log(TAG, "getVoicePath: j() err: " + e.getMessage());
         }
 
-        // x0()=field_imgPath 语音文件名 → 反查 voice2 目录
+        // u0()(8.0.79+)/x0()=field_imgPath 语音文件名 → 反查 voice2 目录
         try {
-            String imgPath = (String) XposedHelpers.callMethod(msg, "x0");
+            String imgPath = null;
+            try { imgPath = (String) XposedHelpers.callMethod(msg, "u0"); } catch (Throwable ignored) {}
+            if (imgPath == null || imgPath.isEmpty()) {
+                try { imgPath = (String) XposedHelpers.callMethod(msg, "x0"); } catch (Throwable ignored) {}
+            }
             if (imgPath != null && !imgPath.isEmpty()) {
                 String name = imgPath;
                 int slash = name.lastIndexOf('/');
@@ -1040,21 +1054,8 @@ public class VoiceAutoPlay {
         try {
             int currentUser = Process.myUid() / 100000;
             java.util.List<String> roots = new java.util.ArrayList<>();
+            // 只扫描当前用户自己的微信目录，禁止跨用户回退（避免分身误用主微信 voice2 播放错误音频）
             roots.add("/data/user/" + currentUser + "/com.tencent.mm/MicroMsg");
-            if (currentUser != 0) {
-                roots.add("/data/user/0/com.tencent.mm/MicroMsg");
-            }
-            File[] userDirs = new File("/data/user").listFiles();
-            if (userDirs != null) {
-                for (File u : userDirs) {
-                    if (!u.isDirectory()) continue;
-                    try {
-                        int id = Integer.parseInt(u.getName());
-                        if (id == currentUser || (currentUser != 0 && id == 0)) continue;
-                    } catch (Throwable ignored) { continue; }
-                    roots.add(u.getAbsolutePath() + "/com.tencent.mm/MicroMsg");
-                }
-            }
             for (String root : roots) {
                 File md = new File(root);
                 if (!md.exists()) continue;

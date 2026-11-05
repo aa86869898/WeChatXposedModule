@@ -187,12 +187,24 @@ class DexKitScanDialog {
                 tv.setPadding(dp(host, 8), dp(host, 8), dp(host, 8), dp(host, 8))
                 val sv = ScrollView(host)
                 sv.addView(tv)
-                AlertDialog.Builder(host)
+                val dlg = AlertDialog.Builder(host)
                         .setTitle("部分功能未适配")
                         .setView(sv)
                         .setPositiveButton("我知道了", null)
                         .setCancelable(true)
-                        .show()
+                        .create()
+                // UI 统一：弹窗圆角 28dp + 按钮跟随主题色
+                try {
+                    dlg.window?.setBackgroundDrawable(
+                            com.leshao.v3.ui.CandyUi.dialogBg(host, 0))
+                } catch (ignored: Throwable) {}
+                dlg.setOnShowListener {
+                    try {
+                        dlg.getButton(AlertDialog.BUTTON_POSITIVE)
+                                ?.setTextColor(com.leshao.v3.ui.AppColors.primary())
+                    } catch (ignored: Throwable) {}
+                }
+                dlg.show()
                 LogWriter.logSync("DexKitScanDialog",
                         "missing summary shown on " + host.javaClass.name)
             } catch (t: Throwable) {

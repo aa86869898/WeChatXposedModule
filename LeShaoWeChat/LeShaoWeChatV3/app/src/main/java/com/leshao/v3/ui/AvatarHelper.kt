@@ -1,5 +1,6 @@
 package com.leshao.v3.ui
 
+import com.leshao.v3.hook.WxResolver
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -335,25 +336,41 @@ class AvatarHelper {
 
             val target = if (sizePx > 0) sizePx else 80
 
+            // 0) 模块磁盘缓存：二次打开列表时微信内存缓存可能已释放，这里直接读模块自存头像
+            val fromModule = loadModuleCache(wxid, target)
+            if (fromModule != null) {
+                sCache.put(wxid, fromModule)
+                return fromModule
+            }
+
             // 1) 微信内存缓存 Bitmap（头像被显示过时最快最准）
             val mem = getCachedAvatarBitmap(wxid)
             if (mem != null && !mem.isRecycled) {
                 val round = makeRoundCorner(mem, target)
                 sCache.put(wxid, round)
+                saveModuleCache(wxid, round)
                 if (mem !== round) mem.recycle()
                 return round
             }
 
             // 2) 微信头像本地文件路径（无需自己拼 md5 目录）
             val fromPath = loadFromExactPath(getAvatarLocalPath(wxid), wxid, target)
-            if (fromPath != null) return fromPath
+            if (fromPath != null) {
+                saveModuleCache(wxid, fromPath)
+                return fromPath
+            }
 
             // 3) 自拼 md5 磁盘路径兜底
             val fromFile = loadFromLocalFile(wxid, target)
-            if (fromFile != null) return fromFile
+            if (fromFile != null) {
+                saveModuleCache(wxid, fromFile)
+                return fromFile
+            }
 
             // 4) 头像 URL（CDN）下载兜底：主微信/分身微信统一，不依赖本地缓存
-            return loadFromUrl(wxid, target)
+            val fromUrl = loadFromUrl(wxid, target)
+            if (fromUrl != null) saveModuleCache(wxid, fromUrl)
+            return fromUrl
         }
 
         /**
@@ -365,6 +382,11 @@ class AvatarHelper {
             if (iv == null || wxid.isNullOrEmpty()) return
             iv.tag = wxid
             if (fallback != null && !fallback.isRecycled) iv.setImageBitmap(fallback)
+            // 优先微信原生头像绑定（微信异步加载，跨进程，最可靠；成功则微信自己设置头像）
+            try {
+                if (bindAvatar(iv, wxid)) return
+            } catch (ignored: Throwable) {
+            }
             sIo.execute {
                 try {
                     val bm = loadAvatar(wxid, sizePx)
@@ -430,7 +452,7 @@ class AvatarHelper {
         fun getCachedAvatarBitmap(wxid: String): Bitmap? {
             try {
                 val cl = getWeChatCL() ?: return null
-                val d1 = XposedHelpers.findClass("com.tencent.mm.modelavatar.d1", cl)
+                val d1 = WxResolver.get("modelavatar_d1", cl)
                 // 8.0.78: hj() 不存在，尝试查找返回 Bitmap 的静态方法
                 for (m in d1.declaredMethods) {
                     if (!Modifier.isStatic(m.modifiers)) continue
@@ -465,7 +487,7 @@ class AvatarHelper {
         fun getAvatarLocalPath(wxid: String): String? {
             try {
                 val cl = getWeChatCL() ?: return null
-                val d1 = XposedHelpers.findClass("com.tencent.mm.modelavatar.d1", cl)
+                val d1 = WxResolver.get("modelavatar_d1", cl)
                 var z: Any? = null
                 // v955: ij() 在 3180 已不存在(实证 NoSuchMethod), 改为枚举静态无参方法
                 // 返回非空非基本类型的候选(头像存储服务), 逐个尝试 f(String,boolean,boolean)
@@ -506,7 +528,7 @@ class AvatarHelper {
             if (wxid.isNullOrEmpty()) return null
             try {
                 val cl = getWeChatCL() ?: return null
-                val d1 = XposedHelpers.findClass("com.tencent.mm.modelavatar.d1", cl)
+                val d1 = WxResolver.get("modelavatar_d1", cl)
 
                 // 1) 兼容旧版链路: d1.mj() -> s0.x0(username) -> c()/d()
                 try {
@@ -611,7 +633,7 @@ class AvatarHelper {
 
                 // 方案1：AnyProcessAvatarAttacher（feature.avatar.s），文档推荐跨进程绑定
                 try {
-                    val attacher = XposedHelpers.findClass("com.tencent.mm.feature.avatar.s", cl)
+                    val attacher = WxResolver.get("feature_avatar_s", cl)
                     if (tryBind(attacher, iv, wxid, "feature.avatar.s", null)) return true
                 } catch (e1: Throwable) {
                     LogWriter.log(TAG, "feature.avatar.s 不可用: " + e1.message)
@@ -619,7 +641,7 @@ class AvatarHelper {
 
                 // 方案2：pluginsdk.ui.a 的静态头像方法
                 try {
-                    val a = XposedHelpers.findClass("com.tencent.mm.pluginsdk.ui.a", cl)
+                    val a = WxResolver.get("pluginsdk_ui_a", cl)
                     if (tryBind(a, iv, wxid, "pluginsdk.ui.a", null)) return true
                 } catch (e2: Throwable) {
                     LogWriter.log(TAG, "pluginsdk.ui.a 不可用: " + e2.message)
@@ -684,6 +706,50 @@ class AvatarHelper {
             }
         }
 
+        private fun moduleCacheFile(wxid: String): File? {
+            try {
+                val ctx = ContextManager.getAppContext() ?: return null
+                val dir = File(ctx.cacheDir, "avatar_cache")
+                if (!dir.exists()) dir.mkdirs()
+                val m = md5(wxid)
+                if (m.isEmpty()) return null
+                return File(dir, m + ".png")
+            } catch (ignored: Throwable) {
+                return null
+            }
+        }
+
+        /** 保存头像到模块缓存目录（二次打开列表时不再依赖微信内存缓存）。 */
+        private fun saveModuleCache(wxid: String, bm: Bitmap?) {
+            if (bm == null) return
+            try {
+                val f = moduleCacheFile(wxid) ?: return
+                val out = java.io.FileOutputStream(f)
+                try {
+                    bm.compress(Bitmap.CompressFormat.PNG, 100, out)
+                    out.flush()
+                } finally {
+                    out.close()
+                }
+            } catch (ignored: Throwable) {
+            }
+        }
+
+        /** 从模块缓存目录读取头像（若无则返回 null）。 */
+        private fun loadModuleCache(wxid: String, target: Int): Bitmap? {
+            try {
+                val f = moduleCacheFile(wxid) ?: return null
+                if (!f.exists() || f.length() <= 0L) return null
+                val bm = decodeFile(f.absolutePath, target)
+                if (bm == null) return null
+                val round = makeRoundCorner(bm, target)
+                if (bm !== round) bm.recycle()
+                return round
+            } catch (ignored: Throwable) {
+                return null
+            }
+        }
+
         private fun loadFromLocalFile(wxid: String, target: Int): Bitmap? {
             val m = md5(wxid)
             if (m.isEmpty()) return null
@@ -695,9 +761,15 @@ class AvatarHelper {
             val paths = arrayOf(
                 base + "user_" + m + ".png",
                 base + "user_" + m + ".jpg",
+                base + "user_" + m + ".hd",
+                base + "user_" + m,
+                base + "avatar_" + m + ".png",
+                base + "avatar_" + m + ".jpg",
+                base + "avatar_" + m,
                 base + m + ".png",
                 base + m + ".jpg",
-                base + "user_" + m + ".hd"
+                base + m + ".hd",
+                base + m
             )
 
             for (path in paths) {
@@ -723,7 +795,7 @@ class AvatarHelper {
                 val cl = getWeChatCL() ?: return null
 
                 // com.tencent.mm.pluginsdk.ui.a$b is WeChat's avatar display helper
-                val avatarClass = cl.loadClass("com.tencent.mm.pluginsdk.ui.a\$b")
+                val avatarClass = WxResolver.resolve(cl, "com.tencent.mm.pluginsdk.ui.a\$b")
                 val ctx = ContextManager.getAppContext() ?: return null
 
                 // Try a.b.a(Context, username, ...) -> Drawable

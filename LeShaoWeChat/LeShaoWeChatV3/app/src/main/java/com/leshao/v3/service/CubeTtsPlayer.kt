@@ -20,6 +20,9 @@ class CubeTtsPlayer(ctx: Context) {
     private val mCacheDir: File
     private val mWakeLock: PowerManager.WakeLock?
     private val mQueue = ConcurrentLinkedQueue<String>()
+    private val mWorker = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+        Thread(r, "leshao-cube-tts")
+    }
     @Volatile
     private var mPlaying = false
     @Volatile
@@ -64,6 +67,7 @@ class CubeTtsPlayer(ctx: Context) {
 
     fun shutdown() {
         stop()
+        mWorker.shutdownNow()
     }
 
     private fun processQueue() {
@@ -77,7 +81,7 @@ class CubeTtsPlayer(ctx: Context) {
         }
         acquireWakeLock()
 
-        Thread({
+        mWorker.execute {
             try {
                 val wav = synthesize(text)
                 if (wav != null && !mPaused) {
@@ -94,18 +98,55 @@ class CubeTtsPlayer(ctx: Context) {
                 releaseWakeLock()
                 if (!mPaused) processQueue()
             }
-        }, "leshao-cube-tts").start()
+        }
     }
 
     private fun synthesize(text: String): File? {
-        try {
-            val apiKey = WmPrefs.getStr("tts_cube_key", "")
-            val voiceId = WmPrefs.getStr("tts_cube_voice", "")
-            if (apiKey.isEmpty() || voiceId.isEmpty()) {
-                LogWriter.log(TAG, "synthesize: key or voice empty, fallback to system TTS")
+        // ★ 多音色池优先：随机选一个音色播报（竹节跳动/傻包/配音魔方）
+        val poolKey = com.leshao.v3.ui.TTSPageView.randomVoiceFromPool()
+        if (poolKey != null) {
+            val idx = poolKey.indexOf('|')
+            val poolEngine = if (idx > 0) poolKey.substring(0, idx) else ""
+            val poolVoice = if (idx > 0 && idx < poolKey.length - 1) poolKey.substring(idx + 1) else ""
+            return when (poolEngine) {
+                "jianying" -> synthesizeJianYing(text, poolVoice)
+                "silly" -> synthesizeFreeLogin(text, poolVoice)
+                "cube" -> synthesizeCube(text, poolVoice)
+                else -> null
+            }
+        }
+        // 回退：无音色池时按单引擎配置合成
+        val engine = WmPrefs.getTtsEngine()
+        if (engine == "system") return null
+        if (engine == "silly") {
+            val freeLogin = WmPrefs.getStr("tts_freelogin_voice", "")
+            if (freeLogin.isEmpty()) {
+                LogWriter.log(TAG, "synthesize: silly engine but no freelogin voice")
                 return null
             }
-            // v986: 密钥脱敏, 禁止打印完整 Key(参考 AppConfig 掩码策略)。
+            return synthesizeFreeLogin(text, freeLogin)
+        }
+        val gatewayVoice = WmPrefs.getStr("tts_gateway_voice", "")
+        if (gatewayVoice.isNotEmpty()) {
+            return synthesizeGateway(gatewayVoice, text)
+        }
+        val apiKey = WmPrefs.getStr("tts_cube_key", "")
+        val voiceId = WmPrefs.getStr("tts_cube_voice", "")
+        if (apiKey.isEmpty() || voiceId.isEmpty()) {
+            LogWriter.log(TAG, "synthesize: key or voice empty, fallback to system TTS")
+            return null
+        }
+        return synthesizeCube(text, voiceId)
+    }
+
+    /** 配音魔方 API 合成：POST 魔方接口，解析 audioUrl 下载 WAV。 */
+    private fun synthesizeCube(text: String, voiceId: String): File? {
+        try {
+            val apiKey = WmPrefs.getStr("tts_cube_key", "")
+            if (apiKey.isEmpty() || voiceId.isEmpty()) {
+                LogWriter.log(TAG, "synthesizeCube: key or voice empty")
+                return null
+            }
             LogWriter.log(TAG, "synthesize: key=" + maskKey(apiKey) + " voice=" + voiceId)
 
             val url = URL(API_URL)
@@ -141,7 +182,6 @@ class CubeTtsPlayer(ctx: Context) {
                     return null
                 }
 
-                // v986: 先整体读字节再一次性 UTF-8 解码, 避免按 4KB 分块打断多字节字符。
                 val rbaos = ByteArrayOutputStream()
                 var ins: InputStream? = null
                 try {
@@ -208,6 +248,102 @@ class CubeTtsPlayer(ctx: Context) {
         } catch (t: Throwable) {
             LogWriter.log(TAG, "synthesize err: " + t.message)
             return null
+        }
+    }
+
+    /** 竹节跳动（剪映）TTS 合成：返回 PCM → WAV 文件。 */
+    private fun synthesizeJianYing(text: String, voiceType: String): File? {
+        try {
+            if (voiceType.isEmpty()) return null
+            LogWriter.log(TAG, "jianying synthesize voice=" + voiceType)
+            val pcm = com.leshao.v3.service.JianYingTtsClient.synthesize(text, voiceType, 90)
+            if (pcm == null || pcm.size == 0) return null
+            val wavBytes = com.leshao.v3.service.JianYingTtsClient.pcmToWav(pcm, 24000)
+            if (wavBytes == null) return null
+            val wav = File(mCacheDir, "tts_" + System.currentTimeMillis() + ".wav")
+            FileOutputStream(wav).use { it.write(wavBytes) }
+            LogWriter.log(TAG, "jianying synthesize OK: " + wav.length() + "b")
+            return wav
+        } catch (t: Throwable) {
+            LogWriter.log(TAG, "jianying synthesize err: " + t.message)
+            return null
+        }
+    }
+
+
+    /** 免登录豆包 TTS 合成（V2 引擎）：DoubaoTtsV2Bridge 返回 OGG/Opus，解码为 WAV 播放。 */
+    private fun synthesizeFreeLogin(text: String, voiceId: String?): File? {
+        try {
+            val vid = voiceId ?: WmPrefs.getStr("tts_freelogin_voice", "")
+            if (vid.isEmpty()) return null
+            LogWriter.log(TAG, "freelogin synthesize voice=" + vid)
+            val bytes = DoubaoTtsV2Bridge.synthesize(text, vid, 30)
+            val wav = File(mCacheDir, "tts_" + System.currentTimeMillis() + ".wav")
+            if (!DoubaoTtsV2Bridge.writeWav(bytes, wav)) {
+                LogWriter.log(TAG, "freelogin writeWav fail")
+                return null
+            }
+            LogWriter.log(TAG, "freelogin synthesize OK: " + wav.length() + "b")
+            return wav
+        } catch (t: Throwable) {
+            LogWriter.log(TAG, "freelogin synthesize err: " + t.message)
+            return null
+        }
+    }
+
+
+    /** 本地网关 TTS 合成（OpenAI /audio/speech 标准）：POST {base}/audio/speech，
+     *  body {model:"doubao", input:text, voice:voiceId}，响应为 mp3 音频二进制。 */
+    private fun synthesizeGateway(voiceId: String, text: String): File? {
+        try {
+            val base = WmPrefs.getStr("tts_gateway_base", "")
+            val key = WmPrefs.getStr("tts_gateway_key", "")
+            if (base.isEmpty() || key.isEmpty()) {
+                LogWriter.log(TAG, "gateway synthesize: base/key empty, fallback")
+                return null
+            }
+            val apiUrl = base.trimEnd('/') + "/audio/speech"
+            LogWriter.log(TAG, "gateway synthesize: voice=" + voiceId + " url=" + apiUrl)
+            val req = JSONObject()
+                .put("model", "doubao")
+                .put("input", text)
+                .put("voice", voiceId)
+                .toString()
+            val resp = GatewayHttpClient.postJson(apiUrl, key, req)
+            if (resp.code != 200) {
+                LogWriter.log(TAG, "gateway synthesize: HTTP " + resp.code + " " + resp.bodyString())
+                return null
+            }
+            val bytes = resp.body ?: ByteArray(0)
+            if (bytes.size < 100) {
+                LogWriter.log(TAG, "gateway synthesize: audio too small " + bytes.size)
+                return null
+            }
+            val mp3 = File(mCacheDir, "tts_" + System.currentTimeMillis() + ".mp3")
+            FileOutputStream(mp3).use { it.write(bytes) }
+            LogWriter.log(TAG, "gateway synthesize OK: " + mp3.length() + "b")
+            return mp3
+        } catch (t: Throwable) {
+            LogWriter.log(TAG, "gateway synthesize err: " + t.message)
+            return null
+        }
+    }
+
+    private fun readErrorBody(conn: HttpURLConnection): String {
+        return try {
+            val es = conn.errorStream ?: return ""
+            val buf = ByteArray(4096)
+            val bos = java.io.ByteArrayOutputStream()
+            while (true) {
+                val n = es.read(buf)
+                if (n <= 0) break
+                bos.write(buf, 0, n)
+            }
+            es.close()
+            val s = String(bos.toByteArray(), Charsets.UTF_8)
+            if (s.length > 300) s.substring(0, 300) + "..." else s
+        } catch (e: Throwable) {
+            ""
         }
     }
 
@@ -283,7 +419,9 @@ class CubeTtsPlayer(ctx: Context) {
         try {
             val wl = mWakeLock
             if (wl != null && !wl.isHeld) {
-                wl.acquire(60000)
+                // 不设硬编码超时，播放完成/异常时 finally 必定 release；
+                // 长音频播报不会因 60s 超时提前释放导致 CPU 休眠。
+                wl.acquire()
             }
         } catch (ignored: Throwable) {}
     }

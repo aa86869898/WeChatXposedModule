@@ -216,16 +216,30 @@ class WeChatDbPageView private constructor() {
                 }
             }
 
-            // 数据库实时刷新：每 3 秒重新读取会话表时间戳，有变化才重绘列表
+            // 数据库实时刷新：每 3 秒在后台线程读取会话表时间戳，有变化才重绘列表（避免主线程 SQL 卡顿）
             val poller = Handler(Looper.getMainLooper())
+            val polling = java.util.concurrent.atomic.AtomicBoolean(false)
             val pollTask = object : Runnable {
                 override fun run() {
-                    val next = loadRecentTimes()
-                    if (next != state.recentTimes) {
-                        state.recentTimes = next
-                        refresh.run()
+                    // 防重入：上一次查询未完成则跳过本轮，避免 SQL 慢时线程堆积
+                    if (!polling.compareAndSet(false, true)) {
+                        if (root.isAttachedToWindow) poller.postDelayed(this, 3000)
+                        return
                     }
-                    if (root.isAttachedToWindow) poller.postDelayed(this, 3000)
+                    Thread {
+                        try {
+                            val next = loadRecentTimes()
+                            act.runOnUiThread {
+                                if (next != state.recentTimes) {
+                                    state.recentTimes = next
+                                    refresh.run()
+                                }
+                            }
+                        } finally {
+                            polling.set(false)
+                        }
+                        if (root.isAttachedToWindow) poller.postDelayed(this, 3000)
+                    }.start()
                 }
             }
             root.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
@@ -590,7 +604,7 @@ class WeChatDbPageView private constructor() {
                 fill.color = AppColors.primary()
                 canvas.drawCircle(size / 2f, size / 2f, size / 2f - 1, fill)
                 val check = Paint(Paint.ANTI_ALIAS_FLAG)
-                check.color = AppColors.whiteTextOnAccent()
+                check.color = AppColors.onPrimary()
                 check.strokeWidth = (2.2 * ctx.resources.displayMetrics.density).toFloat()
                 check.style = Paint.Style.STROKE
                 check.strokeCap = Paint.Cap.ROUND

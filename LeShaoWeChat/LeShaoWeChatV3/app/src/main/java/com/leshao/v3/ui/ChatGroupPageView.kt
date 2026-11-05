@@ -168,7 +168,9 @@ class ChatGroupPageView {
             editBtn.text = "编辑"
             editBtn.setTextSize(11f)
             editBtn.setTextColor(AppColors.accent())
-            editBtn.setPadding((6 * d).toInt(), (6 * d).toInt(), (6 * d).toInt(), (6 * d).toInt())
+            editBtn.setPadding((8 * d).toInt(), (6 * d).toInt(), (8 * d).toInt(), (6 * d).toInt())
+            editBtn.minimumHeight = (44 * d).toInt()
+            editBtn.minimumWidth = (44 * d).toInt()
             CandyUi.ripple(editBtn, AppColors.SHAPE_FULL_DP.toFloat())
             editBtn.setOnClickListener { showRenameLabelDialog(ctx, parentAct, d, label.labelId.toString(), label.labelName, refresh) }
             row.addView(editBtn)
@@ -177,7 +179,9 @@ class ChatGroupPageView {
             delBtn.text = "删除"
             delBtn.setTextSize(11f)
             delBtn.setTextColor(AppColors.error())
-            delBtn.setPadding((6 * d).toInt(), (6 * d).toInt(), (6 * d).toInt(), (6 * d).toInt())
+            delBtn.setPadding((8 * d).toInt(), (6 * d).toInt(), (8 * d).toInt(), (6 * d).toInt())
+            delBtn.minimumHeight = (44 * d).toInt()
+            delBtn.minimumWidth = (44 * d).toInt()
             CandyUi.ripple(delBtn, AppColors.SHAPE_FULL_DP.toFloat())
             delBtn.setOnClickListener { showDeleteLabelDialog(ctx, parentAct, d, label.labelId.toString(), label.labelName, refresh) }
             if (label.labelId != ChatGroupHook.LABEL_ID_GROUP && label.labelId != ChatGroupHook.LABEL_ID_FRIEND && label.labelId != ChatGroupHook.LABEL_ID_SERVICE) {

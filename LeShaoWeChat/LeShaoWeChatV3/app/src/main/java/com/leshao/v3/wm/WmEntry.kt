@@ -6,6 +6,7 @@ import android.os.Looper
 import android.view.View
 import com.leshao.v3.LogWriter
 import com.leshao.v3.hook.MomentsLazyInstall
+import com.leshao.v3.hook.WxResolver
 import com.leshao.v3.wm.hook.WmChatHook
 import com.leshao.v3.wm.utils.WmPrefs
 import com.leshao.v3.wm.utils.WmReflect
@@ -56,7 +57,7 @@ class WmEntry {
             try {
                 var chatClass: Class<*>? = null
                 try {
-                    chatClass = XposedHelpers.findClass("com.tencent.mm.ui.chatting.ChattingUI", cl)
+                    chatClass = WxResolver.get("ui_chatting_ChattingUI", cl)
                 } catch (ignored: Throwable) {}
                 if (chatClass == null) {
                     LogWriter.log(TAG, "\u2717 chat: ChattingUI not found")
@@ -143,7 +144,7 @@ XposedBridge.hookAllMethods(Activity::class.java, "onResume", object : XC_Method
                 // ChattingUIFragment lifecycle: M0=open, O0=close
                 // v957: M0/O0 在 3180 已改名, 逐个 try-catch 隔离, 单点失败不再跳过后续兜底
                 try {
-                    val fragClass = XposedHelpers.findClass("com.tencent.mm.ui.chatting.ChattingUIFragment", cl)
+                    val fragClass = WxResolver.get("ui_chatting_ChattingUIFragment", cl)
                     try {
                         val m0 = fragClass.getDeclaredMethod("M0")
                         XposedBridge.hookMethod(m0, object : XC_MethodHook() {
@@ -183,7 +184,7 @@ XposedBridge.hookAllMethods(Activity::class.java, "onResume", object : XC_Method
 
                 // BaseChattingUIFragment lifecycle fallback: hook onCreate/onResume
                 try {
-                    val baseFrag = XposedHelpers.findClass("com.tencent.mm.ui.chatting.BaseChattingUIFragment", cl)
+                    val baseFrag = WxResolver.get("ui_chatting_BaseChattingUIFragment", cl)
                     XposedBridge.hookAllMethods(baseFrag, "onCreate", object : XC_MethodHook() {
                         override fun afterHookedMethod(p: MethodHookParam) {
                             LogWriter.log(TAG, "BaseChattingUIFragment.onCreate()")
@@ -213,7 +214,7 @@ XposedBridge.hookAllMethods(Activity::class.java, "onResume", object : XC_Method
                 // ChattingUIFragment 自身生命周期：二次进入(fragment 复用)时 MMEditText 不会重新 attach、
                 // M0 不再调用，必须由 onHiddenChanged/setUserVisibleHint/onResume 兜底重显聊天入口
                 try {
-                    val fragClass = XposedHelpers.findClass("com.tencent.mm.ui.chatting.ChattingUIFragment", cl)
+                    val fragClass = WxResolver.get("ui_chatting_ChattingUIFragment", cl)
                     hookChatFragMethod(fragClass, "onHiddenChanged", arrayOf<Class<*>>(Boolean::class.javaPrimitiveType!!), object : XC_MethodHook() {
                         override fun afterHookedMethod(p: MethodHookParam) {
                             try {
@@ -293,7 +294,7 @@ XposedBridge.hookAllMethods(Activity::class.java, "onResume", object : XC_Method
                 // 从会话列表进入第二个聊天窗口时：ChattingUI 为复用 Activity，MMEditText 不会重新 attach，
                 // 通过 onNewIntent 检测切换会话并重显聊天入口
                 try {
-                    val chatUiClass = XposedHelpers.findClass("com.tencent.mm.ui.chatting.ChattingUI", cl)
+                    val chatUiClass = WxResolver.get("ui_chatting_ChattingUI", cl)
                     XposedBridge.hookAllMethods(chatUiClass, "onNewIntent", object : XC_MethodHook() {
                         override fun afterHookedMethod(p: MethodHookParam) {
                             try {

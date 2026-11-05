@@ -183,6 +183,8 @@ public class ChatGroupHook {
             if (dexKitJ1 != null && !dexKitJ1.isEmpty()) j1Cands.add(dexKitJ1);
             String dexKitP06 = DexKitHelper.getP06ClassName();
             if (dexKitP06 != null && !dexKitP06.isEmpty()) j1Cands.add(dexKitP06);
+            // v3.0.566: 8.0.79 服务定位器为 pp0.i1（含 "MicroMsg.ServiceManager"，静态 v(Class)->up0.a）
+            j1Cands.add("pp0.i1");
             j1Cands.add("gp0.j1");
             j1Cands.add("gp0.j1.j");
             String usedJ1 = null;
@@ -315,6 +317,18 @@ public class ChatGroupHook {
                 } catch (Throwable ignored) {}
             }
             if (sContactStorage == null) {
+                // v3.0.466: 新版本 j1 服务链的 IM 接口(tn3.c4/sh3.c4) 已删除，j1.v(具体类) 返回 null。
+                // 直接复用 StorageHub 已绑定的联系人存储（l41.h9.b().r() → com.tencent.mm.storage.j4）。
+                try {
+                    Object rc = com.leshao.ai.hook.wechat.StorageHub.get().rcontactStorage();
+                    if (rc != null) {
+                        sContactStorage = rc;
+                        LogWriter.log(TAG, "initCoreServices: contact via StorageHub.rcontactStorage()="
+                                + rc.getClass().getName());
+                    }
+                } catch (Throwable ignored) {}
+            }
+            if (sContactStorage == null) {
                 StringBuilder dump = new StringBuilder("initCoreServices: svc=")
                         .append(svc.getClass().getName()).append(" 无 cj/ij, 0-arg getters:");
                 for (java.lang.reflect.Method m : svc.getClass().getDeclaredMethods()) {
@@ -368,7 +382,7 @@ public class ChatGroupHook {
             // v955(问题6): 优先运行时反查的标签实体类, 仅在缺失时回退硬编码(旧版)
             Class<?> g4 = sLabelEntityClass != null
                     ? sLabelEntityClass
-                    : XposedHelpers.findClass("com.tencent.mm.storage.g4", sClassLoader);
+                    : WxResolver.get("storage_g4", sClassLoader);
 
             XposedBridge.hookAllMethods(g4, "insert", new XC_MethodHook() {
                 @Override
@@ -572,7 +586,12 @@ public class ChatGroupHook {
     }
 
     public static LabelInfo getLabelById(String labelId) {
-        int id = Integer.parseInt(labelId);
+        int id;
+        try {
+            id = Integer.parseInt(labelId);
+        } catch (NumberFormatException e) {
+            return null;
+        }
         try {
             Object st = getLabelStorage();
             if (st != null) {
@@ -713,7 +732,7 @@ public class ChatGroupHook {
                 Object st = getLabelStorage();
                 ClassLoader cl = getClassLoader();
                 if (st != null && cl != null) {
-                    Class<?> c4 = XposedHelpers.findClass("com.tencent.mm.storage.c4", cl);
+                    Class<?> c4 = WxResolver.get("storage_c4", cl);
                     Object label = XposedHelpers.newInstance(c4);
                     try { XposedHelpers.setIntField(label, "field_labelID", -1); } catch (Throwable ignored) {}
                     try { XposedHelpers.setObjectField(label, "field_labelName", name); } catch (Throwable ignored) {}
@@ -758,7 +777,12 @@ public class ChatGroupHook {
     }
 
     public static boolean deleteLabel(String labelId) {
-        int id = Integer.parseInt(labelId);
+        int id;
+        try {
+            id = Integer.parseInt(labelId);
+        } catch (NumberFormatException e) {
+            return false;
+        }
         if (id == LABEL_ID_GROUP || id == LABEL_ID_FRIEND || id == LABEL_ID_SERVICE) return false;
         boolean wechatDeleted = false;
         try {
@@ -781,7 +805,12 @@ public class ChatGroupHook {
     public static boolean renameLabel(String labelId, String newName) {
         if (newName == null || newName.trim().isEmpty()) return false;
         newName = newName.trim();
-        int id = Integer.parseInt(labelId);
+        int id;
+        try {
+            id = Integer.parseInt(labelId);
+        } catch (NumberFormatException e) {
+            return false;
+        }
         if (id == LABEL_ID_GROUP || id == LABEL_ID_FRIEND || id == LABEL_ID_SERVICE) return false;
         // try WeChat rename
         try {

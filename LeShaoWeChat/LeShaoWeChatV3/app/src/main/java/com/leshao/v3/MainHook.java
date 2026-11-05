@@ -10,7 +10,6 @@ import android.os.Process;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.hook.AutoForwardHook;
 import com.leshao.v3.hook.AntiDetectionHook;
-import com.leshao.v3.hook.ChatBubbleHook;
 import com.leshao.v3.hook.FavVoiceForwardHook;
 import com.leshao.v3.hook.ChatFavVoiceHook;
 import com.leshao.v3.hook.ForwardLimitHook;
@@ -20,6 +19,7 @@ import com.leshao.v3.hook.GroupTitleTagHook;
 import com.leshao.v3.hook.ChatGroupUiInjector;
 import com.leshao.v3.hook.ChatVoiceSwitchHook;
 import com.leshao.v3.hook.DexKitHelper;
+import com.leshao.v3.hook.WxResolverRegistry;
 import com.leshao.v3.wm.WmEntry;
 import com.leshao.v3.wm.hook.WmChatHook;
 import com.leshao.v3.hook.HookManager;
@@ -30,8 +30,12 @@ import com.leshao.v3.hook.TtsVoiceSender;
 import com.leshao.v3.hook.SignatureDump;
 import com.leshao.v3.hook.VoiceForwardHook;
 import com.leshao.v3.hook.VoiceAutoPlay;
+import com.leshao.v3.hook.VoiceSpeakerHook;
+import com.leshao.v3.hook.VoiceDetailHook;
 import com.leshao.v3.hook.WeChatIdInjectHook;
+import com.leshao.v3.hook.WeChatVersion;
 import com.leshao.v3.hook.WeChatUpdateBlocker;
+import com.leshao.v3.hook.ScreenshotFloatBlockerHook;
 import com.leshao.v3.db.VoiceHistoryDbHelper;
 import com.leshao.v3.model.ModuleConfig;
 import com.leshao.v3.service.TTSBroadcaster;
@@ -72,11 +76,11 @@ public class MainHook implements IXposedHookLoadPackage {
 
     public MainHook() {}
 
-    public static final String MODULE_BUILD = "v3.0.314";
+    public static final String MODULE_BUILD = "v3.0.581";
 
     /** 模块构建版本号(整数)。随 MODULE_BUILD 同步递增, 用于 DexKit 扫描缓存失效 */
 
-    public static final int MODULE_VERSION_CODE = 30314;
+    public static final int MODULE_VERSION_CODE = 30581;
 
     /** v1079: 当前前台 Activity(onResume 记录/onPause 清除), 供 talker 解析等复用。 */
     private static volatile java.lang.ref.WeakReference<Activity> sResumedActivity;
@@ -265,7 +269,9 @@ public class MainHook implements IXposedHookLoadPackage {
 
         int wxVersion = 0;
         try { wxVersion = XposedHelpers.getIntField(lpparam.appInfo, "versionCode"); }
-        catch (Throwable t) {}
+        catch (Throwable t) {
+            LogWriter.log(TAG, "读取微信 versionCode 失败: " + t.getMessage());
+        }
 
         // v962: 实例身份统一走 InstanceManager(主微信/系统分身隔离, 见《微信模块隔离.md》);
         // attachBaseContext 前 userId 走 uid 兜底计算, prefs 状态以 onReady 时为准
@@ -297,14 +303,27 @@ public class MainHook implements IXposedHookLoadPackage {
         try {
             ContextManager.init(cl, lpparam.appInfo.sourceDir);
             captureModuleApkPath(lpparam);
-            ContextManager.hookAttachBaseContext(lpparam);
+            ContextManager.hookAttachBaseContext(lpparam, false);
 
             // v1024: WCDB 逃密 —— 必须在微信打开 EnMicroMsg.db 之前 hook WCDB openDatabase,
             // 捕获微信自开的 DB 实例与密钥(绕开 CsoLoader native 库未加载问题)。
-            safeRun("DatabaseProvider.initEarly", () -> com.leshao.v3.db.DatabaseProvider.initEarly(cl));
+            // 放后台线程尽早执行，避免主线程反射 hook 拖慢微信启动（attachBaseContext 的
+            // probeAndRehook 会兜底，即使后台线程稍慢也不会漏掉数据库打开事件）。
+            try {
+                Thread dbEarly = new Thread(() -> {
+                    try {
+                        com.leshao.v3.db.DatabaseProvider.initEarly(cl);
+                    } catch (Throwable ignored) {}
+                }, "leshao-db-early");
+                dbEarly.setDaemon(true);
+                dbEarly.start();
+            } catch (Throwable ignored) {
+            }
 
-             safeRun("DexKitHelper.setVersionCode", () -> DexKitHelper.setVersionCode(wxVerCode));
-             safeRun("DexKitHelper.setModuleVersion", () -> DexKitHelper.setModuleVersion(MODULE_VERSION_CODE));
+            safeRun("DexKitHelper.setVersionCode", () -> DexKitHelper.setVersionCode(wxVerCode));
+            safeRun("DexKitHelper.setModuleVersion", () -> DexKitHelper.setModuleVersion(MODULE_VERSION_CODE));
+            safeRun("WeChatVersion.setVersionCode", () -> WeChatVersion.setVersionCode(wxVerCode));
+            safeRun("WxResolverRegistry.registerAll", () -> WxResolverRegistry.registerAll());
              safeRun("DexKitHelper.hookApplication", () -> DexKitHelper.hookApplication(lpparam));
               DexKitHelper.setProgressCallback(new DexKitHelper.ScanProgressCallback() {
                   @Override
@@ -339,7 +358,7 @@ public class MainHook implements IXposedHookLoadPackage {
             deferRun("ChatFooterLongPressMenu", () -> ChatFooterLongPressMenu.hook(cl));
             deferRun("WmChatHook.p06Bypass", () -> WmChatHook.hookP06BypassEarly(cl));
             deferRun("ChatGroupUiInjector", () -> ChatGroupUiInjector.hook(cl));
-            deferRun("MsgForgeHook", () -> com.leshao.v3.hook.MsgForgeHook.hook(cl));
+            // v3.0.557: 已按要求移除消息伪装功能
             deferRun("RedPacketHook", () -> com.leshao.v3.hook.RedPacketHook.hook(cl));
             ContextManager.setOnReadyCallback(new Runnable() {
                 @Override
@@ -370,8 +389,42 @@ public class MainHook implements IXposedHookLoadPackage {
                                 LogWriter.log(TAG, "[MainHook] DatabaseProvider listener err: " + t.getMessage());
                             }
 
-                            safeRun("SignatureDump", () -> SignatureDump.dump(cl));
+safeRun("SignatureDump", () -> SignatureDump.dump(cl));
                             safeRun("TTSBroadcaster", () -> TTSBroadcaster.init(ctx));
+                            // v3.0.414: 傻包TTS V2 引擎（进程内直连，无局域网依赖）
+                            safeRun("DoubaoTtsV2", () -> com.leshao.v3.service.DoubaoTtsV2Bridge.ensureInit(ctx));
+                            // 接收傻包网页登录页（模块独立进程）回传的完整 Cookie，保存到设置
+                            try {
+                                android.content.IntentFilter cookieFilter =
+                                        new android.content.IntentFilter(
+                                                "com.leshao.v3.action.SAVE_DOUBAO_COOKIE");
+                                android.content.BroadcastReceiver cookieReceiver = new android.content.BroadcastReceiver() {
+                                    @Override
+                                    public void onReceive(android.content.Context c,
+                                                          android.content.Intent intent) {
+                                        try {
+                                            String cookie = intent.getStringExtra("cookie");
+                                            if (cookie != null && !cookie.isEmpty()) {
+                                                com.leshao.v3.wm.utils.WmPrefs.setStr(
+                                                        "tts_samantha_cookie", cookie);
+                                                LogWriter.log(TAG, "傻包登录 Cookie 已保存 len="
+                                                        + cookie.length());
+                                                android.widget.Toast.makeText(ctx,
+                                                        "✅ 傻包登录 Cookie 已保存",
+                                                        android.widget.Toast.LENGTH_LONG).show();
+                                            }
+                                        } catch (Throwable ignored) {}
+                                    }
+                                };
+                                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                                    ctx.registerReceiver(cookieReceiver, cookieFilter,
+                                            android.content.Context.RECEIVER_EXPORTED);
+                                } else {
+                                    ctx.registerReceiver(cookieReceiver, cookieFilter);
+                                }
+                            } catch (Throwable t) {
+                                LogWriter.log(TAG, "注册傻包登录广播失败: " + t.getMessage());
+                            }
                             safeRun("VoiceAutoPlay", () -> VoiceAutoPlay.hook(cl));
                             safeRun("ModuleConfig.initWxid", () -> ModuleConfig.initWxid(ctx));
                             safeRun("VoiceHistoryDbHelper", () -> VoiceHistoryDbHelper.getInstance(ctx)
@@ -387,13 +440,22 @@ public class MainHook implements IXposedHookLoadPackage {
                                     () -> GroupTitleTagHook.hook(cl)));
 
                             safeRun("VoiceForwardHook", () -> HookManager.register("VoiceForwardHook", VoiceForwardHook::hook));
+                            safeRun("VoiceSpeakerHook", () -> HookManager.register("VoiceSpeakerHook",
+                                    () -> VoiceSpeakerHook.hook(cl)));
+                            safeRun("VoiceDetailHook", () -> HookManager.register("VoiceDetailHook",
+                                    () -> VoiceDetailHook.hook(cl)));
                             safeRun("AutoForwardHook", () -> HookManager.register("AutoForwardHook", () -> AutoForwardHook.hook(cl)));
                             safeRun("WeChatUpdateBlocker", () -> HookManager.register("WeChatUpdateBlocker", () -> WeChatUpdateBlocker.hook(cl)));
                             safeRun("ChatVoiceSwitchHook", () -> ChatVoiceSwitchHook.init(cl));
 
                             // 新增（严格按需求文档实现）
+                            // v3.0.515: 屏蔽截图后右下角「转发截图」浮标（截图 -> 屏蔽截图转发浮标）
+                            safeRun("ScreenshotFloatBlockerHook", () -> HookManager.register("ScreenshotFloatBlockerHook",
+                                    () -> ScreenshotFloatBlockerHook.hook(cl)));
                             safeRun("LeftTopEntryHook", () -> com.leshao.v3.hook.LeftTopEntryHook.hook(cl));
                             safeRun("ChatFooterBarHook", () -> com.leshao.v3.hook.ChatFooterBarHook.hook(cl));
+                            // v3.0.505: M3 玻璃化风格主题（微信界面毛玻璃，系统级 FLAG_BLUR_BEHIND）
+                            safeRun("M3GlassThemeHook", () -> com.leshao.v3.hook.M3GlassThemeHook.hook(cl, lpparam.processName));
 
                             // 自定义气泡 + 时间线：v3.0.223 起改用《聊天气泡与时间线_最终方案与权威数据.md》
                             // 「完整替换」方案（WxBubbleModule，见 xposed_init 第二入口），旧贴皮方案停用。
@@ -484,9 +546,10 @@ public class MainHook implements IXposedHookLoadPackage {
         try {
             ContextManager.init(cl, lpparam.appInfo.sourceDir);
             captureModuleApkPath(lpparam);
-            ContextManager.hookAttachBaseContext(lpparam);
+            ContextManager.hookAttachBaseContext(lpparam, false);
             safeRun("DexKitHelper.setVersionCode", () -> DexKitHelper.setVersionCode(wxVerCode));
             safeRun("DexKitHelper.setModuleVersion", () -> DexKitHelper.setModuleVersion(MODULE_VERSION_CODE));
+            safeRun("WeChatVersion.setVersionCode", () -> WeChatVersion.setVersionCode(wxVerCode));
             safeRun("DexKitHelper.hookApplication", () -> DexKitHelper.hookApplication(lpparam));
         } catch (Throwable t) {
             LogWriter.log(TAG, "push init err: " + t.getMessage());
@@ -500,20 +563,15 @@ public class MainHook implements IXposedHookLoadPackage {
                         return;
                     }
                     safeRun("MessageHook(push)", () -> MessageHook.hook(cl));
-                    safeRun("WanQunGroupHook(push)", () -> {
-                        WanQunGroupHook.init(cl);
-                        WanQunGroupHook.hookReceive(cl);
-                    });
-                    // v3.0.223: 自动扫码进群在 push 进程也注册消息监听（手册 §6.4(5) 要求
-                    // scope 同时覆盖 com.tencent.mm 与 com.tencent.mm:push，push 先收到群图片）
-                    safeRun("AutoGroupQrHook(push)", () -> {
-                        com.leshao.v3.hook.AutoGroupQrHook.hook(cl);
-                    });
+                    // 万群管理/自动扫码仅在主进程注册，避免主/push 双进程重复处理（重复入群/重复警告/踢人）
+                    // 原 push 覆盖先收到群图片的场景，由主进程消息监听兜底处理。'''
                 } catch (Throwable t) {
                     LogWriter.log(TAG, "push onReady FATAL: " + t.getMessage());
                 } finally {
                     int hookTasksRegistered = HookManager.pendingCount();
-                    try { HookManager.activateAll(); } catch (Throwable t) {}
+                    try { HookManager.activateAll(); } catch (Throwable t) {
+                            LogWriter.log(TAG, "HookManager.activateAll 失败: " + t.getMessage());
+                        }
                     printModuleSummary(hookTasksRegistered);
                 }
             }
@@ -542,9 +600,10 @@ public class MainHook implements IXposedHookLoadPackage {
         try {
             ContextManager.init(cl, lpparam.appInfo.sourceDir);
             captureModuleApkPath(lpparam);
-            ContextManager.hookAttachBaseContext(lpparam);
+            ContextManager.hookAttachBaseContext(lpparam, true);
             safeRun("DexKitHelper.setVersionCode(appbrand)", () -> DexKitHelper.setVersionCode(wxVerCode));
             safeRun("DexKitHelper.setModuleVersion(appbrand)", () -> DexKitHelper.setModuleVersion(MODULE_VERSION_CODE));
+            safeRun("WeChatVersion.setVersionCode(appbrand)", () -> WeChatVersion.setVersionCode(wxVerCode));
             safeRun("DexKitHelper.hookApplication(appbrand)", () -> DexKitHelper.hookApplication(lpparam));
         } catch (Throwable t) {
             LogWriter.log(TAG, "appbrand init err: " + t.getMessage());
@@ -553,6 +612,11 @@ public class MainHook implements IXposedHookLoadPackage {
             @Override
             public void run() {
                 try {
+                    // appbrand 进程也初始化实例管理器（否则 isEnabled 恒 true，总开关失效）
+                    try {
+                        android.content.Context ac = ContextManager.getAppContext();
+                        if (ac != null) InstanceManager.init(ac);
+                    } catch (Throwable ignored) {}
                     if (!InstanceManager.isEnabled()) {
                         LogWriter.log(TAG, "appbrand 实例开关关闭, 跳过去广告 Hook");
                         return;
@@ -591,8 +655,6 @@ public class MainHook implements IXposedHookLoadPackage {
                             sResumedActivity = new java.lang.ref.WeakReference<>((Activity) param.thisObject);
                             // v1140: 微信切换深色模式会重建 Activity, onResume 时实时重算模块配色
                             com.leshao.v3.ui.AppColors.refresh();
-                            // v3.0.203: 微信深浅色切换后重载气泡配置（浅/暗各一套）并刷新已渲染气泡
-                            ChatBubbleHook.refreshThemeConfig();
                             // v1025: 从微信 Activity 反查真实 ClassLoader 并重新 hook WCDB
                             com.leshao.v3.db.DatabaseProvider.probeAndRehook(param.thisObject);
                         }
@@ -674,6 +736,21 @@ public class MainHook implements IXposedHookLoadPackage {
         sModuleTotal.incrementAndGet();
         LogWriter.log(TAG, "[Module] DEFER " + name);
         Thread t = new Thread(() -> {
+            // 多开门控：实例总开关关闭时跳过延迟 Hook（先等待 InstanceManager 初始化完成，避免 sPrefs==null 恒 true）
+            try {
+                long waitUntil = System.currentTimeMillis() + 5000L;
+                while (!com.leshao.v3.InstanceManager.isInited()
+                        && System.currentTimeMillis() < waitUntil) {
+                    Thread.sleep(100);
+                }
+            } catch (Throwable ignored) {}
+            try {
+                if (!com.leshao.v3.InstanceManager.isEnabled()) {
+                    LogWriter.log(TAG, "[Module] DEFER " + name + " skipped: 实例总开关关闭");
+                    sModuleOk.incrementAndGet();
+                    return;
+                }
+            } catch (Throwable ignored) {}
             long started = System.currentTimeMillis();
             try {
                 task.run();

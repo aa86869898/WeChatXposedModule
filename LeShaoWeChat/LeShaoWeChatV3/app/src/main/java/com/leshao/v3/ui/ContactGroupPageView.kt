@@ -121,7 +121,7 @@ class ContactGroupPageView {
 
             // ==================== 消息增强类 ====================
             root.addView(M3Page.section(ctx, "消息增强",
-                    "防撤回、长按菜单净化、消息伪装"))
+                    "防撤回、长按菜单净化"))
 
             // v1146: 消息防撤回（严格实现文档《WeChat_AntiRevoke_Reverse.md》H1/H3 方案）
             val antiRevokeOn = prefs != null && prefs.getBoolean(AntiRecallHook.K_MASTER, true)
@@ -148,38 +148,13 @@ class ContactGroupPageView {
 
             root.addView(candyDivider(ctx, d))
 
-            // 消息伪装（原"更多功能"卡片拆出，归入消息增强）
-            val cardMsgForge = makeCard(ctx, d)
-            cardMsgForge.addView(switchRow(ctx, d, "消息伪装",
-                    "文本伪装成系统消息 / 名片 / 链接卡片", MsgForgeHook.isEnabled(),
-                    { _, on ->
-                        MsgForgeHook.setEnabled(on)
-                        Toast.makeText(ctx, "消息伪装已" + (if (on) "开启" else "关闭"), Toast.LENGTH_SHORT).show()
-                    },
-                    { SubPageActivity.open(act, "消息伪装", 23) }))
-            root.addView(cardMsgForge)
-
-            // ==================== 红包装备类 ====================
-            root.addView(M3Page.section(ctx, "红包装备",
-                    "自动抢红包"))
-
-            // 自动抢红包（原"更多功能"卡片拆出）
-            val cardRedPacket = makeCard(ctx, d)
-            cardRedPacket.addView(switchRow(ctx, d, "自动抢红包",
-                    "纯后台自动领取群红包", RedPacketHook.isEnabled(),
-                    { _, on ->
-                        RedPacketHook.setEnabled(on)
-                        Toast.makeText(ctx, "自动抢红包已" + (if (on) "开启" else "关闭"), Toast.LENGTH_SHORT).show()
-                    },
-                    { SubPageActivity.open(act, "自动抢红包", 24) }))
-            root.addView(cardRedPacket)
 
             // ==================== 聊天类 ====================
             root.addView(M3Page.section(ctx, "聊天增强",
                     "聊天分组、输入框快捷按钮、自动扫码进群"))
 
             // 聊天分组卡片
-            val chatGroupOn = prefs != null && prefs.getBoolean("ls_chat_group_enabled", true)
+            val chatGroupOn = prefs != null && prefs.getBoolean("ls_chat_group_enabled", false)
             val cardGroup = makeCard(ctx, d)
             cardGroup.addView(switchRow(ctx, d, "聊天分组", null, chatGroupOn, { _, on ->
                 if (prefs != null) prefs.edit().putBoolean("ls_chat_group_enabled", on).apply()
@@ -231,6 +206,29 @@ class ContactGroupPageView {
                     },
                     { AutoGroupQrConfig.showConfigDialog(act) }))
             root.addView(cardAutoGroupQr)
+
+            // ==================== 语音播放 ====================
+            root.addView(M3Page.section(ctx, "语音播放",
+                    "屏蔽听筒自动切换、长按语音消息查看详情并拖动进度播放"))
+
+            val cardVoicePlay = makeCard(ctx, d)
+            val speakerOn = VoiceSpeakerHook.isEnabled()
+            cardVoicePlay.addView(switchRow(ctx, d, "屏蔽听筒切换",
+                    "播放语音始终使用扬声器，贴近耳朵不再自动切听筒", speakerOn,
+                    { _, on ->
+                        VoiceSpeakerHook.setEnabled(on)
+                        Toast.makeText(ctx, "屏蔽听筒切换已" + (if (on) "开启" else "关闭"),
+                                Toast.LENGTH_SHORT).show()
+                    }, null))
+            val detailOn = VoiceDetailHook.isEnabled()
+            cardVoicePlay.addView(switchRow(ctx, d, "长按语音查看详情",
+                    "语音消息长按菜单增加「语音详情」，可拖动进度播放", detailOn,
+                    { _, on ->
+                        VoiceDetailHook.setEnabled(on)
+                        Toast.makeText(ctx, "长按语音详情已" + (if (on) "开启" else "关闭"),
+                                Toast.LENGTH_SHORT).show()
+                    }, null))
+            root.addView(cardVoicePlay)
 
             // ==================== UI美化类 ====================
             root.addView(M3Page.section(ctx, "UI美化",

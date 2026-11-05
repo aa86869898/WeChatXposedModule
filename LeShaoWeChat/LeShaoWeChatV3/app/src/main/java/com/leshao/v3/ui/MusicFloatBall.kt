@@ -25,7 +25,7 @@ import android.widget.LinearLayout
  * 无操作 5 秒自动侧边休眠（缩回只露半圆）；无播放时自动消失。
  * × 关闭悬浮球（不停止播放），再次进入在线音乐并返回时会重新出现。
  *
- * 外观跟随模块「糖果粉」主题（#FF99C2 纯色），浅色/暗色模式自动适配。
+ * 外观跟随模块「极光蓝紫」主题（品牌主色纯色），浅色/暗色模式自动适配。
  *
  * 使用 WindowManager.LayoutParams.TYPE_APPLICATION_PANEL 挂到 Activity 的
  * WindowManager，无需系统悬浮窗权限，随 Activity 一起销毁。

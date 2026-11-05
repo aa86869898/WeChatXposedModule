@@ -21,6 +21,7 @@ import android.text.TextWatcher
 import android.text.style.StyleSpan
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.view.Window
 import android.view.WindowManager
 import android.widget.CheckBox
@@ -108,16 +109,16 @@ class MainActivity {
         private val ITEM_NAMES = arrayOf(
             "联系人和群聊", "聊天分组",
             "TTS语音播报", "在线音乐",
-            "关于模块"
+            "红包转账", "关于模块"
         )
         private val ITEM_ICONS = intArrayOf(
             0x1F465, 0x1F4CB,
             0x1F50A, 0x1F3B5,
-            0x2139
+            0x1F9E7, 0x2139
         )
 
         private val PAGE_IDS = intArrayOf(
-            3, 14, 8, 22, 20
+            3, 14, 8, 22, 36, 20
         )
 
         private val PAGE_FEATURES = HashMap<Int, String>()
@@ -127,9 +128,10 @@ class MainActivity {
             PAGE_FEATURES[8] = "语音播报|TTS播报|排版引擎|配音|API|Voice|间隔|熔断|消息类型|免打扰|安静时段|播报参数|音量|语速|音调|TTS|文字消息播报|语音消息播报|图片消息播报|播报发送人昵称|播报群聊消息|截断长文字"
             PAGE_FEATURES[22] = "在线音乐|音乐|点歌|歌曲搜索|专辑|歌手|歌单|排行榜|无损|试听|下载|酷我|Music|点歌白名单"
             PAGE_FEATURES[20] = "关于模块|版本|模块版本|热更新|更新管控|禁止微信热更新|WeChatUpdateBlocker"
-            PAGE_FEATURES[33] = "微信美化|自定义气泡|气泡|聊天时间线颜色|时间颜色|群聊成员昵称颜色|昵称颜色|群成员头衔|头衔标签|群主|管理员"
+            PAGE_FEATURES[33] = "微信美化|群成员头衔|头衔标签|群主|管理员|群成员标签|群聊头衔"
             PAGE_FEATURES[34] = "快捷菜单|快捷|入口"
             PAGE_FEATURES[99] = "乐少群发|群发|万群定时群发|自动转发|转发"
+            PAGE_FEATURES[36] = "红包转账|抢红包|自动抢红包|红包统计|红包排行|排行榜|金额播报|红包"
         }
 
         @JvmStatic
@@ -224,7 +226,13 @@ class MainActivity {
                                     if (queryMethod.parameterTypes.size == 1) {
                                         cursor = queryMethod.invoke(db, sql)
                                     } else {
-                                        cursor = queryMethod.invoke(db, sql, arrayOf(wxid))
+                                        // WCDB rawQuery 第二参是 Object[]；String[] 也兼容。
+                                        val args: Any = if (queryMethod.parameterTypes[1] == Array<Any>::class.java) {
+                                            arrayOf<Any>(wxid)
+                                        } else {
+                                            arrayOf(wxid)
+                                        }
+                                        cursor = queryMethod.invoke(db, sql, args)
                                     }
                                     if (cursor != null) {
                                         val moveToFirst = cursor.javaClass.getMethod("moveToFirst")
@@ -239,22 +247,24 @@ class MainActivity {
                                     }
                                 } catch (e: Throwable) {
                                     LogWriter.log(TAG, "DB query failed: " + e.message)
-                                } finally {
-                                    try {
-                                        val closeMethod = db.javaClass.getMethod("close")
-                                        closeMethod.invoke(db)
-                                    } catch (e: Throwable) {
-                                        try {
-                                            val c = db.javaClass.getDeclaredMethod("c")
-                                            c.isAccessible = true
-                                            c.invoke(db)
-                                        } catch (ignored: Throwable) {}
-                                    }
                                 }
+                                // v3.0.569: 不关闭捕获的数据库——这是微信自己打开的实例，
+                                // 关闭会导致微信后续操作崩溃/数据异常。
                             }
                         }
                     } catch (e: Throwable) {
                         LogWriter.log(TAG, "DB open failed: " + e.message)
+                    }
+
+                    if (!found) {
+                        // v3.0.557: 手写 DB 查询失败时用 ContactRepository（已验证的 rcontact 链路）兜底
+                        try {
+                            val anyName = com.leshao.v3.ContactRepository.queryAnyContactName(sUserWxid)
+                            if (anyName != null && anyName.isNotEmpty()) {
+                                sUserNickname = anyName
+                                found = true
+                            }
+                        } catch (ignored: Throwable) {}
                     }
 
                     if (!found) {
@@ -389,26 +399,39 @@ class MainActivity {
         }
 
         private fun openDb(cl: ClassLoader, uin: Long): Any? {
-            var cl = cl
-            val tkCL = VersionCompat.findTinkerClassLoader(cl)
-            if (tkCL != null) {
-                cl = tkCL
-                LogWriter.log(TAG, "openDb: using Tinker ClassLoader")
+            // v3.0.569: 不再裸开微信 EnMicroMsg.db（错误密码会触发微信数据损坏检测）。
+            // 改为使用 DatabaseProvider 捕获的「微信自己打开」的数据库实例（密钥正确、零风险）。
+            // v3.0.570: 若微信已启动但数据库尚未捕获（hook 时序/子进程差异），轮询等待最多 6s，
+            //           仍失败则返回 null（主页走 ContactRepository/prefs 兜底，不影响主功能）。
+            try {
+                val deadline = System.currentTimeMillis() + 6000L
+                while (System.currentTimeMillis() < deadline) {
+                    val db = com.leshao.v3.db.DatabaseProvider.getDatabase()
+                    if (db != null) {
+                        LogWriter.log(TAG, "openDb: using DatabaseProvider captured db " + db.javaClass.name)
+                        return db
+                    }
+                    Thread.sleep(500L)
+                }
+                LogWriter.log(TAG, "openDb: DatabaseProvider db not ready after 6s, return null")
+            } catch (t: Throwable) {
+                LogWriter.log(TAG, "openDb: DatabaseProvider err " + t.message)
             }
-            val baseDir = VersionCompat.getBaseDir(cl, ContextManager.getAppContext())
-            LogWriter.log(TAG, "DB path=" + baseDir + "MicroMsg/<hash>/EnMicroMsg.db")
-            // v1016: 目录名候选化 + 按磁盘实际存在选择
-            return VersionCompat.openEnMicroDb(cl, baseDir, uin)
+            return null
         }
 
         private fun findQueryMethod(dbClass: Class<*>): Method? {
+            // v3.0.466: WCDB rawQuery 第二参数是 Object[]，须同时匹配 String[] 与 Object[]。
+            val sig2 = arrayOf(Array<String>::class.java, Array<Any>::class.java)
             val knownNames = arrayOf("u", "rawQuery", "v", "w", "x", "y", "z", "rowQuery")
             for (name in knownNames) {
-                try {
-                    val m = dbClass.getDeclaredMethod(name, String::class.java, Array<String>::class.java)
-                    m.isAccessible = true
-                    return m
-                } catch (ignored: NoSuchMethodException) {}
+                for (arr in sig2) {
+                    try {
+                        val m = dbClass.getDeclaredMethod(name, String::class.java, arr)
+                        m.isAccessible = true
+                        return m
+                    } catch (ignored: NoSuchMethodException) {}
+                }
             }
             for (name in knownNames) {
                 try {
@@ -421,7 +444,8 @@ class MainActivity {
             for (m in dbClass.declaredMethods) {
                 if (m.returnType == android.database.Cursor::class.java) {
                     val pts = m.parameterTypes
-                    if (pts.size == 2 && pts[0] == String::class.java && pts[1] == Array<String>::class.java) {
+                    if (pts.size == 2 && pts[0] == String::class.java
+                            && (pts[1] == Array<String>::class.java || pts[1] == Array<Any>::class.java)) {
                         m.isAccessible = true
                         return m
                     }
@@ -504,16 +528,17 @@ class MainActivity {
 
             val root = LinearLayout(ctx)
             root.orientation = LinearLayout.VERTICAL
-            root.background = CandyUi.pageGradient()
-            root.setPadding(dp(d, 12), dp(d, 12), dp(d, 12), dp(d, 12))
+            // M3: 纯 surface 底色，替代旧渐变
+            root.background = CandyUi.dialogBg(ctx)
+            root.setPadding(dp(d, 16), dp(d, 16), dp(d, 16), dp(d, 16))
 
             val titleTv = TextView(ctx)
             titleTv.text = "免责声明"
-            titleTv.setTextSize(18f)
-            titleTv.setTextColor(AppColors.accent())
+            titleTv.setTextSize(20f)
+            titleTv.setTextColor(AppColors.textPrimary())
             titleTv.setTypeface(null, Typeface.BOLD)
             titleTv.gravity = Gravity.CENTER
-            titleTv.setPadding(0, 0, 0, dp(d, 8))
+            titleTv.setPadding(0, dp(d, 2), 0, dp(d, 10))
             root.addView(titleTv)
 
             val sv = ScrollView(ctx)
@@ -522,7 +547,8 @@ class MainActivity {
             bodyCol.orientation = LinearLayout.VERTICAL
             val bodyBg = GradientDrawable()
             bodyBg.cornerRadius = dp(d, AppColors.SHAPE_SM_DP).toFloat()
-            bodyBg.setColor(AppColors.card())
+            bodyBg.setColor(AppColors.glassRowFill())
+            bodyBg.setStroke(dp(d, 1), AppColors.glassStroke())
             bodyCol.background = bodyBg
             bodyCol.setPadding(dp(d, 12), dp(d, 10), dp(d, 12), dp(d, 10))
 
@@ -545,8 +571,20 @@ class MainActivity {
             root.addView(candyDivider(ctx, d))
 
             val checkBox = com.leshao.v3.ui.widgets.M3Page.checkBox(ctx, "我已完整阅读并同意以上免责条款")
-            checkBox.setTextColor(AppColors.text1())
-            checkBox.setPadding(0, 0, 0, dp(d, 2))
+            checkBox.setTextSize(15f)
+            checkBox.setTypeface(null, Typeface.BOLD)
+            checkBox.setTextColor(AppColors.textPrimary())
+            // v3.0.457 玻璃风勾选行：半透明实底 + 发丝描边
+            val cbBg = GradientDrawable()
+            cbBg.cornerRadius = dp(d, AppColors.SHAPE_SM_DP).toFloat()
+            cbBg.setColor(AppColors.glassRowFill())
+            cbBg.setStroke(dp(d, 1), AppColors.glassStroke())
+            checkBox.background = cbBg
+            checkBox.setPadding(dp(d, 12), dp(d, 10), dp(d, 12), dp(d, 10))
+            val cbLp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT)
+            cbLp.topMargin = dp(d, 6)
+            checkBox.layoutParams = cbLp
             root.addView(checkBox)
 
             val btnRow = LinearLayout(ctx)
@@ -662,12 +700,18 @@ class MainActivity {
             val searchMap = HashMap<View, String>()
 
             val card1 = buildCard(ctx, d)
-            card1.addView(makeListRow(ctx, d, 0x2764, "爱心捐赠", AppColors.accent(), true, View.OnClickListener { showDonateDialog(act) }))
+            val donateItem = makeListRow(ctx, d, 0x2764, "爱心捐赠", AppColors.accent(), true, View.OnClickListener { showDonateDialog(act) })
+            donateItem.tag = "menu_item"
+            searchMap[donateItem] = "爱心捐赠|捐赠|赞助|支持|赞赏"
+            card1.addView(donateItem)
             card1.addView(candyDivider(ctx, d))
-            card1.addView(makeListRow(ctx, d, 0x1F464, "乐少群发", 0, false, View.OnClickListener {
+            val groupSendItem = makeListRow(ctx, d, 0x1F464, "乐少群发", 0, false, View.OnClickListener {
                 dismissDialog()
                 SubPageActivity.openFromMain(act, "乐少群发", 99)
-            }))
+            })
+            groupSendItem.tag = "menu_item"
+            searchMap[groupSendItem] = "乐少群发|群发|批量发送|定时群发|万群"
+            card1.addView(groupSendItem)
             // v998: 实例隔离入口已隐藏(默认开启), 不再提供主页切换开关
             body.addView(card1)
 
@@ -893,12 +937,8 @@ class MainActivity {
             val cardLp = LinearLayout.LayoutParams(-1, -2)
             cardLp.setMargins(dp(d, 12), 0, dp(d, 12), 0)
             card.layoutParams = cardLp
-            // M3 Expressive search bar: 纯白底 + 28dp 全圆角
-            val searchBg = GradientDrawable()
-            searchBg.shape = GradientDrawable.RECTANGLE
-            searchBg.cornerRadius = dp(d, AppColors.DIALOG_RADIUS_DP).toFloat()
-            searchBg.setColor(AppColors.surfaceContainerLowest())
-            card.background = searchBg
+            // v3.0.457 玻璃搜索卡：玻璃实底 + 全圆角发丝描边
+            card.background = CandyUi.searchBg(ctx)
             InsetsUtil.clipRounded(card)
             card.setPadding(dp(d, 14), dp(d, 10), dp(d, 14), dp(d, 10))
 
@@ -940,18 +980,20 @@ class MainActivity {
                         val searchTextLower = searchText.lowercase()
                         menuItem.visibility = if (query.isEmpty() || searchTextLower.contains(query)) View.VISIBLE else View.GONE
                     }
+                    // v3.0.557: 卡片级显隐 —— 卡片内无可见 menu_item 时整卡隐藏，避免空白卡片
                     for (i in 0 until itemsContainer.childCount) {
                         val child = itemsContainer.getChildAt(i)
                         if ("menu_item" == child.tag) continue
-                        child.visibility = View.GONE
-                        for (j in i + 1 until itemsContainer.childCount) {
-                            val next = itemsContainer.getChildAt(j)
-                            if ("menu_item" == next.tag) {
-                                if (next.visibility == View.VISIBLE && query.isEmpty())
-                                    child.visibility = View.VISIBLE
-                                break
+                        var visibleCount = 0
+                        if (child is ViewGroup) {
+                            for (j in 0 until child.childCount) {
+                                val inner = child.getChildAt(j)
+                                if ("menu_item" == inner.tag && inner.visibility == View.VISIBLE) {
+                                    visibleCount++
+                                }
                             }
                         }
+                        child.visibility = if (query.isEmpty() || visibleCount > 0) View.VISIBLE else View.GONE
                     }
                 }
             })
@@ -1038,7 +1080,8 @@ class MainActivity {
             card1.orientation = LinearLayout.VERTICAL
             val card1Bg = GradientDrawable()
             card1Bg.cornerRadius = dp(d, AppColors.SHAPE_CARD_DP).toFloat()
-            card1Bg.setColor(AppColors.card())
+            card1Bg.setColor(AppColors.glassFillSolid())
+            card1Bg.setStroke(dp(d, 1), AppColors.glassStroke())
             card1.background = card1Bg
             card1.setPadding(dp(d, 12), dp(d, 10), dp(d, 12), dp(d, 10))
 
@@ -1050,19 +1093,20 @@ class MainActivity {
             card2.orientation = LinearLayout.VERTICAL
             val card2Bg = GradientDrawable()
             card2Bg.cornerRadius = dp(d, AppColors.SHAPE_CARD_DP).toFloat()
-            card2Bg.setColor(AppColors.card())
+            card2Bg.setColor(AppColors.glassFillSolid())
+            card2Bg.setStroke(dp(d, 1), AppColors.glassStroke())
             card2.background = card2Bg
             card2.setPadding(dp(d, 16), dp(d, 14), dp(d, 16), dp(d, 14))
 
             val contactBtn = TextView(ctx)
             contactBtn.text = "联系乐少"
             contactBtn.setTextSize(15f)
-            contactBtn.setTextColor(AppColors.whiteTextOnAccent())
+            contactBtn.setTextColor(AppColors.onPrimary())
             contactBtn.setTypeface(null, Typeface.BOLD)
             contactBtn.gravity = Gravity.CENTER
             contactBtn.setPadding(dp(d, 14), dp(d, 12), dp(d, 14), dp(d, 12))
-            contactBtn.background = CandyUi.gradientBgStatic(ctx, AppColors.SHAPE_FULL_DP.toFloat())
-            applyRipple(contactBtn, d, AppColors.SHAPE_FULL_DP.toFloat())
+            contactBtn.background = CandyUi.gradientBgStatic(ctx, AppColors.SHAPE_MD_DP.toFloat())
+            applyRipple(contactBtn, d, AppColors.SHAPE_MD_DP.toFloat())
             contactBtn.setOnClickListener {
                 try {
                     val intent = Intent()

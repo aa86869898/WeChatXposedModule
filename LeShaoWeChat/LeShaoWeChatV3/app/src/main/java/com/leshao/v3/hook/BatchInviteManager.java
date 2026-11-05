@@ -46,6 +46,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 
+import de.robv.android.xposed.XC_MethodHook;
+import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 
 /**
@@ -73,17 +75,24 @@ public final class BatchInviteManager {
     /** RoomServiceFactory 服务接口。 */
     private static final String CLS_ROOM_FACTORY_IF = "vf0.e";
     /** 通用服务定位器：c(Class)->服务。 */
-    private static final String CLS_SERVICE_LOCATOR = "ph5.n0";
+    private static final String CLS_SERVICE_LOCATOR = "ni5.n0";
     /** ChatroomMembersLogic：m(room)=成员列表, B(name)=是否群。 */
-    private static final String CLS_CHATROOM_MEMBERS = "b41.u1";
+    // v3.0.467: b41.u1 已迁移至 l41.u1（ChatroomMembersLogic），成员列表方法由 m 改为 o
+    private static final String CLS_CHATROOM_MEMBERS = "l41.u1";
+    // v3.0.549: 群成员逻辑类用 DexKit 字符串锚点动态定位（不硬编码混淆类名/方法名）
+    private static volatile String sRoomMembersCls = null;
+    private static volatile java.lang.reflect.Method sMembersOfMethod = null;
     /** 我的群列表：c()。 */
     private static final String CLS_MY_ROOM_LIST = "t73.n";
     /** 账号工具：u()=我的 wxid。 */
     private static final String CLS_ACCOUNT = "b41.y1";
-    /** 邀请链接/系统邀请消息（-2012 需邀请时的降级路径）：c(String,List,String,boolean,String)。 */
-    private static final String CLS_INVITE_LINK = "b41.s1";
+    /** 邀请链接/系统邀请消息（成功通知路径）：c(String,List,String,boolean,String)。 */
+    private static final String CLS_INVITE_LINK = "l41.s1";
     /** 邀请链接类锚点：方法体内含该 URL，跨版本可用 DexKit 重新定位。 */
     private static final String ANCHOR_INVITE_LINK = "weixin://findfriend/verifycontact/";
+    /** 已执行二次邀请（invitechatroommember type=610）的群，防止 -2012 回调递归死循环。 */
+    private static final java.util.Set<String> sSecondInvited =
+            java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     private static final String TAG_MEMBERS_LOGIC = "MicroMsg.ChatroomMembersLogic";
     private static final String TAG_FTS = "MicroMsg.FTS.FTSApiLogic";
@@ -101,15 +110,42 @@ public final class BatchInviteManager {
     private static final java.util.concurrent.ConcurrentHashMap<String, Integer> sInviteResults =
             new java.util.concurrent.ConcurrentHashMap<>();
 
-    /** 已降级发过邀请链接的群（-2012 需邀请）。 */
-    private static final java.util.Set<String> sInviteLinkRooms =
-            java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<String, Boolean>());
-
     private BatchInviteManager() {}
 
     public static void init(ClassLoader cl) {
         sCL = cl;
         LogWriter.log(TAG, "init cl=" + (cl != null));
+        hookNativeInviteDiag();
+    }
+
+    /** v492 诊断: hook 微信原生邀请两条链路, 记录手动邀请时微信真实使用的参数与卡片 XML。
+     *  1) l41.s1.c —— 长按菜单"邀请进群"入口(群内 type=10000 系统消息)
+     *  2) rt5.i5.Aj  —— SendMsgMgr.sendAppMsg(type=49 AppMessage 卡片发送入口)
+     *  抓到官方卡片 XML 后即可精确复刻。所有 hook 失败仅记日志, 不影响其他功能。
+     */
+    private static void hookNativeInviteDiag() {
+        try {
+            final Class<?> s1 = cls(CLS_INVITE_LINK);
+            // 注意：本环境 xposed-api-82 stub 的 varargs findAndHookMethod 返回 void，
+            // 与 LSPosed 运行时签名不一致会抛 NoSuchMethodError，必须用 hookAllMethods。
+            XposedBridge.hookAllMethods(s1, "c", new XC_MethodHook() {
+                @Override protected void beforeHookedMethod(MethodHookParam param) {
+                    try {
+                        if (param.args == null || param.args.length < 5) return;
+                        LogWriter.log(TAG, "[diag-native] l41.s1.c called"
+                            + " room=" + param.args[0]
+                            + " targets=" + param.args[1]
+                            + " tpl=" + param.args[2]
+                            + " z=" + param.args[3]
+                            + " url=" + param.args[4]);
+                    } catch (Throwable ignored) {}
+                }
+            });
+            LogWriter.log(TAG, "hookNativeInviteDiag: l41.s1.c hooked");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "hookNativeInviteDiag: l41.s1.c hook FAIL " + t);
+        }
+        // 8.0.79 已无 com.tencent.mm.plugin.msg.SendMsgMgr/MsgIdTalker，原诊断块移除避免日志噪音。
     }
 
     /** 取消进行中的批量邀请（已发送的群不受影响，仅停止后续）。 */
@@ -142,6 +178,46 @@ public final class BatchInviteManager {
 
     // ==================== 数据积木 ====================
 
+    /** DexKit 动态定位群成员逻辑类（MicroMsg.ChatroomMembersLogic），失败回退硬编码名。 */
+    private static String roomMembersCls() {
+        if (sRoomMembersCls != null) return sRoomMembersCls;
+        try {
+            ClassLoader cl = sCL != null ? sCL : ContextManager.getClassLoader();
+            List<String> cs = DexKitHelper.findClassesByString(cl, "MicroMsg.ChatroomMembersLogic");
+            for (String cn : cs) {
+                try {
+                    Class<?> cand = cl.loadClass(cn);
+                    // 只缓存「确有一个静态 1 参返回 List 方法」的类，避免锚点命中无关类导致静默失效
+                    if (findStaticMethod(cand, 1, List.class) != null) {
+                        sRoomMembersCls = cn;
+                        LogWriter.log(TAG, "roomMembersCls DexKit -> " + cn);
+                        return cn;
+                    }
+                } catch (Throwable ignored) {}
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "roomMembersCls DexKit err: " + t);
+        }
+        sRoomMembersCls = CLS_CHATROOM_MEMBERS;
+        return sRoomMembersCls;
+    }
+
+    /** 在类中查找首个「静态、参数个数匹配、返回类型兼容、参数类型可接收 String」的方法（动态适配方法名）。 */
+    private static java.lang.reflect.Method findStaticMethod(Class<?> c, int paramCount, Class<?> ret) {
+        for (java.lang.reflect.Method m : c.getDeclaredMethods()) {
+            if (!java.lang.reflect.Modifier.isStatic(m.getModifiers())) continue;
+            if (m.getParameterCount() != paramCount) continue;
+            // 返回类型：List 及其子类都接受（真实方法可能声明返回 ArrayList 而非 List 接口）
+            if (ret != null && !ret.isAssignableFrom(m.getReturnType())) continue;
+            // 参数类型：必须是 String 或 Object 等能接收 String 的类型
+            Class<?>[] pts = m.getParameterTypes();
+            if (pts.length > 0 && !pts[0].isAssignableFrom(String.class)) continue;
+            try { m.setAccessible(true); } catch (Throwable ignored) {}
+            return m;
+        }
+        return null;
+    }
+
     private static Class<?> cls(String name) throws ClassNotFoundException {
         // 微信热修复下真实类由 Tinker CL 加载，逐份候选 CL 解析，避免单一 CL 抛 ClassNotFound。
         ClassLoader base = sCL != null ? sCL : ContextManager.getClassLoader();
@@ -163,6 +239,24 @@ public final class BatchInviteManager {
         } catch (Throwable t) {
             return username.endsWith("@chatroom") || username.endsWith("@im.chatroom");
         }
+    }
+
+    /** 实时获取我的群列表（只调 t73.n.c()，不回落缓存）；失败返回 null。用于"是否还在群"的权威判断。 */
+    @SuppressWarnings("unchecked")
+    public static List<String> loadMyRoomsRealTime() {
+        try {
+            Object r = XposedHelpers.callStaticMethod(cls(CLS_MY_ROOM_LIST), "c");
+            if (r instanceof List) {
+                List<String> out = new ArrayList<>();
+                for (Object o : (List<Object>) r) {
+                    if (o instanceof String && !((String) o).isEmpty()) out.add((String) o);
+                }
+                return out;
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "loadMyRoomsRealTime via t73.n.c failed: " + t);
+        }
+        return null;
     }
 
     /** 我的所有群：t73.n.c()；失败回落 rcontact 数据。 */
@@ -194,14 +288,34 @@ public final class BatchInviteManager {
         return fallback;
     }
 
-    /** 群全部成员 username：b41.u1.m(room)。 */
+    /** 群全部成员 username：动态定位静态 List(String) 方法（原 l41.u1.o，不硬编码方法名）。 */
     @SuppressWarnings("unchecked")
     public static List<String> membersOf(String room) {
         try {
-            Object r = XposedHelpers.callStaticMethod(cls(CLS_CHATROOM_MEMBERS), "m", room);
+            // 第一次：DexKit 动态类 + 动态方法
+            Class<?> c = cls(roomMembersCls());
+            if (sMembersOfMethod == null || sMembersOfMethod.getDeclaringClass() != c) {
+                sMembersOfMethod = findStaticMethod(c, 1, List.class);
+            }
+            if (sMembersOfMethod != null) {
+                Object r = sMembersOfMethod.invoke(null, room);
+                if (r instanceof List) return (List<String>) r;
+            }
+            // 第二次：回退硬编码类 l41.u1，再按「静态 1 参返回 List」动态找方法
+            if (!CLS_CHATROOM_MEMBERS.equals(roomMembersCls())) {
+                Class<?> fb = cls(CLS_CHATROOM_MEMBERS);
+                java.lang.reflect.Method m = findStaticMethod(fb, 1, List.class);
+                if (m != null) {
+                    Object r = m.invoke(null, room);
+                    if (r instanceof List) return (List<String>) r;
+                }
+            }
+            // 最后：旧硬编码方法名（原 l41.u1.o）兜底
+            Object r = XposedHelpers.callStaticMethod(cls(CLS_CHATROOM_MEMBERS), "o", room);
             if (r instanceof List) return (List<String>) r;
         } catch (Throwable t) {
-            LogWriter.log(TAG, "membersOf failed room=" + room + " : " + t);
+            Throwable cause = t.getCause() != null ? t.getCause() : t;
+            LogWriter.log(TAG, "membersOf failed room=" + room + " : " + cause);
         }
         return Collections.emptyList();
     }
@@ -409,7 +523,6 @@ public final class BatchInviteManager {
         }
         sCancelled = false;
         sInviteResults.clear();
-        sInviteLinkRooms.clear();
         Thread worker = new Thread(() -> {
             int sent = 0, sendFail = 0, cancelled = 0;
             for (int i = 0; i < rooms.size(); i++) {
@@ -454,7 +567,6 @@ public final class BatchInviteManager {
             final int realReject = Math.max(0, rejected - needInvite);
             final int fsent = sent, fsendFail = sendFail, fcancel = cancelled;
             final int faccept = accepted, freject = realReject, fneed = needInvite;
-            final int flink = sInviteLinkRooms.size();
             sInviteThread = null;
             sMain.post(() -> {
                 if (act != null && !act.isFinishing()) {
@@ -466,11 +578,8 @@ public final class BatchInviteManager {
                     }
                     if (fneed > 0) {
                         if (msg.length() > 0) msg.append("，");
-                        if (flink > 0) {
-                            msg.append("已发送邀请链接 ").append(flink).append(" 个群（对方确认后进群）");
-                        } else {
-                            msg.append("已发出邀请请求 ").append(fneed).append(" 个群（需对方/群主确认）");
-                        }
+                        // v3.0.494: 不再主动发群内消息/跳群窗口，等对方在微信内收到进群邀请
+                        msg.append("已发出进群邀请请求 ").append(fneed).append(" 个群（对方将在微信收到邀请）");
                     }
                     if (fsendFail > 0) {
                         if (msg.length() > 0) msg.append("，");
@@ -486,7 +595,7 @@ public final class BatchInviteManager {
             });
             LogWriter.log(TAG, "startInvite done sent=" + fsent + " sendFail=" + fsendFail
                     + " accept=" + faccept + " reject=" + freject + " needInvite=" + fneed
-                    + " inviteLink=" + flink + " cancel=" + fcancel);
+                    + " cancel=" + fcancel);
         }, "leshao-batch-invite");
         worker.setDaemon(true);
         sInviteThread = worker;
@@ -519,57 +628,58 @@ public final class BatchInviteManager {
      *   op.b()                                         // 无 UI 立即发送
      * </pre>
      */
+    /** v3.0.484: 新版加群 API = dg0.e（RoomServiceFactory）→ yj(room) → j(...) → b() 发送。 */
+    private static Class<?> resolveAddMemberClass(ClassLoader cl) {
+        try {
+            return XposedHelpers.findClass("dg0.e", cl);
+        } catch (Throwable ignored) {}
+        return null;
+    }
+
     public static boolean inviteToRoom(String room, List<String> targets) {
         try {
-            Class<?> factoryIf = cls(CLS_ROOM_FACTORY_IF);
-            ClassLoader cl = factoryIf.getClassLoader();
-            Object factory = XposedHelpers.callStaticMethod(cls(CLS_SERVICE_LOCATOR), "c", factoryIf);
-            if (factory == null) {
-                LogWriter.log(TAG, "inviteToRoom: factory(null) room=" + room);
-                return false;
-            }
-            Object roomOp = XposedHelpers.callMethod(factory, "bj", room);
-            if (roomOp == null) {
-                LogWriter.log(TAG, "inviteToRoom: roomOp(null) room=" + room);
-                return false;
-            }
-            Object op = XposedHelpers.callMethod(roomOp, "j",
-                    room, new ArrayList<>(targets), BatchInviteConfig.getReason(), null);
-            if (op == null) {
-                LogWriter.log(TAG, "inviteToRoom: op(null) room=" + room);
-                return false;
-            }
-            // 结果回调：字段 d = qe5.b
+            ClassLoader cl = sCL != null ? sCL : BatchInviteManager.class.getClassLoader();
+            // 1) 获取 dg0.e（RoomServiceFactory）服务实例：ni5.n0.c(dg0.e.class)
+            Object svc = null;
             try {
-                Class<?> cbIf = findRoomCallbackInterface(cl);
-                if (cbIf != null) {
-                    Object cb = Proxy.newProxyInstance(cl, new Class[]{cbIf},
-                            (proxy, method, args) -> {
-                                if ("a".equals(method.getName()) && args != null && args.length >= 3) {
-                                    int errType = args[0] instanceof Integer ? (Integer) args[0] : -1;
-                                    int errCode = args[1] instanceof Integer ? (Integer) args[1] : -1;
-                                    String errMsg = args[2] instanceof String ? (String) args[2] : "";
-                                    sInviteResults.put(room, errCode);
-                                    LogWriter.log(TAG, "invite callback room=" + room
-                                            + " errType=" + errType + " errCode=" + errCode + " errMsg=" + errMsg);
-                                    // -2012(Need invite)：该群开启「邀请确认」，强拉被拒。
-                                    // 降级走微信正规路径：以本账号在群里发 type=10000 系统邀请链接，对方点确认即可进群。
-                                    if (errCode == -2012
-                                            || (errMsg != null && errMsg.toLowerCase().contains("need invite"))) {
-                                        boolean linkSent = sendInviteLink(room, targets);
-                                        if (linkSent) sInviteLinkRooms.add(room);
-                                        LogWriter.log(TAG, "invite -2012 -> 邀请链接 linkSent=" + linkSent
-                                                + " room=" + room);
-                                    }
-                                }
-                                return null;
-                            });
-                    XposedHelpers.setObjectField(op, "d", cb);
-                }
-            } catch (Throwable t) {
-                LogWriter.log(TAG, "set callback field d failed: " + t);
+                Class<?> n0 = XposedHelpers.findClass("ni5.n0", cl);
+                Class<?> dg0e = XposedHelpers.findClass("dg0.e", cl);
+                svc = XposedHelpers.callStaticMethod(n0, "c", dg0e);
+            } catch (Throwable ignored) {}
+            if (svc == null) {
+                LogWriter.log(TAG, "inviteToRoom: RoomServiceFactory(dg0.e) 未定位 room=" + room);
+                return false;
             }
-            // b() = 无 UI 直接发送（注意与字段 b 区分，这里是方法）
+            // 2) yj(room) → 房间工厂（nf5.f，实现 ln.a）
+            Object factory = XposedHelpers.callMethod(svc, "yj", room);
+            if (factory == null) {
+                LogWriter.log(TAG, "inviteToRoom: 房间工厂 null room=" + room);
+                return false;
+            }
+            // 3) j(room, targets, reason, localHistoryInfo) → 邀请操作对象（roomsdk.model.factory.c）
+            // v3.0.493: 微信原生从群设置页进来时第 4 参为 ChatroomInfoUI$LocalHistoryInfo（非 null），
+            //   缺失时服务端请求不含 local_history 字段（a4Var.i=null），可能被服务端判定为异常邀请而不推送。
+            Object lhi = newLocalHistoryInfo(cl);
+            Object op = XposedHelpers.callMethod(factory, "j",
+                    room, new ArrayList<>(targets), BatchInviteConfig.getReason(), lhi);
+            if (op == null) {
+                LogWriter.log(TAG, "inviteToRoom: 邀请操作对象 null room=" + room);
+                return false;
+            }
+            // 4) 设置微信原生结果回调（factory.a.d = of5.b）。
+            // v3.0.495: 回调第 4 参就是 of5.d（服务端响应对象，qn.n.d() 已填充成员状态列表）。
+            //   errCode==0    -> 预检查直接通过（群主直接添加成功）。
+            //   errCode==-2012 -> 预检查需要邀请：提取状态0(a)+状态6(f)成员，
+            //       再调用 factory.a(room, members, 0, lhi) 发送 invitechatroommember(type=610)，
+            //       这才是微信原生 vn.y 确认后真正发送邀请的接口！
+            try {
+                Class<?> cbIf = XposedHelpers.findClass("of5.b", cl);
+                if (cbIf != null) {
+                    Object cb = newCallback(cl, room, factory, lhi, targets, op);
+                    try { XposedHelpers.setObjectField(op, "d", cb); } catch (Throwable ignored) {}
+                }
+            } catch (Throwable ignored) {}
+            // 5) b() = 微信原生无 UI 发送（内部 i1.q().b.g(scene) 入队，与红包同链路但走原生封装）
             XposedHelpers.callMethod(op, "b");
             LogWriter.log(TAG, "inviteToRoom sent room=" + room + " targets=" + targets.size()
                     + " reason=\"" + BatchInviteConfig.getReason() + "\" list=" + targets);
@@ -581,52 +691,274 @@ public final class BatchInviteManager {
     }
 
     /**
-     * -2012 降级：发送群邀请链接（type=10000 系统消息，本账号发出，对方点确认后进群）。
-     * <pre>
-     *   b41.s1.c(String room, List targets, String tpl, boolean, String url)
-     *   url = "weixin://findfriend/verifycontact/" + room + "/"
-     * </pre>
-     * 这是微信自身「需邀请」群的正规路径，可绕过 addchatroommember 的权限拒绝
-     * （但绕不过账号级风控）。
+     * v3.0.493: 创建空的 ChatroomInfoUI$LocalHistoryInfo 实例（跳过 Parcelable 构造器）。
+     * 微信原生从群设置页邀请时该对象非 null，模块传 null 会导致请求体缺少 local_history 字段。
      */
-    private static boolean sendInviteLink(String room, List<String> targets) {
+    private static Object newLocalHistoryInfo(ClassLoader cl) {
         try {
-            ClassLoader cl = sCL != null ? sCL : BatchInviteManager.class.getClassLoader();
-            Class<?> c = resolveInviteLinkClass(cl);
-            if (c == null) {
-                LogWriter.log(TAG, "sendInviteLink: invite-link class not found");
-                return false;
+            Class<?> cls = XposedHelpers.findClass(
+                    "com.tencent.mm.chatroom.ui.ChatroomInfoUI$LocalHistoryInfo", cl);
+            if (cls == null) {
+                LogWriter.log(TAG, "newLocalHistoryInfo: class not found");
+                return null;
             }
-            String tpl = BatchInviteConfig.getReason();
-            if (tpl == null || tpl.isEmpty()) tpl = "%s 邀请你加入群聊";
-            String url = ANCHOR_INVITE_LINK + room + "/";
-            XposedHelpers.callStaticMethod(c, "c",
-                    room, new ArrayList<>(targets), tpl, Boolean.TRUE, url);
-            return true;
+            // Android 运行时存在 sun.misc.Unsafe（ART），但编译期 android.jar 不含，必须反射。
+            Class<?> unsafeClass = Class.forName("sun.misc.Unsafe");
+            java.lang.reflect.Field f = unsafeClass.getDeclaredField("theUnsafe");
+            f.setAccessible(true);
+            Object u = f.get(null);
+            java.lang.reflect.Method alloc = unsafeClass.getMethod("allocateInstance", Class.class);
+            Object o = alloc.invoke(u, cls);
+            LogWriter.log(TAG, "newLocalHistoryInfo: allocated " + cls.getName());
+            return o;
         } catch (Throwable t) {
-            LogWriter.log(TAG, "sendInviteLink err room=" + room + " : " + t);
-            return false;
+            LogWriter.log(TAG, "newLocalHistoryInfo err: " + t);
+            return null;
         }
     }
 
-    /** 解析邀请链接类 b41.s1（硬编码优先，DexKit 锚点兜底）。 */
-    private static Class<?> resolveInviteLinkClass(ClassLoader cl) {
-        try {
-            return XposedHelpers.findClass(CLS_INVITE_LINK, cl);
-        } catch (Throwable ignored) {}
-        try {
-            List<String> cands = DexKitHelper.findClassesByString(cl, ANCHOR_INVITE_LINK);
-            for (String cn : cands) {
-                try {
-                    Class<?> c = XposedHelpers.findClass(cn, cl);
-                    for (Method m : c.getMethods()) {
-                        if ("c".equals(m.getName()) && m.getParameterTypes().length == 5) return c;
+    /**
+ * v3.0.495: 完整邀请链路（微信原生 vn.h0 同款）。
+ * <pre>
+ *   第一步 j(room, targets, reason, LocalHistoryInfo) -> qn.n  addchatroommember(type=120) 预检查
+ *     - errCode==0   -> 群主直接添加成功
+ *     - errCode==-2012 -> 服务端返回成员状态：a=状态0(可直接添加) f=状态6(可邀请) d=状态1(待确认)
+ *   第二步 factory.a(room, 可添加成员, 0, LocalHistoryInfo) -> qn.y invitechatroommember(type=610)
+ *     - 这才是真正向对方推送进群邀请的接口（微信原生 vn.y.onClick 确认后执行的动作）
+ *   成功后 l41.s1.c 群内系统消息 + 刷新列表 + 打开群窗口
+ * </pre>
+ */
+private static Object newCallback(final ClassLoader cl, final String room, final Object factory,
+                                  final Object lhi, final List<String> targets, final Object op) {
+    try {
+        Class<?> cbIf = XposedHelpers.findClass("of5.b", cl);
+        return Proxy.newProxyInstance(cl, new Class[]{cbIf},
+                (proxy, method, args) -> {
+                    if ("a".equals(method.getName()) && args != null && args.length >= 4) {
+                        int errType = args[0] instanceof Number ? ((Number) args[0]).intValue() : 0;
+                        int errCode = args[1] instanceof Number ? ((Number) args[1]).intValue() : 0;
+                        String errMsg = args[2] == null ? "" : String.valueOf(args[2]);
+                        // v3.0.496: args[3] 实为模块自己的 of5.b 代理对象（h=InvocationHandler lambda），
+                        //   不是服务端响应。真正含成员状态的是 op.f（qn.n NetSceneAddChatRoomMember），
+                        //   v3.0.493 已实测其字段 p=memberCount、r=响应串、f/g/h/i/m/n/o=成员结果列表。
+                        Object scene = null;
+                        try { scene = op == null ? null : XposedHelpers.getObjectField(op, "f"); } catch (Throwable ignored) {}
+                        String respInfo = buildRespInfo(scene);
+                        sInviteResults.put(room, errCode);
+                        if (errCode == 0) {
+                            // 预检查直接通过：成员已被添加/邀请受理成功
+                            LogWriter.log(TAG, "invite 成功 room=" + room + " targets=" + targets
+                                    + " resp=" + respInfo);
+                            onInviteSuccess(room, targets);
+                        } else if (errCode == -2012) {
+                            // 预检查：需要邀请。提取可邀请成员（状态0 a + 状态6 f）二次发送！
+                            List<String> members = extractInvitable(scene);
+                            if (members.isEmpty()) {
+                                LogWriter.log(TAG, "invite -2012 无可邀请成员 room=" + room
+                                        + " targets=" + targets + " resp=" + respInfo);
+                                return null;
+                            }
+                            if (sSecondInvited.add(room)) {
+                                LogWriter.log(TAG, "invite -2012 二次邀请 room=" + room
+                                        + " members=" + members + " resp=" + respInfo);
+                                try {
+                                    Object op2 = XposedHelpers.callMethod(factory, "a",
+                                            room, new ArrayList<>(members), 0, lhi);
+                                    if (op2 != null) {
+                                        try {
+                                            Object cb2 = newCallback(cl, room, factory, lhi, members, op2);
+                                            XposedHelpers.setObjectField(op2, "d", cb2);
+                                        } catch (Throwable ignored) {}
+                                        XposedHelpers.callMethod(op2, "b");
+                                        LogWriter.log(TAG, "invite 二次发送 b() room=" + room
+                                                + " count=" + members.size());
+                                    } else {
+                                        LogWriter.log(TAG, "invite 二次操作对象 null room=" + room);
+                                    }
+                                } catch (Throwable t) {
+                                    LogWriter.log(TAG, "invite 二次发送 err room=" + room + " : " + t);
+                                }
+                            } else {
+                                LogWriter.log(TAG, "invite -2012 已二次邀请过 room=" + room);
+                            }
+                        } else {
+                            LogWriter.log(TAG, "invite 失败 errType=" + errType + " errCode=" + errCode
+                                    + " msg=" + errMsg + " room=" + room + " resp=" + respInfo);
+                        }
                     }
-                } catch (Throwable ignored) {}
-            }
-        } catch (Throwable ignored) {}
+                    return null;
+                });
+    } catch (Throwable t) {
+        LogWriter.log(TAG, "newCallback err: " + t);
         return null;
     }
+}
+
+/** 从 qn.n 场景对象读取字段概览：成员列表大小 + 群名/tips + 前 2 个元素完整结构（诊断）。 */
+private static String buildRespInfo(Object scene) {
+    if (scene == null) return "";
+    StringBuilder sb = new StringBuilder();
+    java.lang.reflect.Field[] fs;
+    try { fs = scene.getClass().getDeclaredFields(); } catch (Throwable t) { return ""; }
+    for (java.lang.reflect.Field f : fs) {
+        try {
+            f.setAccessible(true);
+            Object v = f.get(scene);
+            String fn = f.getName();
+            if (v instanceof List) {
+                List<?> list = (List<?>) v;
+                sb.append(fn).append("=< ").append(list.size()).append("> ");
+                for (int i = 0; i < Math.min(2, list.size()); i++) {
+                    Object item = list.get(i);
+                    if (item == null) continue;
+                    if (item instanceof String) {
+                        sb.append("[").append((String) item).append("] ");
+                        continue;
+                    }
+                    sb.append("[").append(item.getClass().getSimpleName()).append(":");
+                    for (java.lang.reflect.Field ef : item.getClass().getDeclaredFields()) {
+                        try {
+                            ef.setAccessible(true);
+                            Object ev = ef.get(item);
+                            sb.append(ef.getName()).append("=").append(ev).append(" ");
+                        } catch (Throwable ignored) {}
+                    }
+                    sb.append("] ");
+                }
+            } else if (v != null) {
+                sb.append(fn).append("=").append(v).append(" ");
+            }
+        } catch (Throwable ignored) {}
+    }
+    return sb.toString().trim();
+}
+
+/**
+ * 提取可二次邀请成员（v3.0.497 依据 qn.n.onGYNetEnd 反编译精准字段）：
+ *  - f = 状态0（可直接添加）成员列表，元素为 String wxid
+ *  - n = 状态6（可邀请）成员列表，元素为 String wxid
+ * 其余：h=3、i=1、g=2、m=4、o=10（反骚扰）均不可用于邀请。
+ */
+private static List<String> extractInvitable(Object scene) {
+    List<String> result = new ArrayList<>();
+    if (scene == null) return result;
+    for (String field : new String[]{"f", "n"}) {
+        try {
+            Object list = XposedHelpers.getObjectField(scene, field);
+            if (list instanceof List) {
+                for (Object o : (List<?>) list) {
+                    if (o instanceof String) {
+                        String s = ((String) o).trim();
+                        if (isLikelyWxid(s)) result.add(s);
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
+    }
+    // 通用兜底：遍历所有 List 字段，String 元素直接收（防御字段漂移）
+    if (result.isEmpty()) {
+        try {
+            for (java.lang.reflect.Field f : scene.getClass().getDeclaredFields()) {
+                f.setAccessible(true);
+                Object v = f.get(scene);
+                if (!(v instanceof List)) continue;
+                for (Object item : (List<?>) v) {
+                    if (item instanceof String) {
+                        String s = ((String) item).trim();
+                        if (isLikelyWxid(s)) result.add(s);
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
+    }
+    return new ArrayList<>(new java.util.LinkedHashSet<>(result));
+}
+
+private static boolean isLikelyWxid(String s) {
+    if (s == null || s.length() < 3) return false;
+    if (s.contains("@chatroom") || s.contains("@stranger") || s.contains("@openim")) return false;
+    if (s.startsWith("wxid_") || s.startsWith("gh_")) return true;
+    for (int i = 0; i < s.length(); i++) {
+        char c = s.charAt(i);
+        if (Character.isWhitespace(c) || Character.isIdeographic(c)) return false;
+    }
+    return s.length() <= 64;
+}
+
+/** 邀请成功后：群内系统消息（verifycontact 链接）+ 刷新列表 + 打开群窗口 + Toast。 */
+private static void onInviteSuccess(String room, List<String> targets) {
+    try {
+        boolean sent = sendInviteLink(room, targets);
+        LogWriter.log(TAG, "onInviteSuccess 群内系统消息 sent=" + sent + " room=" + room);
+    } catch (Throwable t) {
+        LogWriter.log(TAG, "onInviteSuccess sendInviteLink err: " + t);
+    }
+    sMain.post(() -> {
+        try {
+            android.content.Context ctx = com.leshao.v3.ContextManager.getAppContext();
+            if (ctx != null) {
+                Toast.makeText(ctx, "已成功邀请 " + targets.size() + " 人加入 " + room,
+                        Toast.LENGTH_SHORT).show();
+            }
+        } catch (Throwable ignored) {}
+    });
+}
+
+/**
+ * 群内系统消息（微信原生 vn.h0.e() 同款）：
+ * l41.s1.c(String room, List targets, String tpl, boolean, String url)
+ * url = "weixin://findfriend/verifycontact/" + room + "/"
+ * 微信原生 type=10000 系统消息（发起方/群内可见）。
+ */
+private static boolean sendInviteLink(String room, List<String> targets) {
+    try {
+        ClassLoader cl = sCL != null ? sCL : BatchInviteManager.class.getClassLoader();
+        Class<?> c = resolveInviteLinkClass(cl);
+        if (c == null) {
+            LogWriter.log(TAG, "sendInviteLink: invite-link class not found");
+            return false;
+        }
+        String tpl = BatchInviteConfig.getReason();
+        if (tpl == null || tpl.isEmpty()) tpl = "%s 邀请你加入群聊";
+        String url = ANCHOR_INVITE_LINK + room + "/";
+        XposedHelpers.callStaticMethod(c, "c",
+                room, new ArrayList<>(targets), tpl, Boolean.TRUE, url);
+        // 刷新聊天列表 + 会话列表（不上屏跳转，用户要求：选中群聊点确定后直接发邀请链接）
+        try {
+            sMain.post(() -> {
+                try {
+                    com.leshao.v3.ChatFooterLongPressMenu.refreshChattingList();
+                } catch (Throwable ignored) {}
+                try {
+                    com.leshao.v3.hook.ConversationFilter.refreshIfInstalled();
+                } catch (Throwable ignored) {}
+            });
+        } catch (Throwable ignored) {}
+        return true;
+    } catch (Throwable t) {
+        LogWriter.log(TAG, "sendInviteLink err room=" + room + " : " + t);
+        return false;
+    }
+}
+
+/** 解析邀请链接类 l41.s1（硬编码优先，DexKit 锚点兜底）。 */
+private static Class<?> resolveInviteLinkClass(ClassLoader cl) {
+    try {
+        return XposedHelpers.findClass(CLS_INVITE_LINK, cl);
+    } catch (Throwable ignored) {}
+    try {
+        List<String> cands = DexKitHelper.findClassesByString(cl, ANCHOR_INVITE_LINK);
+        for (String cn : cands) {
+            try {
+                Class<?> c = XposedHelpers.findClass(cn, cl);
+                for (Method m : c.getMethods()) {
+                    if ("c".equals(m.getName()) && m.getParameterTypes().length == 5) return c;
+                }
+            } catch (Throwable ignored) {}
+        }
+    } catch (Throwable ignored) {}
+    return null;
+}
 
     /** 解析房间结果回调接口 qe5.b（含 DexKit 兜底，避免硬编码失效）。 */
     private static Class<?> findRoomCallbackInterface(ClassLoader cl) {

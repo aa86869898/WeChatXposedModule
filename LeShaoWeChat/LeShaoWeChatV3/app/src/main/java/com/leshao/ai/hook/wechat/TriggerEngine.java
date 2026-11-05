@@ -137,10 +137,14 @@ public final class TriggerEngine {
 
             // ④⑤ 生成 + 回复
             final AppConfig cfg = c;
-            final String incoming = body;
+            // ★ 剥离 @机器人 / 唤醒词，避免脏 prompt 进入 LLM
+            final String incoming = com.leshao.ai.util.ChatUtils.stripMention(body, c.getBotName());
             final ClassLoader cl = HookEntry.appClassLoader;
             final ConversationConfig.Entry over = ov;
-            final boolean tts = (ov != null && ov.ttsEnabled != null)
+            // ★ 聊天总结请求强制文字回复，不受语音消息管控
+            final boolean summaryReq = c.isSummaryEnabled()
+                    && com.leshao.ai.hook.wechat.AIBotCore.containsSummary(body);
+            final boolean tts = summaryReq ? false : (ov != null && ov.ttsEnabled != null)
                     ? ov.ttsEnabled.booleanValue() : c.isTtsEnabled();
             // v985: 会话/模板多音色: 开启随机时每条从音色列表随机取一个, 否则用列表首个。
             String voiceOverride = null;
@@ -174,63 +178,9 @@ public final class TriggerEngine {
                         LogWriter.log(TAG, "AI 空回复, 不发送 talker=" + talker);
                         return;
                     }
-                    String replyMarked = SendGuard.mark(reply);
-                    // @前缀 + atWxid：群 + 开启autoAt 时 @发送者。
-                    String atPrefix = "";
-                    String atWxid = "";
-                    if (isGroupF && autoAtF && senderF != null && !senderF.isEmpty()) {
-                        try {
-                            String nick = GroupMemberNames.displayName(talker, senderF);
-                            atPrefix = WeChatMessenger.buildAtPrefix(nick);
-                            atWxid = senderF;
-                        } catch (Throwable t) {
-                            LogWriter.log(TAG, "取群昵称失败, 跳过@: " + t);
-                        }
-                    }
-                    // 文本式内容（TTS 回退及原生引用失败时使用）
-                    String textContent = atPrefix
-                            + (quoteF ? WeChatMessenger.buildQuoteBlock(inBodyF) : "")
-                            + replyMarked;
-                    final String atWxidF = atWxid;
-                    final String textContentF = textContent;
-                    try {
-                        if (tts) {
-                            String cid = "ai-" + System.currentTimeMillis();
-                            LogWriter.log(TAG, "AI 回复走语音消息 talker=" + talker
-                                    + " cid=" + cid + " voice=" + voiceFinal);
-                            // v985: 语音合成/发送失败或超时时自动回退发文本, 避免"AI 没回复"。
-                            TtsVoiceSender.sendAiReplyAsVoice(talker, reply, cid, voiceFinal, () -> {
-                                try {
-                                    WeChatMessenger.sendText(talker, textContentF, atWxidF, cl);
-                                } catch (Throwable t2) {
-                                    LogWriter.log(TAG, "AI 文本回退失败: " + t2);
-                                }
-                            });
-                        } else {
-                            // v1076: 引用回复改用微信原生引用气泡；失败回退文本式引用。
-                            boolean nativeQuoted = false;
-                            if (quoteF && isGroupF && quotedMsg != null) {
-                                nativeQuoted = WeChatMessenger.sendQuoteAndAt(
-                                        quotedMsg, talker, atWxidF, atPrefix + replyMarked, cl);
-                            }
-                            if (nativeQuoted) {
-                                LogWriter.log(TAG, "AI 回复走原生引用 talker=" + talker
-                                        + " at=" + atWxidF);
-                            } else {
-                                LogWriter.log(TAG, "AI 回复走文本 talker=" + talker
-                                        + " at=" + atWxidF + " quote=" + quoteF
-                                        + " (nativeQuote未命中,回退)");
-                                WeChatMessenger.sendText(talker, textContentF, atWxidF, cl);
-                            }
-                        }
-                    } catch (Throwable t) {
-                        LogWriter.log(TAG, "AI 回复发送失败: " + t);
-                        try {
-                            WeChatMessenger.sendText(talker, textContentF, atWxidF, cl);
-                        } catch (Throwable t2) {
-                            LogWriter.log(TAG, "AI 文本回退也失败: " + t2);
-                        }
-                    }
+                    // 统一发送：支持 @回复 / 引用回复 / 语音回复（文本 AI 与图片识别共用）
+                    sendReply(talker, reply, inBodyF, isGroupF, senderF, quotedMsg,
+                            over, c, cl);
                 }
             });
         } catch (Throwable t) {
@@ -258,7 +208,7 @@ public final class TriggerEngine {
         String reply = hit.reply == null ? "" : hit.reply.trim();
         LogWriter.log(TAG, "关键词命中: talker=" + talker + " kw=" + hit.keyword
                 + " replyLen=" + reply.length());
-        if (reply.isEmpty()) return true; // 命中即拦截, 不送大模型
+        if (reply.isEmpty()) return false; // ★ 空回复不拦截，继续走 LLM 生成
 
         boolean kwAt = isGroup && ((ov != null && ov.keywordAutoAt != null)
                 ? ov.keywordAutoAt.booleanValue() : c.isAutoAt());
@@ -299,6 +249,103 @@ public final class TriggerEngine {
             }
         }
         return true;
+    }
+
+    /** 会话级名单检查：AI 总开关 + 该会话已配置且启用（豆包文本/图片识别也必须遵守）。 */
+    public static boolean isConversationEnabled(String talker) {
+        try {
+            AppConfig c = AIBotCore.config();
+            if (c == null || !c.isEnabled()) return false;
+            ConversationConfig cc = AIBotCore.conversationConfig();
+            ConversationConfig.Entry ov = cc != null ? cc.get(talker) : null;
+            return ov != null && ov.isActive();
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "isConversationEnabled err: " + t);
+            return false;
+        }
+    }
+
+    /**
+     * 统一 AI 回复发送：支持 @回复 / 引用回复 / 语音回复。
+     * 文本 AI（onResult）与图片识别共用同一发送链路，保证回复方式一致。
+     */
+    public static void sendReply(final String talker, final String reply, final String body,
+                                 final boolean isGroup, final String sender,
+                                 final Object quotedMsg,
+                                 final ConversationConfig.Entry ov, final AppConfig c,
+                                 final ClassLoader cl) {
+        if (reply == null || reply.isEmpty()) return;
+        final String replyMarked = SendGuard.mark(reply);
+        final boolean tts = (ov != null && ov.ttsEnabled != null)
+                ? ov.ttsEnabled.booleanValue() : c.isTtsEnabled();
+        String voiceOverride = null;
+        if (ov != null && ov.voices != null && !ov.voices.isEmpty()) {
+            boolean random = ov.randomVoice != null && ov.randomVoice.booleanValue();
+            if (random && ov.voices.size() > 1) {
+                voiceOverride = ov.voices.get(
+                        new java.util.Random().nextInt(ov.voices.size()));
+            } else {
+                voiceOverride = ov.voices.get(0);
+            }
+        }
+        final String voiceFinal = voiceOverride;
+        final boolean autoAtF = isGroup && ((ov != null && ov.autoAt != null)
+                ? ov.autoAt.booleanValue() : c.isAutoAt());
+        final boolean quoteF = (ov != null && ov.quoteReply != null)
+                ? ov.quoteReply.booleanValue() : c.isQuoteReply();
+        final String inBodyF = body;
+        // @前缀 + atWxid：群 + 开启autoAt 时 @发送者。
+        String atPrefix = "";
+        String atWxid = "";
+        if (isGroup && autoAtF && sender != null && !sender.isEmpty()) {
+            try {
+                String nick = GroupMemberNames.displayName(talker, sender);
+                atPrefix = WeChatMessenger.buildAtPrefix(nick);
+                atWxid = sender;
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "取群昵称失败, 跳过@: " + t);
+            }
+        }
+        final String atWxidF = atWxid;
+        final String textContent = atPrefix
+                + (quoteF ? WeChatMessenger.buildQuoteBlock(inBodyF) : "")
+                + replyMarked;
+        final String textContentF = textContent;
+        try {
+            if (tts) {
+                String cid = "ai-" + System.currentTimeMillis();
+                LogWriter.log(TAG, "AI 回复走语音消息 talker=" + talker
+                        + " cid=" + cid + " voice=" + voiceFinal);
+                TtsVoiceSender.sendAiReplyAsVoice(talker, replyMarked, cid, voiceFinal, () -> {
+                    try {
+                        WeChatMessenger.sendText(talker, textContentF, atWxidF, cl);
+                    } catch (Throwable t2) {
+                        LogWriter.log(TAG, "AI 文本回退失败: " + t2);
+                    }
+                });
+            } else {
+                boolean nativeQuoted = false;
+                if (quoteF && isGroup && quotedMsg != null) {
+                    nativeQuoted = WeChatMessenger.sendQuoteAndAt(
+                            quotedMsg, talker, atWxidF, atPrefix + replyMarked, cl);
+                }
+                if (nativeQuoted) {
+                    LogWriter.log(TAG, "AI 回复走原生引用 talker=" + talker + " at=" + atWxidF);
+                } else {
+                    LogWriter.log(TAG, "AI 回复走文本 talker=" + talker
+                            + " at=" + atWxidF + " quote=" + quoteF
+                            + " (nativeQuote未命中,回退)");
+                    WeChatMessenger.sendText(talker, textContentF, atWxidF, cl);
+                }
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "AI 回复发送失败: " + t);
+            try {
+                WeChatMessenger.sendText(talker, textContentF, atWxidF, cl);
+            } catch (Throwable t2) {
+                LogWriter.log(TAG, "AI 文本回退也失败: " + t2);
+            }
+        }
     }
 
     /** 日志用截断, 避免超长正文刷屏。 */

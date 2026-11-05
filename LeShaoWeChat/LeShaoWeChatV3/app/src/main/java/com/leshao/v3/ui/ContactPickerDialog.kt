@@ -405,7 +405,7 @@ class ContactPickerDialog {
         }
 
         private fun makeCheckbox(act: Activity, checked: Boolean): Drawable {
-            val size = dp(act, 22)
+            val size = dp(act, 28)
             val bm = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bm)
 
@@ -416,7 +416,7 @@ class ContactPickerDialog {
                 canvas.drawCircle(size / 2f, size / 2f, size / 2f - 1f, fill)
 
                 val check = Paint(Paint.ANTI_ALIAS_FLAG)
-                check.color = AppColors.whiteTextOnAccent()
+                check.color = AppColors.onPrimary()
                 check.strokeWidth = dp(act, 2.2f).toFloat()
                 check.style = Paint.Style.STROKE
                 check.strokeCap = Paint.Cap.ROUND

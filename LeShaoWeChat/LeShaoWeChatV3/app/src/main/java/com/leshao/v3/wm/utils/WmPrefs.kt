@@ -46,7 +46,7 @@ object WmPrefs {
     @JvmStatic fun isExportChat() = get("export_chat", true)
     @JvmStatic fun isKeywordAlert() = get("keyword_alert", true)
     @JvmStatic fun isAutoTranslate() = get("auto_translate", false)
-    @JvmStatic fun isAutoVoice() = get("auto_voice", true)
+    @JvmStatic fun isAutoVoice() = get("auto_voice", false)
     @JvmStatic fun isTTS() = get("tts", false)
     @JvmStatic fun isAntiRevoke() = get("anti_revoke", true)
     @JvmStatic fun isAtRemind() = get("at_remind", true)
@@ -56,6 +56,22 @@ object WmPrefs {
     @JvmStatic fun isClearScreen() = get("clear_screen", false)
     @JvmStatic fun isMsgSearch() = get("msg_search", true)
     @JvmStatic fun isTTSCube() = get("tts_cube", true)
+
+    /** TTS 语音播报引擎三态: silly=傻包TTS(豆包免登录) / cube=配音魔方TTS / system=系统TTS */
+    @JvmStatic
+    fun getTtsEngine(): String {
+        val v = getStr("tts_engine", "")
+        if (v == "silly" || v == "cube" || v == "system") return v
+        // 旧版本兼容: 之前设置过 tts_cube 则沿用旧选择, 从未设置过默认傻包TTS
+        val hasOld = sp?.contains("tts_cube") ?: false
+        return if (hasOld) (if (get("tts_cube", true)) "cube" else "system") else "silly"
+    }
+
+    @JvmStatic
+    fun setTtsEngine(e: String) {
+        if (e != "silly" && e != "cube" && e != "system") return
+        setStr("tts_engine", e)
+    }
     @JvmStatic fun isBatchSend() = get("batch_send", true)
     @JvmStatic fun isLongPressMenu() = get("long_press_menu", true)
     @JvmStatic fun isCardOrder() = get("card_order", false)
@@ -95,7 +111,8 @@ object WmPrefs {
 
     @JvmStatic
     fun defaultFor(key: String): Boolean {
-        return "auto_voice" == key
+        // 语音自动播放默认关闭（与 auto_voice prefs 默认 false 保持一致，避免快捷开关显示反）
+        return false
     }
 
     @JvmStatic
@@ -110,11 +127,13 @@ object WmPrefs {
 
     @JvmStatic
     fun getInt(k: String, d: Int): Int {
+        ensureInit()
         return sp?.getInt(k, d) ?: d
     }
 
     @JvmStatic
     fun setInt(k: String, v: Int) {
+        ensureInit()
         sp?.edit()?.putInt(k, v)?.apply()
     }
 }

@@ -38,16 +38,8 @@ public class HookConfig {
         return sp.getString(key, def);
     }
 
+    /** v3.0.564: 所有功能开关默认关闭，由用户手动开启。 */
     private static boolean getDefault(String key) {
-        if (key.equals("sns_ad_block")) return true;
-        if (key.equals("sns_forward")) return true;
-        if (key.equals("sns_simulate_like")) return false;
-        if (key.equals("sns_fake_like")) return false;
-        if (key.equals("sns_time_edit")) return false;
-        if (key.equals("sns_video_quality")) return true;
-        if (key.equals("sns_long_video")) return true;
-        if (key.equals("anti_detection")) return true;
-        if (key.equals("voice_forward")) return true;
-        return true;
+        return false;
     }
 }

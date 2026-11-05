@@ -66,6 +66,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import com.leshao.v3.hook.WxResolver;
 
 /**
  * 聊天窗口功能注入 — 复刻自微信大师 ChatFeatureHook
@@ -889,13 +890,13 @@ public class WmChatHook {
         btn.setTextSize(14);
         btn.setAllCaps(false);
         btn.setTypeface(null, android.graphics.Typeface.BOLD);
-        btn.setTextColor(0xFFFFFFFF);
-        // v3.0.101 糖果粉：填充按钮走糖果粉纯色
-        btn.setBackground(CandyUi.gradientBg(sAct, 14));
+        btn.setTextColor(AppColors.onPrimary());
+        // 填充按钮：长形微圆角主色底
+        btn.setBackground(CandyUi.gradientBg(sAct, AppColors.SHAPE_MD_DP));
         btn.setElevation(dp(3));
         btn.setPadding(dp(24), 0, dp(24), 0);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT, dp(44));
+                LinearLayout.LayoutParams.WRAP_CONTENT, dp(40));
         lp.setMargins(0, dp(6), 0, dp(6));
         btn.setLayoutParams(lp);
         return btn;
@@ -909,11 +910,12 @@ public class WmChatHook {
         btn.setAllCaps(false);
         GradientDrawable bg = new GradientDrawable();
         bg.setStroke(dp(2), color);
-        bg.setCornerRadius(dp(14));
+        bg.setCornerRadius(dp(AppColors.SHAPE_MD_DP));
         bg.setColor(0x00000000);
         btn.setBackground(bg);
         btn.setTextColor(color);
         btn.setPadding(dp(18), 0, dp(18), 0);
+        btn.setMinimumHeight(dp(40));
         return btn;
     }
 
@@ -925,6 +927,7 @@ public class WmChatHook {
         btn.setAllCaps(false);
         btn.setTextColor(color);
         btn.setPadding(dp(16), 0, dp(16), 0);
+        btn.setMinimumHeight(dp(40));
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(0x00000000);
         btn.setBackground(bg);
@@ -959,7 +962,7 @@ public class WmChatHook {
                 dotBg.setCornerRadius(size);
                 dotBg.setPhaseOffset(i * 0.2f);
                 dot.setBackground(dotBg);
-                dot.setTextColor(0xFFFFFFFF);
+                dot.setTextColor(AppColors.onPrimary());
             } else {
                 GradientDrawable dotBg = new GradientDrawable();
                 dotBg.setColor(0x00000000);
@@ -2438,7 +2441,8 @@ sv.addView(root);
             recoverMassSendTask();
             // v1025: 延迟安装 p06 bypass, 避开微信内核初始化窗口(详情见 hookP06BypassEarly)
             hookP06BypassEarly(sCL);
-            hookF9Debug();
+            // v3.0.461: 移除调试用 hookF9Debug（f9.Ra/I9 被高频调用，日志刷屏）
+            // hookF9Debug();
             hookSendMsgMgrDebug();
             hookVideoSendDebug();
             LogWriter.log(TAG, "initOnAppStart OK v815 kl5.s5.Dj+thumb build=v430 2026-08-24");
@@ -2457,7 +2461,7 @@ sv.addView(root);
     private static void hookF9Debug() {
         try {
             if (sCL == null) return;
-            Class<?> f9 = XposedHelpers.findClass("com.tencent.mm.storage.f9", sCL);
+            Class<?> f9 = WxResolver.get("storage_f9", sCL);
             XposedBridge.hookAllMethods(f9, "Ra", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam p) {

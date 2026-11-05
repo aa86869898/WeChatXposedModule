@@ -390,7 +390,7 @@ class ContactSelectorView {
         }
 
         private fun makeCheckbox(act: Activity, checked: Boolean): Drawable {
-            val size = dp(act, 22)
+            val size = dp(act, 28)
             val bm = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bm)
 
@@ -404,7 +404,7 @@ class ContactSelectorView {
                 canvas.drawCircle(size / 2f, size / 2f, size / 2f - 1f, fill)
 
                 val check = Paint(Paint.ANTI_ALIAS_FLAG)
-                check.color = AppColors.whiteTextOnAccent()
+                check.color = AppColors.onPrimary()
                 check.strokeWidth = dp(act, 2.2f).toFloat()
                 check.style = Paint.Style.STROKE
                 check.strokeCap = Paint.Cap.ROUND
@@ -450,7 +450,7 @@ class ContactSelectorView {
             btn.setPadding(dp(act, 18), dp(act, 8), dp(act, 18), dp(act, 8))
             val gd = GradientDrawable()
             gd.setShape(GradientDrawable.RECTANGLE)
-            gd.setCornerRadius(dp(act, AppColors.SHAPE_FULL_DP).toFloat())
+            gd.setCornerRadius(dp(act, AppColors.SHAPE_MD_DP).toFloat())
             gd.setColor(AppColors.primary())
             btn.background = gd
             btn.setTextColor(AppColors.onGradient())
@@ -465,7 +465,7 @@ class ContactSelectorView {
             btn.setPadding(dp(act, 18), dp(act, 8), dp(act, 18), dp(act, 8))
             val gd = GradientDrawable()
             gd.setShape(GradientDrawable.RECTANGLE)
-            gd.setCornerRadius(dp(act, AppColors.SHAPE_FULL_DP).toFloat())
+            gd.setCornerRadius(dp(act, AppColors.SHAPE_MD_DP).toFloat())
             gd.setColor(0x00000000)
             gd.setStroke(dp(act, 1), AppColors.outline())
             btn.background = gd

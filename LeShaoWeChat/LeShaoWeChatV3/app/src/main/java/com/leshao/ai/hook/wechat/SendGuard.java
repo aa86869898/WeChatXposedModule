@@ -14,24 +14,18 @@ package com.leshao.ai.hook.wechat;
 public final class SendGuard {
 
     /** 零宽空格 + 零宽非连接符。 */
-    public static final String MARK = "\u200B\u200C";
+    public static final String MARK = com.leshao.v3.hook.SelfMsgGuard.MARK;
 
     private SendGuard() {
     }
 
-    /** 给待发送文本打水印。 */
+    /** 给待发送文本打水印（@ 提及前缀之后插入，幂等）。 */
     public static String mark(String text) {
-        if (text == null) {
-            return null;
-        }
-        if (text.startsWith(MARK)) {
-            return text;
-        }
-        return MARK + text;
+        return com.leshao.v3.hook.SelfMsgGuard.watermark(text);
     }
 
     /** 是否是机器人自己所发（带水印）的消息。 */
     public static boolean isBotSent(String content) {
-        return content != null && content.startsWith(MARK);
+        return com.leshao.v3.hook.SelfMsgGuard.hasWatermark(content);
     }
 }

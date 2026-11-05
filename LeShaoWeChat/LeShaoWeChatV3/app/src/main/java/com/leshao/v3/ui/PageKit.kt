@@ -122,7 +122,9 @@ class PageKit private constructor() {
             tv.setTextSize(14f)
             tv.typeface = Typeface.DEFAULT_BOLD
             tv.setTextColor(AppColors.text2())
-            tv.setPadding(0, 0, 0, (8 * d).toInt())
+            // 卡片圆角 24dp：标签必须内缩，否则首行文字落在圆角扇区内被 clipToOutline 裁掉
+            tv.setPadding((16 * d).toInt(), (10 * d).toInt(),
+                    (16 * d).toInt(), (8 * d).toInt())
             return tv
         }
 

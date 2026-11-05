@@ -26,6 +26,12 @@ public class VersionCompat {
      * 及硬编码 opener 类猜测, 杜绝因错误密码/错误标志反复触碰导致微信检测到数据损坏。
      * 数据访问完全交由 DatabaseProvider (运行时捕获微信自身句柄) 或 StorageHub (微信存储 API)。
      */
+    /**
+     * 安全开关: 彻底关闭对微信 EnMicroMsg.db 的独立裸开(openDatabase/openDatabaseWcdb/openEnMicroDb)
+     * 及硬编码 opener 类猜测, 杜绝因错误密码/错误标志反复触碰导致微信检测到数据损坏。
+     * 数据访问完全交由 DatabaseProvider (运行时捕获微信自身句柄) 或 StorageHub (微信存储 API)。
+     * v3.0.569: 恢复为 false——此前 v3.0.568 误开启导致错误密码触碰数据库引发数据损坏。
+     */
     public static final boolean ENABLE_RAW_DB_OPEN = false;
 
     public static Class<?> findDbOpenerClass(ClassLoader cl) {
@@ -386,11 +392,11 @@ public class VersionCompat {
     private static boolean isValidWechatCl(ClassLoader c) {
         if (c == null) return false;
         try {
-            c.loadClass("com.tencent.mm.R");
+            WxResolver.resolve(c, "com.tencent.mm.R");
             return true;
         } catch (Throwable ignored) {}
         try {
-            c.loadClass("com.tencent.mm.storage.j4");
+            WxResolver.resolve(c, "com.tencent.mm.storage.j4");
             return true;
         } catch (Throwable ignored) {}
         return false;

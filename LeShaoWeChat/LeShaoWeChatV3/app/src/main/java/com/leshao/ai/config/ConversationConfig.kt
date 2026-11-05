@@ -42,6 +42,7 @@ class ConversationConfig {
         @JvmField var randomVoice: Boolean? = null
         @JvmField var quoteReply: Boolean? = null
         @JvmField var autoAt: Boolean? = null
+        @JvmField var imageReplyEnabled: Boolean? = null
         @JvmField var keywordReplyEnabled: Boolean? = null
         @JvmField var keywordReplyRules: MutableList<com.leshao.v3.model.KeywordRule>? = null
         @JvmField var keywordAutoAt: Boolean? = null
@@ -58,6 +59,7 @@ class ConversationConfig {
                     && temperature == null
                     && (vs == null || vs.isEmpty()) && randomVoice == null
                     && quoteReply == null && autoAt == null
+                    && imageReplyEnabled == null
                     && keywordReplyEnabled == null
                     && (kr == null || kr.isEmpty())
                     && keywordAutoAt == null && keywordQuote == null
@@ -86,6 +88,7 @@ class ConversationConfig {
             e.randomVoice = randomVoice
             e.quoteReply = quoteReply
             e.autoAt = autoAt
+            e.imageReplyEnabled = imageReplyEnabled
             e.keywordReplyEnabled = keywordReplyEnabled
             e.keywordReplyRules = keywordReplyRules?.let { ArrayList(it) }
             e.keywordAutoAt = keywordAutoAt
@@ -117,6 +120,7 @@ class ConversationConfig {
             }
             if (randomVoice != null) o.put("randomVoice", randomVoice!!)
             if (quoteReply != null) o.put("quoteReply", quoteReply!!)
+            if (imageReplyEnabled != null) o.put("imageReplyEnabled", imageReplyEnabled!!)
             if (autoAt != null) o.put("autoAt", autoAt!!)
             if (keywordReplyEnabled != null) {
                 o.put("keywordReplyEnabled", keywordReplyEnabled!!)
@@ -173,6 +177,9 @@ class ConversationConfig {
                 if (o.has("autoAt") && !o.isNull("autoAt")) {
                     e.autoAt = o.optBoolean("autoAt")
                 }
+                if (o.has("imageReplyEnabled") && !o.isNull("imageReplyEnabled")) {
+                    e.imageReplyEnabled = o.optBoolean("imageReplyEnabled")
+                }
                 if (o.has("keywordReplyEnabled") && !o.isNull("keywordReplyEnabled")) {
                     e.keywordReplyEnabled = o.optBoolean("keywordReplyEnabled")
                 }
@@ -198,9 +205,14 @@ class ConversationConfig {
         try {
             FileInputStream(file).use { fis ->
                 val data = ByteArray(file.length().toInt())
-                val read = fis.read(data)
-                if (read <= 0) return
-                val root = JSONObject(String(data, 0, read, StandardCharsets.UTF_8))
+                var off = 0
+                while (off < data.size) {
+                    val n = fis.read(data, off, data.size - off)
+                    if (n < 0) break
+                    off += n
+                }
+                if (off <= 0) return
+                val root = JSONObject(String(data, 0, off, StandardCharsets.UTF_8))
                 val ov = root.optJSONObject("overrides")
                 if (ov != null) {
                     val it = ov.keys()
@@ -220,8 +232,10 @@ class ConversationConfig {
                     }
                 }
             }
-        } catch (ignored: IOException) {
-        } catch (ignored: JSONException) {
+        } catch (e: IOException) {
+            com.leshao.v3.LogWriter.log("ConversationConfig", "load err: " + e)
+        } catch (e: JSONException) {
+            com.leshao.v3.LogWriter.log("ConversationConfig", "load json err: " + e)
         }
     }
 
@@ -244,13 +258,22 @@ class ConversationConfig {
                 tpl.put(o)
             }
             root.put("templates", tpl)
-            FileOutputStream(file, false).use { out ->
+            val tmp = File(parent, file.name + ".tmp")
+            FileOutputStream(tmp, false).use { out ->
                 out.write(root.toString(2).toByteArray(StandardCharsets.UTF_8))
+            }
+            // ★ 原子替换，防止进程被杀留下半截 JSON
+            if (!tmp.renameTo(file)) {
+                tmp.delete()
+                com.leshao.v3.LogWriter.log("ConversationConfig", "save renameTo fail")
+                return false
             }
             return true
         } catch (e: IOException) {
+            com.leshao.v3.LogWriter.log("ConversationConfig", "save err: " + e)
             return false
         } catch (e: JSONException) {
+            com.leshao.v3.LogWriter.log("ConversationConfig", "save json err: " + e)
             return false
         }
     }

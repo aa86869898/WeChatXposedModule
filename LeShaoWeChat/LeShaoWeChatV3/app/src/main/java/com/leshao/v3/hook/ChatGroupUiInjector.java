@@ -57,7 +57,7 @@ public class ChatGroupUiInjector {
     private static void installTagFilterBar(final ClassLoader cl) {
         // Hook s5.h to capture the ConversationListView reference (fallback)
         try {
-            Class<?> s5 = XposedHelpers.findClass("com.tencent.mm.ui.conversation.s5", cl);
+            Class<?> s5 = WxResolver.get("ui_conversation_s5", cl);
             XposedBridge.hookAllMethods(s5, "h", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam p) {
@@ -134,7 +134,7 @@ public class ChatGroupUiInjector {
 
         // Fallback: hook MainUI.onResume (kept in case Activity.onResume fails)
         try {
-            final Class<?> mainUIConv = XposedHelpers.findClass("com.tencent.mm.ui.conversation.MainUI", cl);
+            final Class<?> mainUIConv = WxResolver.get("ui_conversation_MainUI", cl);
             XC_MethodHook mainUIHook = new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
@@ -167,7 +167,7 @@ public class ChatGroupUiInjector {
 
         // 文档核心注入点：MainUI.w0(Bundle) after -> this.o(u5).addHeaderView(按钮栏)；缓存 this.w(jo5.l0)
         try {
-            final Class<?> mainUIConv = XposedHelpers.findClass("com.tencent.mm.ui.conversation.MainUI", cl);
+            final Class<?> mainUIConv = WxResolver.get("ui_conversation_MainUI", cl);
             XposedBridge.hookAllMethods(mainUIConv, "w0", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
@@ -221,7 +221,7 @@ public class ChatGroupUiInjector {
     public static boolean isTagBarEnabled() {
         try {
             android.content.SharedPreferences sp = com.leshao.v3.ContextManager.getPrefs();
-            if (sp != null) return sp.getBoolean("ls_chat_group_enabled", true);
+            if (sp != null) return sp.getBoolean("ls_chat_group_enabled", false);
         } catch (Throwable ignored) {}
         return true;
     }
@@ -510,7 +510,7 @@ public class ChatGroupUiInjector {
                 bg.setCornerRadii(new float[]{dp(20, ctx), dp(20, ctx), dp(20, ctx), dp(20, ctx)});
                 bg.setStroke(dp(1, ctx), 0xB3FFFFFF);
                 tv.setBackground(bg);
-                tv.setTextColor(Color.WHITE);
+                tv.setTextColor(AppColors.onPrimary());
                 tv.setShadowLayer(dp(4, ctx), 0, 0, (AppColors.primary() & 0x00FFFFFF) | 0x40000000);
             } else {
                 // v1148 去渐变：主色浅底 + 主色描边
@@ -610,11 +610,11 @@ public class ChatGroupUiInjector {
             String badgeText = unread > 99 ? "99+" : String.valueOf(unread);
             badge.setText(badgeText);
             badge.setTextSize(8);
-            badge.setTextColor(Color.WHITE);
+            badge.setTextColor(AppColors.onError());
             badge.setGravity(Gravity.CENTER);
             badge.setSingleLine(true);
             GradientDrawable badgeBg = new GradientDrawable();
-            badgeBg.setColor(Color.RED);
+            badgeBg.setColor(AppColors.error());
             badgeBg.setCornerRadius(dp(5, ctx));
             badge.setBackground(badgeBg);
             int bw = unread > 9 ? dp(18, ctx) : dp(12, ctx);
@@ -642,8 +642,7 @@ public class ChatGroupUiInjector {
                         logBoth("ConvFilter call applyFilter " + id);
                         ConversationFilter.applyFilter(id, name);
                         logBoth("ConvFilter applyFilter returned");
-                        logBoth("ConvFilter applyFilter returned");
-                        // 滚动由 ConversationFilter 中 lookForSelectablePosition hook 自动处理
+                        // 滚动由 ConversationFilter 的锚点恢复逻辑自动处理
                     }
                 }
                 refreshTagChipsSoft();
@@ -764,12 +763,12 @@ public class ChatGroupUiInjector {
     private static Context getCurrentActivityContext() {
         return sCurrentActivity != null ? sCurrentActivity.get() : null;
     }
-    private static int themeTitle() { return isDarkMode(getCurrentActivityContext()) ? 0xFFE4E4E8 : 0xFF1D1D1F; }
-    private static int themeBody()   { return isDarkMode(getCurrentActivityContext()) ? 0xFFB0B0B8 : 0xFF565659; }
-    private static int themeNote()   { return isDarkMode(getCurrentActivityContext()) ? 0xFF707079 : 0xFF949499; }
+    private static int themeTitle() { return AppColors.onSurface(); }
+    private static int themeBody()   { return AppColors.onSurfaceVariant(); }
+    private static int themeNote()   { return AppColors.outline(); }
     private static int themeAccent() { return AppColors.primary(); }
-    private static int themeBg()     { return isDarkMode(getCurrentActivityContext()) ? 0xFF2A2A2E : 0xFFFFFFFF; }
-    private static int themeCard()   { return isDarkMode(getCurrentActivityContext()) ? 0xFF1E1E22 : 0xFFF5F5F5; }
+    private static int themeBg()     { return AppColors.surfaceContainerLowest(); }
+    private static int themeCard()   { return AppColors.surfaceContainerLow(); }
 
     private static void themeDialog(AlertDialog d) {
         try {
@@ -778,7 +777,7 @@ public class ChatGroupUiInjector {
             if (w != null) {
                 GradientDrawable bg = new GradientDrawable();
                 bg.setColor(themeBg());
-                bg.setCornerRadius(dp(18, ctx));
+                bg.setCornerRadius(AppColors.DIALOG_RADIUS_DP * ctx.getResources().getDisplayMetrics().density);
                 w.setBackgroundDrawable(bg);
             }
             TextView title = null;
@@ -813,7 +812,7 @@ public class ChatGroupUiInjector {
         et.setPadding(40, 30, 40, 30);
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(themeCard());
-        bg.setCornerRadius(dp(10, ctx));
+        bg.setCornerRadius(AppColors.SHAPE_INPUT_DP * ctx.getResources().getDisplayMetrics().density);
         et.setBackground(bg);
         return et;
     }

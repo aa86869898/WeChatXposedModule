@@ -132,6 +132,16 @@ public final class ChatFooterBarHook {
         return null;
     }
 
+    /** v3.0.557: 按当前会话动态显隐快捷菜单中的「群管理」按钮（仅群聊显示）。 */
+    private static void updateGroupMgrForFooter(final View footer) {
+        try {
+            if (footer == null) return;
+            View bar = footer.findViewWithTag(ROW_TAG);
+            if (bar == null) return;
+            com.leshao.v3.hook.ChatVoiceSwitchHook.updateGroupMgrVisibility(bar);
+        } catch (Throwable ignored) {}
+    }
+
     private static void injectBar(final View footer) {
         if (footer == null) return;
         ViewParent pp = footer.getParent();
@@ -214,6 +224,7 @@ public final class ChatFooterBarHook {
             com.leshao.v3.hook.ChatVoiceSwitchHook.ensureMessageSpace(footer, bar);
             com.leshao.v3.hook.ChatVoiceSwitchHook.scheduleMessageSpace(footer, bar);
         } catch (Throwable ignored) {}
+        updateGroupMgrForFooter(footer);
         LogWriter.log(TAG, "injected bar " + target + " footer=" + footer.getClass().getName());
     }
 
@@ -290,7 +301,10 @@ public final class ChatFooterBarHook {
                                     Object v = XposedHelpers.callMethod(frag, "getView");
                                     if (v instanceof View) {
                                         View footer = findFooter((View) v);
-                                        if (footer != null) injectBar(footer);
+                                        if (footer != null) {
+                                            injectBar(footer);
+                                            updateGroupMgrForFooter(footer);
+                                        }
                                     }
                                 } catch (Throwable ignored) {}
                             }
@@ -324,7 +338,10 @@ public final class ChatFooterBarHook {
                                                 : act.getWindow().peekDecorView();
                                         if (decor == null) return;
                                         View footer = findFooter(decor);
-                                        if (footer != null) injectBar(footer);
+                                        if (footer != null) {
+                                            injectBar(footer);
+                                            updateGroupMgrForFooter(footer);
+                                        }
                                     } catch (Throwable ignored) {}
                                 }, 800L);
                             } catch (Throwable ignored) {}

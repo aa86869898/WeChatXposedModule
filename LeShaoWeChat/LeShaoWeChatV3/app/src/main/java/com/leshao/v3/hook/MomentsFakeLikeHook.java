@@ -24,6 +24,7 @@ import com.leshao.v3.ui.widgets.ModernButton;
 import com.leshao.v3.ui.widgets.ModernTopBar;
 
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
@@ -73,7 +74,7 @@ public final class MomentsFakeLikeHook {
     private static final int MAX_COUNT = 50;
 
     /**
-     * v3.0.148：新版时间线(ImproveSnsTimelineUI)渲染点赞时读 {@code jk4.p.Q0()}
+     * v3.0.148：新版时间线(ImproveSnsTimelineUI)渲染点赞时读 {@code dl4.p.Q0()}
      * (ImproveSnsInfo.getLikeUserList) 返回的 {@code uu5.c}，且该容器是 by-lazy
      * 首算后永不再算——改 {@code SnsInfo.field_attrBuf} 对时间线不再上屏。
      * 这里用「菜单点击时的 localId」→ 伪造名单缓存，在 setupLikeLayout 渲染前注入
@@ -162,16 +163,17 @@ public final class MomentsFakeLikeHook {
         LogWriter.log(TAG, "install fake-like (v3.0.157)");
         // ① 注入长按菜单（MMPopupMenu 所有 SNS 长按菜单的唯一汇聚点）
         hookMenuRegister("h", 5, 1);
-        hookMenuRegister("g", 6, 2);
+        // v3.0.467: fv5.s0.g 实际 7 参，listener 在下标 3（第 4 参）
+        hookMenuRegister("g", 7, 3);
         hookMenuRegister("j", 3, 1);
         // ② 拦截菜单点击（朋友圈主分发器 + 气泡菜单分发器）
         hookMenuSelected("com.tencent.mm.plugin.sns.ui.listener.c");
         hookMenuSelected("com.tencent.mm.plugin.sns.ui.k1");
-        // ③ 新版时间线 ImproveInteractionLayout.setupLikeLayout(jk4.p) —— 数据层注入
+        // ③ 新版时间线 ImproveInteractionLayout.setupLikeLayout(dl4.p) —— 数据层注入
         hookSetupLikeLayout(cl);
-        // ④ v3.0.149：jk4.p.Q0() after 注入（兼容旧渲染路径）
+        // ④ v3.0.149：dl4.p.Q0() after 注入（兼容旧渲染路径）
         hookImproveInfoQ0(cl);
-        // ⑤ v3.0.154：渲染真实读取路径注入 —— jk4.p.b1()(getMergeSnsObject) 与
+        // ⑤ v3.0.154：渲染真实读取路径注入 —— dl4.p.b1()(getMergeSnsObject) 与
         //    mh4.z0.D0()(SnsUtil.snsInfoToSnsStruct)。v3.0.153 实测 Q0()/setupLikeLayout
         //    运行期零触发，真正上屏的 SnsObject 来自这两处；只做纯内存注入，不写库、不崩。
         hookRenderSnsObject(cl);
@@ -187,7 +189,28 @@ public final class MomentsFakeLikeHook {
      * @param listenerIdx listener 参数下标（h/j=1，g=2，因 g 第 2 参是 long）
      */
     private static void hookMenuRegister(String method, int paramCount, int listenerIdx) {
-        Class<?> c = loadClass("eu5.s0");
+        // v3.0.467: 新版菜单宿主为 fv5.s0（MMPopupMenu，日志 TAG "MicroMsg.MMPopupMenu"）。
+        // 旧 eu5.s0 已不存在；getPopupMenu 字符串命中的 zt$$a 只是 lambda 类（0 钩子）。
+        Class<?> c = loadClass("fv5.s0");
+        String displayCls = "fv5.s0";
+        if (c == null) {
+            // DexKit 字符串锚点：MMPopupMenu 日志 TAG 定位弹窗菜单类
+            try {
+                java.util.List<String> cands = DexKitHelper.findClassesByString(sCl, "MicroMsg.MMPopupMenu");
+                if (cands != null) {
+                    for (String cand : cands) {
+                        if (cand != null && !cand.contains("com.leshao")) {
+                            c = loadClass(cand);
+                            if (c != null) {
+                                displayCls = cand;
+                                LogWriter.log(TAG, "menu class via MMPopupMenu: " + cand);
+                                break;
+                            }
+                        }
+                    }
+                }
+            } catch (Throwable ignored) {}
+        }
         if (c == null) {
             LogWriter.log(TAG, "[WARN] eu5.s0 not found, menu inject off");
             return;
@@ -195,7 +218,19 @@ public final class MomentsFakeLikeHook {
         final int idx = listenerIdx;
         int hooked = 0;
         for (Method m : c.getDeclaredMethods()) {
-            if (!m.getName().equals(method) || m.getParameterCount() != paramCount) continue;
+            boolean nameOk = method == null || m.getName().equals(method);
+            boolean countOk = paramCount < 0 || m.getParameterCount() == paramCount;
+            if (!nameOk || !countOk) {
+                // 跨版本兜底：新版本方法名/参数个数漂移，但注册回调参数类型仍含 OnCreateContextMenuListener
+                boolean hasListener = false;
+                for (Class<?> pt : m.getParameterTypes()) {
+                    if (View.OnCreateContextMenuListener.class.isAssignableFrom(pt)) {
+                        hasListener = true;
+                        break;
+                    }
+                }
+                if (!hasListener) continue;
+            }
             m.setAccessible(true);
             XposedBridge.hookMethod(m, new XC_MethodHook() {
                 @Override
@@ -204,15 +239,17 @@ public final class MomentsFakeLikeHook {
                         if (p.args.length <= idx) return;
                         Object origin = p.args[idx];
                         if (origin instanceof View.OnCreateContextMenuListener) {
+                            Object anchor = p.args[0];
                             p.args[idx] = new WrappedMenuCreator(
-                                    (View) p.args[0], (View.OnCreateContextMenuListener) origin);
+                                    anchor instanceof View ? (View) anchor : null,
+                                    (View.OnCreateContextMenuListener) origin);
                         }
                     } catch (Throwable ignored) {}
                 }
             });
             hooked++;
         }
-        LogWriter.log(TAG, "hooked eu5.s0." + method + "/" + paramCount + " (listener@" + idx + ") x" + hooked);
+        LogWriter.log(TAG, "hooked " + displayCls + "." + method + "/" + paramCount + " (listener@" + idx + ") x" + hooked);
     }
 
     /** 包装微信原生菜单创建回调：先让微信构建菜单，再追加「秒集赞」，并记录锚点 View。 */
@@ -279,10 +316,10 @@ public final class MomentsFakeLikeHook {
     // ================================================================
 
     /**
-     * Hook {@code ImproveInteractionLayout.setupLikeLayout(jk4.p)}：
+     * Hook {@code ImproveInteractionLayout.setupLikeLayout(dl4.p)}：
      * <ul>
      *   <li><b>数据层(治本)</b>：before 里把伪造名单直接写进
-     *       {@code jk4.p.Q0()}(ImproveSnsInfo.getLikeUserList) 返回的
+     *       {@code dl4.p.Q0()}(ImproveSnsInfo.getLikeUserList) 返回的
      *       {@code uu5.c.a} public List（每行 av5.h，a[0]=wxid、a[1]=昵称）。
      *       由于 Q0() 是 by-lazy 首算后缓存，改 field_attrBuf 永不再上屏，
      *       必须改这个缓存 List。</li>
@@ -296,9 +333,9 @@ public final class MomentsFakeLikeHook {
             LogWriter.log(TAG, "[WARN] ImproveInteractionLayout not found, improve inject off");
             return;
         }
-        Class<?> infoCls = loadClass("jk4.p");
+        Class<?> infoCls = loadClass("dl4.p");
         if (infoCls == null) {
-            LogWriter.log(TAG, "[WARN] jk4.p(ImproveSnsInfo) not found, improve inject off");
+            LogWriter.log(TAG, "[WARN] dl4.p(ImproveSnsInfo) not found, improve inject off");
             return;
         }
         int hooked = 0;
@@ -325,7 +362,7 @@ public final class MomentsFakeLikeHook {
                         List<String[]> pairs = null;
                         // v3.0.160：优先按 e1()(snsId) 命中（渲染侧 localId 常为 -1）
                         long sid = 0L;
-                        try { sid = ((Number) XposedHelpers.callMethod(info, "e1")).longValue(); } catch (Throwable ignored) {}
+                        try { sid = ((Number) XposedHelpers.callMethod(info, "S0")).longValue(); } catch (Throwable ignored) {}
                         List<String[]> byId = PendingLikes.peekBySnsId(sid);
                         if (byId != null && !byId.isEmpty()) {
                             pairs = byId;
@@ -352,15 +389,15 @@ public final class MomentsFakeLikeHook {
     }
 
     /**
-     * v3.0.149：hook {@code jk4.p.Q0()}（ImproveSnsInfo.getLikeUserList，by-lazy 首算后缓存）。
+     * v3.0.149：hook {@code dl4.p.Q0()}（ImproveSnsInfo.getLikeUserList，by-lazy 首算后缓存）。
      * <p>v3.0.148 实测：新版时间线渲染点赞区不调用 ImproveInteractionLayout.setupLikeLayout
      * （钩子已装但运行期零触发，无 improve inject / pending take 日志），PendingLikes 名单永不注入。
      * 改为在渲染读 Q0() 的 after 直接注入 —— 无论渲染路径走哪个方法，只要读 Q0() 缓存必然命中。</p>
      */
     private static void hookImproveInfoQ0(ClassLoader cl) {
-        Class<?> infoCls = loadClass("jk4.p");
+        Class<?> infoCls = loadClass("dl4.p");
         if (infoCls == null) {
-            LogWriter.log(TAG, "[WARN] jk4.p not found, Q0 inject off");
+            LogWriter.log(TAG, "[WARN] dl4.p not found, Q0 inject off");
             return;
         }
         int hooked = 0;
@@ -378,7 +415,7 @@ public final class MomentsFakeLikeHook {
                         // v3.0.160：渲染侧 ImproveSnsInfo.localId 常解析为 -1（sns_table_-1），
                         // 先按 e1()(snsId, long) 命中——与 doFakeLike readSnsId 的 field_snsId 对应。
                         long sid = 0L;
-                        try { sid = ((Number) XposedHelpers.callMethod(info, "e1")).longValue(); } catch (Throwable ignored) {}
+                        try { sid = ((Number) XposedHelpers.callMethod(info, "S0")).longValue(); } catch (Throwable ignored) {}
                         List<String[]> byId = PendingLikes.peekBySnsId(sid);
                         if (byId != null && !byId.isEmpty()) {
                             int a2 = injectIntoLikeCenter(likeC, byId);
@@ -412,10 +449,10 @@ public final class MomentsFakeLikeHook {
     }
 
     /**
-     * v3.0.154：渲染真实读取路径注入。v3.0.153 实测 {@code jk4.p.Q0()} 与
+     * v3.0.154：渲染真实读取路径注入。v3.0.153 实测 {@code dl4.p.Q0()} 与
      * {@code setupLikeLayout} 运行期零触发；真正上屏的 {@code SnsObject} 来自：
      * <ul>
-     *   <li>{@code jk4.p.b1()} = getMergeSnsObject（返回 SnsObject，逐帧 parseFrom field_attrBuf）</li>
+     *   <li>{@code dl4.p.b1()} = getMergeSnsObject（返回 SnsObject，逐帧 parseFrom field_attrBuf）</li>
      *   <li>{@code mh4.z0.D0(...)} = SnsUtil.snsInfoToSnsStruct（返回 rt：a=SnsInfo、c=SnsObject，
      *       improve 时间线 {@code improve.component.f2.y2} 调用）</li>
      * </ul>
@@ -423,12 +460,15 @@ public final class MomentsFakeLikeHook {
      * 不 toByteArray、不 setAttrBuf、不落库 —— 避免畸形 proto 污染微信持久化数据导致原生崩溃。
      */
     private static void hookRenderSnsObject(ClassLoader cl) {
-        // ① jk4.p.b1() → SnsObject
-        Class<?> infoCls = loadClass("jk4.p");
+        // ① getMergeSnsObject → SnsObject
+        //    v3.0.462：8.0.79 中 ImproveSnsInfo 混淆为 dl4.p，b1 方法改名为 Z0（返回 SnsObject）；
+        //    另 8.0.79 的 getMergeSnsObject 宿主为 com.tencent.mm.plugin.sns.model.w5，作为兜底。
+        Class<?> infoCls = loadClass("dl4.p");
         if (infoCls != null) {
             int hooked = 0;
             for (Method m : infoCls.getDeclaredMethods()) {
-                if (!m.getName().equals("b1") || m.getParameterCount() != 0) continue;
+                boolean nameOk = m.getName().equals("b1") || m.getName().equals("Z0");
+                if (!nameOk || m.getParameterCount() != 0) continue;
                 m.setAccessible(true);
                 XposedBridge.hookMethod(m, new XC_MethodHook() {
                     @Override
@@ -437,10 +477,9 @@ public final class MomentsFakeLikeHook {
                             if (!isEnabled()) return;
                             Object res = p.getResult();
                             if (res == null) return;
-                            // v3.0.162（《WeChat_Moments_AutoLike_Reverse.md》§0）：b1() 的返回值就是
-                            // 真正被渲染的 SnsObject —— 直接用 thisObject.V0() 拿 localId，本地命名单，
-                            // 直接改返回对象的 LikeUserList，不再做任何 snsId 反查（SnsObject.Id 与
-                            // snsId 是两套号，反查必然 miss）。
+                            // b1()/Z0() 的返回值就是真正被渲染的 SnsObject ——
+                            // 直接用 thisObject.V0() 拿 localId，本地命名单，
+                            // 直接改返回对象的 LikeUserList，不再做任何 snsId 反查。
                             long rid = 0L;
                             try { rid = ((Number) XposedHelpers.getObjectField(res, "Id")).longValue(); } catch (Throwable ignored) {}
                             String lid = PendingLikes.resolveLocalId(p.thisObject);
@@ -471,69 +510,103 @@ public final class MomentsFakeLikeHook {
                 });
                 hooked++;
             }
-            LogWriter.log(TAG, "hooked jk4.p.b1 x" + hooked);
+            LogWriter.log(TAG, "hooked dl4.p.b1 x" + hooked);
         } else {
-            LogWriter.log(TAG, "[WARN] jk4.p not found, b1 inject off");
+            LogWriter.log(TAG, "[WARN] dl4.p not found, b1 inject off");
         }
-        // ② mh4.z0.D0(...) → rt{a=SnsInfo, c=SnsObject}
-        Class<?> snsUtil = loadClass("mh4.z0");
+        // ② SnsUtil → lu（UI 模型）→ vv5.c 注入
+        //    v3.0.463：8.0.79 中 SnsUtil 为 com.tencent.mm.plugin.sns.data.a1（存在），
+        //    旧方法名 snsInfoToSnsStruct / D0 均不存在。真实入口为静态
+        //    F0(SnsInfo, SnsObject, Context, zt, boolean, d8, String, Map, Map, List)→lu，
+        //    lu.T 持有 vv5.c（点赞容器）。同时 args[1] 就是被渲染的 SnsObject。
+        Class<?> snsUtil = loadClass("com.tencent.mm.plugin.sns.data.a1");
         if (snsUtil != null) {
             int hooked = 0;
             for (Method m : snsUtil.getDeclaredMethods()) {
-                if (!m.getName().equals("D0")) continue;
+                if (!m.getName().equals("F0") || !Modifier.isStatic(m.getModifiers())) continue;
                 m.setAccessible(true);
                 XposedBridge.hookMethod(m, new XC_MethodHook() {
                     @Override
                     protected void afterHookedMethod(MethodHookParam p) {
                         try {
                             if (!isEnabled()) return;
-                            Object rt = p.getResult();
-                            if (rt == null) return;
-                            Object snsObj = XposedHelpers.getObjectField(rt, "c");
-                            // ① v3.0.158：按 SnsObject.Id 精确匹配
+                            Object lu = p.getResult();
+                            if (lu == null) return;
+                            Object snsObj = (p.args != null && p.args.length > 1) ? p.args[1] : null;
                             long rid = 0L;
-                            try { rid = ((Number) XposedHelpers.getObjectField(snsObj, "Id")).longValue(); } catch (Throwable ignored) {}
-                            List<String[]> byId = PendingLikes.peekBySnsId(rid);
-                            if (byId != null && !byId.isEmpty()) {
-                                int a2 = injectIntoSnsObject(snsObj, byId);
-                                if (a2 > 0) LogWriter.logSync(TAG, "D0 inject(bySnsId) +" + a2 + " Id=" + rid);
-                                return;
+                            if (snsObj != null) {
+                                try { rid = ((Number) XposedHelpers.getObjectField(snsObj, "Id")).longValue(); } catch (Throwable ignored) {}
                             }
-                            // ② 回退 localId（v3.0.162：优先用入参 SnsInfo.getLocalid；比 rt.a 更可靠。
-                            //    bySnsId(renderId) 与 localId 是两套号，先 localId 后 bySnsId）
                             String localId = null;
                             if (p.args != null && p.args.length > 0 && p.args[0] != null) {
                                 try { localId = (String) XposedHelpers.callMethod(p.args[0], "getLocalid"); }
                                 catch (Throwable ignored) {}
                             }
-                            if (localId == null) {
-                                try {
-                                    Object sns = XposedHelpers.getObjectField(rt, "a");
-                                    localId = (String) XposedHelpers.callMethod(sns, "getLocalid");
-                                } catch (Throwable ignored) {}
-                            }
-                            List<String[]> pairs = PendingLikes.peek(localId);
+                            List<String[]> byId = PendingLikes.peekBySnsId(rid);
+                            List<String[]> pairs = byId != null && !byId.isEmpty() ? byId : PendingLikes.peek(localId);
                             if (pairs == null || pairs.isEmpty()) {
-                                if (PendingLikes.hasBySnsId() && diag("D0", 2000)) {
-                                    LogWriter.logSync(TAG, "D0 CALL miss localId=" + localId
-                                            + " renderId=" + rid);
+                                if (PendingLikes.hasBySnsId() && diag("F0", 2000)) {
+                                    LogWriter.logSync(TAG, "F0 CALL miss localId=" + localId + " Id=" + rid);
                                 }
                                 return;
                             }
-                            int added = injectIntoSnsObject(snsObj, pairs);
+                            int added = 0;
+                            if (snsObj != null) added += injectIntoSnsObject(snsObj, pairs);
+                            Object likeC = null;
+                            try { likeC = XposedHelpers.getObjectField(lu, "T"); } catch (Throwable ignored) {}
+                            if (likeC != null) added += injectIntoLikeCenter(likeC, pairs);
                             if (added > 0) {
-                                LogWriter.logSync(TAG, "D0 inject +" + added + " localId=" + localId);
+                                LogWriter.logSync(TAG, "F0 inject +" + added + " localId=" + localId + " Id=" + rid);
                             }
                         } catch (Throwable t) {
-                            LogWriter.log(TAG, "D0 inject err: " + t);
+                            LogWriter.log(TAG, "F0 inject err: " + t);
                         }
                     }
                 });
                 hooked++;
             }
-            LogWriter.log(TAG, "hooked mh4.z0.D0 x" + hooked);
+            LogWriter.log(TAG, "hooked a1.F0 x" + hooked);
         } else {
-            LogWriter.log(TAG, "[WARN] mh4.z0 not found, D0 inject off");
+            LogWriter.log(TAG, "[WARN] a1(SnsUtil) not found, F0 inject off");
+        }
+        // ③ v3.0.470: 朋友圈动态详情页（SnsCommentDetailUI）点赞区渲染走 w5.f(SnsInfo)→SnsObject
+        //    （onConfigurationChanged 中 E8(f.LikeUserList,...)），计数走 w5.e。两者都要注入。
+        Class<?> w5Cls = loadClass("com.tencent.mm.plugin.sns.model.w5");
+        if (w5Cls != null) {
+            int hooked = 0;
+            for (Method m : w5Cls.getDeclaredMethods()) {
+                boolean nameOk = m.getName().equals("e") || m.getName().equals("f");
+                if (!nameOk || !Modifier.isStatic(m.getModifiers())) continue;
+                Class<?>[] pts = m.getParameterTypes();
+                if (pts.length != 1 || pts[0] == null
+                        || !pts[0].getName().endsWith("storage.SnsInfo")) continue;
+                final String mn = m.getName();
+                m.setAccessible(true);
+                XposedBridge.hookMethod(m, new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam p) {
+                        try {
+                            if (!isEnabled()) return;
+                            Object res = p.getResult();
+                            if (res == null) return;
+                            long rid = 0L;
+                            try { rid = ((Number) XposedHelpers.getObjectField(res, "Id")).longValue(); } catch (Throwable ignored) {}
+                            List<String[]> byId = PendingLikes.peekBySnsId(rid);
+                            if (byId == null || byId.isEmpty()) return;
+                            int added = injectIntoSnsObject(res, byId);
+                            if (added > 0) {
+                                LogWriter.logSync(TAG, "detailPage w5." + mn + " inject +" + added + " Id=" + rid);
+                            }
+                        } catch (Throwable t) {
+                            LogWriter.log(TAG, "w5." + mn + " inject err: " + t);
+                        }
+                    }
+                });
+                hooked++;
+            }
+            LogWriter.log(TAG, "hooked w5.e/f(detailPage) x" + hooked);
+        } else {
+            LogWriter.log(TAG, "[WARN] w5 not found, detailPage inject off");
         }
     }
 
@@ -548,9 +621,9 @@ public final class MomentsFakeLikeHook {
             if (!(luo instanceof LinkedList)) return 0;
             @SuppressWarnings("unchecked")
             LinkedList<Object> list = (LinkedList<Object>) luo;
-            Class<?> uf6 = loadClass("pc5.uf6");
+            Class<?> uf6 = loadClass("nd5.jj6");
             if (uf6 == null) {
-                LogWriter.logSync(TAG, "pc5.uf6 not found, SnsObject inject off");
+                LogWriter.logSync(TAG, "nd5.jj6 not found, SnsObject inject off");
                 return 0;
             }
             int added = 0;
@@ -597,9 +670,9 @@ public final class MomentsFakeLikeHook {
             @SuppressWarnings("unchecked")
             List<Object> rows = (List<Object>) XposedHelpers.getObjectField(likeC, "a");
             if (rows == null) return 0;
-            Class<?> hCls = loadClass("av5.h");
+            Class<?> hCls = loadClass("bw5.j");
             if (hCls == null) {
-                LogWriter.logSync(TAG, "av5.h not found, improve inject off");
+                LogWriter.logSync(TAG, "bw5.j not found, improve inject off");
                 return 0;
             }
             int added = 0;
@@ -612,11 +685,8 @@ public final class MomentsFakeLikeHook {
                     if (a != null && a.length > 0 && wxid.equals(a[0])) { dup = true; break; }
                 }
                 if (dup) continue;
-                Object row = XposedHelpers.newInstance(hCls);
-                Object[] cols = (Object[]) XposedHelpers.getObjectField(row, "a");
-                cols[0] = wxid;
-                cols[1] = nick;
-                XposedHelpers.setObjectField(row, "a", cols);
+                // bw5.j 无无参构造，用静态工厂 c(wxid, nick) 生成 bw5.b（bw5.b→bw5.a→bw5.j）
+                Object row = XposedHelpers.callStaticMethod(hCls, "c", wxid, nick);
                 rows.add(0, row);
                 added++;
             }
@@ -640,7 +710,7 @@ public final class MomentsFakeLikeHook {
 
     /**
      * 秒集赞名单暂存：localId → 名单（TTL 10s 后自动清理）。
-     * setupLikeLayout 渲染时从 jk4.p(ImproveSnsInfo) 反查 SnsInfo.getLocalid()
+     * setupLikeLayout 渲染时从 dl4.p(ImproveSnsInfo) 反查 SnsInfo.getLocalid()
      * 匹配 key，命中则把名单注入 uu5.c.a 缓存 List。
      */
     static final class PendingLikes {
@@ -721,7 +791,7 @@ public final class MomentsFakeLikeHook {
             }
         }
 
-        /** 从 jk4.p(ImproveSnsInfo) 提取 localId 并取名单（不移除，供 Q0 注入重复检查）。 */
+        /** 从 dl4.p(ImproveSnsInfo) 提取 localId 并取名单（不移除，供 Q0 注入重复检查）。 */
         static List<String[]> peek(Object improveInfo) {
             if (improveInfo == null) return null;
             return peek(resolveLocalId(improveInfo));
@@ -739,7 +809,7 @@ public final class MomentsFakeLikeHook {
             }
         }
 
-        /** 从 jk4.p(ImproveSnsInfo) 提取 localId 并取出名单（取出后即移除）。 */
+        /** 从 dl4.p(ImproveSnsInfo) 提取 localId 并取出名单（取出后即移除）。 */
         static List<String[]> take(Object improveInfo) {
             if (improveInfo == null) return null;
             String localId = resolveLocalId(improveInfo);
@@ -788,24 +858,25 @@ public final class MomentsFakeLikeHook {
             }
         }
 
-        /** jk4.p → 优先 V0()（直接取 ImproveSnsInfo.localId，渲染侧稳定）；
-         *  失败回退 jk4.p→Z0()→SnsInfo.getLocalid()，再退 getLocalId/getLocalID 直查。
+        /** dl4.p → 优先 V0()（直接取 ImproveSnsInfo.localId，渲染侧稳定）；
+         *  失败回退 dl4.p→Z0()→SnsInfo.getLocalid()，再退 getLocalId/getLocalID 直查。
          *  v3.0.162（《WeChat_Moments_AutoLike_Reverse.md》§0）：b1() 的返回值就是渲染源，
          *  不要经由 snsId 反查；渲染侧 localId 用 V0() 拿（Z0() 懒加载常返回 sns_table_-1）。 */
         static String resolveLocalId(Object improveInfo) {
-            for (String m : new String[]{ "V0", "getLocalid", "getLocalId", "getLocalID" }) {
-                try {
-                    Object v = XposedHelpers.callMethod(improveInfo, m);
-                    if (v instanceof String) return (String) v;
-                } catch (Throwable ignored) {}
-            }
+            // 8.0.79：dl4.p(ImproveSnsInfo).Y0()=getSnsInfo → SnsInfo.getLocalid()（V0 返回 Boolean，不可用）
             try {
-                Object sns = XposedHelpers.callMethod(improveInfo, "Z0");
+                Object sns = XposedHelpers.callMethod(improveInfo, "Y0");
                 if (sns != null) {
                     Object v = XposedHelpers.callMethod(sns, "getLocalid");
                     if (v instanceof String) return (String) v;
                 }
             } catch (Throwable ignored) {}
+            for (String m : new String[]{ "getLocalid", "getLocalId", "getLocalID" }) {
+                try {
+                    Object v = XposedHelpers.callMethod(improveInfo, m);
+                    if (v instanceof String) return (String) v;
+                } catch (Throwable ignored) {}
+            }
             return null;
         }
     }
@@ -994,7 +1065,7 @@ public final class MomentsFakeLikeHook {
         try {
             byte[] attr = (byte[]) XposedHelpers.getObjectField(snsInfo, "field_attrBuf");
             if (attr == null || attr.length == 0) return 0;
-            Class<?> soCls = XposedHelpers.findClass("com.tencent.mm.protocal.protobuf.SnsObject", sCl);
+            Class<?> soCls = WxResolver.get("protocal_protobuf_SnsObject", sCl);
             Object snsObj = XposedHelpers.callMethod(
                     XposedHelpers.newInstance(soCls), "parseFrom", (Object) attr);
             if (snsObj == null) return 0;
@@ -1212,7 +1283,7 @@ public final class MomentsFakeLikeHook {
     /** 取 SnsInfo（唯一推荐入口：MergeInfoStorage.getByLocalId）。 */
     static Object getSnsInfo(String localId) {
         try {
-            Class<?> l1 = XposedHelpers.findClass("com.tencent.mm.plugin.sns.storage.l1", sCl);
+            Class<?> l1 = WxResolver.get("plugin_sns_storage_l1", sCl);
             return XposedHelpers.callStaticMethod(l1, "b", localId);
         } catch (Throwable t) {
             LogWriter.log(TAG, "getSnsInfo err: " + t);
@@ -1270,7 +1341,7 @@ public final class MomentsFakeLikeHook {
                 return 0;
             }
 
-            Class<?> soCls = XposedHelpers.findClass("com.tencent.mm.protocal.protobuf.SnsObject", sCl);
+            Class<?> soCls = WxResolver.get("protocal_protobuf_SnsObject", sCl);
             // ★★ parseFrom 是实例方法、返回新对象（不能丢返回值）
             Object snsObj = XposedHelpers.callMethod(
                     XposedHelpers.newInstance(soCls), "parseFrom", (Object) attr);
@@ -1282,9 +1353,9 @@ public final class MomentsFakeLikeHook {
             @SuppressWarnings("unchecked")
             LinkedList<Object> list = (LinkedList<Object>)
                     XposedHelpers.getObjectField(snsObj, "LikeUserList");
-            Class<?> uf6 = loadClass("pc5.uf6");
+            Class<?> uf6 = loadClass("nd5.jj6");
             if (uf6 == null) {
-                LogWriter.log(TAG, "pc5.uf6 not found");
+                LogWriter.log(TAG, "nd5.jj6 not found");
                 return 0;
             }
 
@@ -1510,6 +1581,8 @@ public final class MomentsFakeLikeHook {
     /** 具名类直接 loadClass；混淆短名（如 pc5.uf6 / eu5.s0）loadClass 失败时回退 DexKit 按简名解析。 */
     private static Class<?> loadClass(String name) {
         if (name == null || name.isEmpty() || sCl == null) return null;
+        Class<?> c = WxResolver.resolve(sCl, name);
+        if (c != null) return c;
         for (ClassLoader l : HookUtil.candidateLoaders(sCl)) {
             try { return l.loadClass(name); } catch (Throwable ignored) {}
         }

@@ -180,33 +180,44 @@ public final class DexKitAdapter {
         return rcontactClass;
     }
 
-    /** b41.e AccountStorage。 */
+    /** l41.e AccountStorage（新版本，含 MicroMsg.AccountStorage/shakeTranImg 字符串）。 */
     public static Class<?> findAccountStorageClass() {
         if (accountStorageClass == null) {
-            accountStorageClass = classByMethodStrings(
-                    Arrays.asList(TAG_ACCOUNT_STORAGE, STR_ATTACHMENT, STR_RECORD, STR_IMG_SHAKE),
-                    "AccountStorage");
+            // v3.0.465: 新版本 Hub 已从 b41 迁到 l41 包，AccountStorage=l41.e（权威类名优先）。
+            try {
+                accountStorageClass = XposedHelpers.findClass("l41.e", HookEntry.appClassLoader);
+            } catch (Throwable ignored) {}
+            if (accountStorageClass == null) {
+                accountStorageClass = classByMethodStrings(
+                        Arrays.asList(TAG_ACCOUNT_STORAGE, STR_ATTACHMENT, STR_RECORD, STR_IMG_SHAKE),
+                        "AccountStorage");
+            }
         }
         return accountStorageClass;
     }
 
     /**
-     * b41.h9 核心 Hub。
+     * l41.h9 核心 Hub（新版本，d() 单例 + b() 返回 l41.e AccountStorage）。
      * <p>
-     * 无直接字符串锚点，改用结构特征：含方法 {@code b()} 且返回类型即 AccountStorage
-     * （文档 §15.4 核心 Hub 定位法）。
+     * 无直接字符串锚点，优先权威类名，失败再按结构特征：含方法 {@code b()} 且返回类型即 AccountStorage。
      */
     public static Class<?> findCoreHubClass() {
         if (coreHubClass == null) {
-            Class<?> acc = findAccountStorageClass();
-            if (acc == null) {
-                Log.w(TAG, "findCoreHubClass: AccountStorage 未定位，无法反推 Hub");
-                return null;
+            // v3.0.465: 新版本核心 Hub=l41.h9，直接权威验证。
+            try {
+                coreHubClass = XposedHelpers.findClass("l41.h9", HookEntry.appClassLoader);
+            } catch (Throwable ignored) {}
+            if (coreHubClass == null) {
+                Class<?> acc = findAccountStorageClass();
+                if (acc == null) {
+                    Log.w(TAG, "findCoreHubClass: AccountStorage 未定位，无法反推 Hub");
+                    return null;
+                }
+                coreHubClass = findClass(FindClass.create().matcher(ClassMatcher.create()
+                        .addMethod(MethodMatcher.create()
+                                .name("b", StringMatchType.Equals, false)
+                                .returnType(acc.getName(), StringMatchType.Equals, false))), "CoreHub");
             }
-            coreHubClass = findClass(FindClass.create().matcher(ClassMatcher.create()
-                    .addMethod(MethodMatcher.create()
-                            .name("b", StringMatchType.Equals, false)
-                            .returnType(acc.getName(), StringMatchType.Equals, false))), "CoreHub");
         }
         return coreHubClass;
     }

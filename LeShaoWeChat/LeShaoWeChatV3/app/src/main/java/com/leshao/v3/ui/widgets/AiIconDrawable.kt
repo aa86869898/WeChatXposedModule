@@ -173,6 +173,39 @@ class AiIconDrawable private constructor(private val mGlyph: Int, private val mC
                 mStrokePath.lineTo(12f, 20f)
                 mStrokePath.lineTo(20.5f, 15.6f)
             }
+            G_EDIT -> {
+                mFillPath.moveTo(3f, 17.25f)
+                mFillPath.lineTo(3f, 21f)
+                mFillPath.lineTo(6.75f, 21f)
+                mFillPath.lineTo(17.81f, 9.94f)
+                mFillPath.lineTo(14.06f, 6.19f)
+                mFillPath.lineTo(3f, 17.25f)
+                mFillPath.close()
+                mFillPath.moveTo(20.71f, 7.04f)
+                mFillPath.lineTo(16.96f, 3.29f)
+                mFillPath.lineTo(18.42f, 1.83f)
+                mFillPath.lineTo(22.17f, 5.58f)
+                mFillPath.lineTo(20.71f, 7.04f)
+                mFillPath.close()
+            }
+            G_TRASH -> {
+                mFillPath.moveTo(6f, 7f)
+                mFillPath.lineTo(18f, 7f)
+                mFillPath.lineTo(18f, 19f)
+                mFillPath.lineTo(6f, 19f)
+                mFillPath.lineTo(6f, 7f)
+                mFillPath.close()
+                mFillPath.moveTo(5f, 4f)
+                mFillPath.lineTo(8.5f, 4f)
+                mFillPath.lineTo(9.5f, 3f)
+                mFillPath.lineTo(14.5f, 3f)
+                mFillPath.lineTo(15.5f, 4f)
+                mFillPath.lineTo(19f, 4f)
+                mFillPath.lineTo(19f, 6f)
+                mFillPath.lineTo(5f, 6f)
+                mFillPath.lineTo(5f, 4f)
+                mFillPath.close()
+            }
             else -> {
                 mStrokePath.moveTo(3.4f, 7.1f)
                 mStrokePath.lineTo(11.8f, 7.1f)
@@ -219,6 +252,8 @@ class AiIconDrawable private constructor(private val mGlyph: Int, private val mC
         const val G_DB = 7
         const val G_LAYERS = 8
         const val G_SLIDERS = 9
+        const val G_EDIT = 10
+        const val G_TRASH = 11
 
         // v30111: 去静态固化 —— 每次创建时获取当前动态主题色板，深色/动态取色切换后自动跟随
         private fun palette(): IntArray {

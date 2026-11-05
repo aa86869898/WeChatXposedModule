@@ -171,13 +171,22 @@ class KnowledgeBase {
             }
             val root = JSONObject()
             root.put("items", arr)
-            FileOutputStream(file, false).use { out ->
+            val tmp = File(parent, file.name + ".tmp")
+            FileOutputStream(tmp, false).use { out ->
                 out.write(root.toString(2).toByteArray(StandardCharsets.UTF_8))
+            }
+            // ★ 原子替换，防止进程被杀留下半截 JSON
+            if (!tmp.renameTo(file)) {
+                tmp.delete()
+                com.leshao.v3.LogWriter.log("KnowledgeBase", "persist renameTo fail")
+                return false
             }
             return true
         } catch (e: IOException) {
+            com.leshao.v3.LogWriter.log("KnowledgeBase", "persist err: " + e)
             return false
         } catch (e: JSONException) {
+            com.leshao.v3.LogWriter.log("KnowledgeBase", "persist json err: " + e)
             return false
         }
     }
@@ -190,11 +199,14 @@ class KnowledgeBase {
         try {
             FileInputStream(file).use { fis ->
                 val data = ByteArray(file.length().toInt())
-                val read = fis.read(data)
-                if (read <= 0) {
-                    return
+                var off = 0
+                while (off < data.size) {
+                    val n = fis.read(data, off, data.size - off)
+                    if (n < 0) break
+                    off += n
                 }
-                val root = JSONObject(String(data, 0, read, StandardCharsets.UTF_8))
+                if (off <= 0) return
+                val root = JSONObject(String(data, 0, off, StandardCharsets.UTF_8))
                 val arr = root.optJSONArray("items")
                 if (arr == null) {
                     return
@@ -213,7 +225,9 @@ class KnowledgeBase {
                 items.addAll(loaded)
             }
         } catch (e: IOException) {
+            com.leshao.v3.LogWriter.log("KnowledgeBase", "load err: " + e)
         } catch (e: JSONException) {
+            com.leshao.v3.LogWriter.log("KnowledgeBase", "load json err: " + e)
         }
     }
 

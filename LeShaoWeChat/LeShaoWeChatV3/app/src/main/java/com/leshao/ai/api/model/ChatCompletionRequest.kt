@@ -26,10 +26,8 @@ class ChatCompletionRequest {
         }
 
         val arr = JSONArray()
-        val sys = system
-        if (sys != null && !sys.isEmpty()) {
-            arr.put(ChatMessage("system", sys).toJson())
-        }
+        // 注意：调用方（AIBotCore.generateReply/generateSummary）已在 messages 中显式加入 system 消息，
+        // 此处不再自动插入顶层 system，避免 system 人设重复注入（浪费 token 且可能干扰模型行为）。
         if (messages != null) {
             for (m in messages) {
                 arr.put(m.toJson())

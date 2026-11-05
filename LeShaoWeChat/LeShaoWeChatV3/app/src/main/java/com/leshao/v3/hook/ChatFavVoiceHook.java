@@ -259,12 +259,22 @@ public final class ChatFavVoiceHook {
                                 return true;
                             }
                             final Object fav = item;
-                            new AlertDialog.Builder(act)
+                            final android.app.AlertDialog dlg = new AlertDialog.Builder(act)
                                     .setTitle("语音转发")
                                     .setMessage("转发该语音到当前聊天？")
                                     .setPositiveButton("转发", (d, w) -> forwardVoice(fav, toUser, act))
                                     .setNegativeButton("取消", null)
-                                    .show();
+                                    .create();
+                            // 统一弹窗按钮颜色：主按钮主题色，取消按钮 onSurfaceVariant
+                            dlg.setOnShowListener(d -> {
+                                try {
+                                    dlg.getButton(android.app.AlertDialog.BUTTON_POSITIVE)
+                                            .setTextColor(com.leshao.v3.ui.AppColors.primary());
+                                    dlg.getButton(android.app.AlertDialog.BUTTON_NEGATIVE)
+                                            .setTextColor(com.leshao.v3.ui.AppColors.onSurfaceVariant());
+                                } catch (Throwable ignored) {}
+                            });
+                            dlg.show();
                             return true;
                         } catch (Throwable t) {
                             LogWriter.log(TAG, "long press err: " + t.getMessage());

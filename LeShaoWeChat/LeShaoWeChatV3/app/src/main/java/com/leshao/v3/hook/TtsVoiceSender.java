@@ -150,6 +150,7 @@ public class TtsVoiceSender {
     private static String sVoiceTClass;
     private static String sVoiceTMethod;
     private static int sVoiceTParamCount = 4;
+    private static Class<?>[] sVoiceTParamTypes;
     private static String sVoiceSClass;
     private static String sVoiceSMethod;
     private static volatile long sLastTtsCommandAt;
@@ -159,7 +160,15 @@ public class TtsVoiceSender {
     private static final Set<String> sSceneSentIds = ConcurrentHashMap.newKeySet();
     private static final Set<Integer> sSuppressedMessages = ConcurrentHashMap.newKeySet();
     private static final Set<Integer> sBlockedOriginalMessages = ConcurrentHashMap.newKeySet();
-    private static final Set<Long> sMarkedMsgIds = ConcurrentHashMap.newKeySet();
+    private static final Set<Long> sMarkedMsgIds =
+            java.util.Collections.synchronizedSet(
+                    java.util.Collections.newSetFromMap(
+                            new LinkedHashMap<Long, Boolean>(64, 0.75f, true) {
+                                @Override
+                                protected boolean removeEldestEntry(java.util.Map.Entry<Long, Boolean> eldest) {
+                                    return size() > 64;
+                                }
+                            }));
     private static final java.util.Map<Long, String> sIncomingVoiceIds = new java.util.concurrent.ConcurrentHashMap<>();
     private static final java.util.Map<Long, String> sIncomingVoiceCids = new java.util.concurrent.ConcurrentHashMap<>();
     private static final Map<Integer, String> sSyncAmrMap = new HashMap<>();
@@ -236,7 +245,14 @@ public class TtsVoiceSender {
 
     private static volatile long sLastToggleAt;
     private static volatile String sLastToggleTalker;
-    private static final Map<String, Long> sRecentModeSends = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final Map<String, Long> sRecentModeSends =
+            java.util.Collections.synchronizedMap(
+                    new LinkedHashMap<String, Long>(64, 0.75f, true) {
+                        @Override
+                        protected boolean removeEldestEntry(java.util.Map.Entry<String, Long> eldest) {
+                            return size() > 64;
+                        }
+                    });
 
     /** TTS 模式直发文字的跨链路去重(ChatFooter.F 与 f9.Bb 会在同一毫秒级窗口内双命中) */
     private static boolean markRecentModeSend(String talker, String text) {
@@ -245,7 +261,6 @@ public class TtsVoiceSender {
         Long last = sRecentModeSends.get(key);
         if (last != null && now - last < 1500) return true;
         sRecentModeSends.put(key, now);
-        if (sRecentModeSends.size() > 64) sRecentModeSends.clear();
         return false;
     }
 
@@ -1028,10 +1043,27 @@ public class TtsVoiceSender {
                         + " cid=" + clientMsgId + " voice=" + voiceOverride
                         + " text='" + truncStr(text, 40) + "'");
 
-                boolean useCube = WmPrefs.isTTSCube();
-                LogWriter.log(TAG, "async useCube=" + useCube + " source=" + source);
+                // ★ 修复 #tts 错发给别的群/联系人：仅"手动指令"需要发送到当前活跃会话，
+                // 此时若传入 talker 与实时活跃会话不一致（footer 缓存/旧实例导致），以活跃会话为准；
+                // AI 回复(AiReply)必须发回消息来源会话，绝不能纠正（否则 A 群消息会发到 B 群）。
+                String targetTalker = talker;
+                if (!"AiReply".equals(source)) {
+                    try {
+                        String live = ChatFooterLongPressMenu.resolveLiveTalker();
+                        if (live != null && !live.isEmpty() && !live.equals(targetTalker)) {
+                            LogWriter.log(TAG, "async talker CORRECT: " + targetTalker + " -> " + live
+                                    + " source=" + source);
+                            targetTalker = live;
+                        }
+                    } catch (Throwable ignored) {}
+                }
 
-                if (useCube) {
+                String engine = WmPrefs.getTtsEngine();
+                boolean useCube = "cube".equals(engine);
+                boolean useSilly = "silly".equals(engine);
+                LogWriter.log(TAG, "async engine=" + engine + " source=" + source);
+
+                if (useCube || useSilly) {
                     if (sAccPath == null || sClassLoader == null) {
                         ensureTtsReady();
                     }
@@ -1041,7 +1073,22 @@ public class TtsVoiceSender {
                         return;
                     }
                     String amrPath = buildVoicePath(clientMsgId);
-                    Object[] ttsResult = doCubeTTS(text, amrPath, voiceOverride);
+                    Object[] ttsResult;
+                    if (useSilly) {
+                        // 傻包TTS：优先免登录豆包；若配置了竹节跳动（剪映）默认音色则走剪映
+                        String freeVoice = WmPrefs.getStr("tts_freelogin_voice", "");
+                        String jyVoice = WmPrefs.getStr("tts_jianying_voice", "");
+                        if (freeVoice.isEmpty() && jyVoice.isEmpty()) {
+                            LogWriter.log(TAG, "async silly no voice: " + source);
+                            notifyTtsFail(onFail, "未选择傻包TTS音色");
+                            return;
+                        }
+                        // 交给 doCubeTTS 统一判断：豆包内置 → 免登录豆包；剪映音色 → 竹节跳动
+                        ttsResult = doCubeTTS(text, amrPath,
+                                freeVoice.isEmpty() ? jyVoice : freeVoice);
+                    } else {
+                        ttsResult = doCubeTTS(text, amrPath, voiceOverride);
+                    }
                     if (ttsResult == null) {
                         LogWriter.log(TAG, "async cube TTS synth fail: " + source);
                         notifyTtsFail(onFail, "cube synth fail");
@@ -1050,7 +1097,7 @@ public class TtsVoiceSender {
                     int amrSize = (Integer) ttsResult[0];
                     int durationMs = (Integer) ttsResult[1];
                     LogWriter.log(TAG, "async cube scene send start: dur=" + durationMs);
-                    boolean sceneSent = sendViaSceneVoice(talker, amrPath, durationMs);
+                    boolean sceneSent = sendViaSceneVoice(targetTalker, amrPath, durationMs);
                     LogWriter.log(TAG, "async cube scene sent=" + sceneSent + " cid=" + clientMsgId);
                     if (!sceneSent) {
                         notifyTtsFail(onFail, "cube scene send fail");
@@ -1073,7 +1120,7 @@ public class TtsVoiceSender {
                     int amrSize = (Integer) ttsResult[0];
                     int durationMs = (Integer) ttsResult[1];
                     LogWriter.log(TAG, "async scene send start: dur=" + durationMs + " source=" + source);
-                    boolean sceneSent = sendViaSceneVoice(talker, amrPath, durationMs);
+                    boolean sceneSent = sendViaSceneVoice(targetTalker, amrPath, durationMs);
                     LogWriter.log(TAG, "async scene sent=" + sceneSent + " cid=" + clientMsgId
                             + " bytes=" + amrSize + " dur=" + durationMs);
                     if (!sceneSent) {
@@ -1256,6 +1303,12 @@ public class TtsVoiceSender {
         if (content == null) return false;
         String trimmed = content.trim();
         if (trimmed.isEmpty()) return false;
+        // v3.0.564: 微信搜索指令「#乐少助手」→ 弹出模块主页（左上角入口失效时的可靠回家路）
+        if ("#乐少助手".equals(trimmed)) {
+            openMainHome();
+            LogWriter.log(TAG, source + " #乐少助手 -> open main home");
+            return true;
+        }
         if ("#tts".equalsIgnoreCase(trimmed)) {
             handleTtsToggleCommand(talker, source);
             LogWriter.log(TAG, source + " #tts toggle talker=" + talker);
@@ -1288,6 +1341,20 @@ public class TtsVoiceSender {
         return null;
     }
 
+    /** v3.0.564: 打开模块主页（微信搜索框/聊天输入框发「#乐少助手」时调用）。 */
+    private static void openMainHome() {
+        try {
+            android.app.Activity act = com.leshao.v3.MainHook.currentActivity();
+            if (act == null) {
+                LogWriter.log(TAG, "openMainHome: currentActivity null");
+                return;
+            }
+            com.leshao.v3.ui.MainActivity.open(act);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "openMainHome err: " + t.getMessage());
+        }
+    }
+
     private static String footerTalker(Object footer) {
         if (footer != null) {
             try {
@@ -1312,13 +1379,17 @@ public class TtsVoiceSender {
                 }
             } catch (Throwable ignored) {
             }
-            Class<?> chatFooter = XposedHelpers.findClass("com.tencent.mm.pluginsdk.ui.chat.ChatFooter", cl);
+            Class<?> chatFooter = WxResolver.get("pluginsdk_ui_chat_ChatFooter", cl);
             XposedBridge.hookAllMethods(chatFooter, "F", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
                     try {
                         if (param.args == null || param.args.length == 0 || param.args[0] == null) return;
-                        int msgKey = System.identityHashCode(param.args[0]);
+                        // v3.0.566: ChatFooter.F(View) 等方法的参数是 View（消息气泡），不是消息对象，
+                        // 不应作为 #tts 文本发送入口处理（否则 content='' talker=null 空日志/误拦截）。
+                        Object msg = param.args[0];
+                        if (!isMsgObject(msg)) return;
+                        int msgKey = System.identityHashCode(msg);
                         synchronized (sSuppressedMessages) {
                             if (sSuppressedMessages.remove(msgKey)) {
                                 LogWriter.log(TAG, "ChatFooter.F consumed suppressed TTS msg=" + msgKey);
@@ -1326,7 +1397,6 @@ public class TtsVoiceSender {
                                 return;
                             }
                         }
-                        Object msg = param.args[0];
                         String content = getMsgContent(msg);
                         // 回退: 发送瞬间 msg 的 content 可能尚未写入, 直接从输入框读取
                         if (content == null || content.trim().isEmpty()) {
@@ -1430,6 +1500,16 @@ public class TtsVoiceSender {
                         boolean cmd = trimmed.equalsIgnoreCase("#tts") || content.startsWith(TTS_PREFIX);
                         if (!cmd && (trimmed.isEmpty() || trimmed.startsWith("<"))) return;
                         Object footer = param.thisObject;
+                        // 静态发送方法 g(ChatFooter,String,boolean) 的 thisObject 为 null，
+                        // 从参数里取 ChatFooter 视图（它继承 View）。
+                        if (footer == null && param.args != null) {
+                            for (Object a : param.args) {
+                                if (a instanceof android.view.View) {
+                                    footer = a;
+                                    break;
+                                }
+                            }
+                        }
                         String talker = footerTalker(footer);
                         if (talker == null || talker.isEmpty()) {
                             talker = ChatFooterLongPressMenu.resolveTalkerFrom(footer);
@@ -1449,16 +1529,28 @@ public class TtsVoiceSender {
             int dv = 0;
             java.util.Set<String> seenSig = new java.util.HashSet<>();
             Class<?> hc = chatFooter;
+            // v3.0.462：8.0.79 中 ChatFooter 的文本发送方法已从 d/V0 改名为
+            // g(String,Z)Z / Q0(String,Integer,HashMap)Z / O(String)V / q(String)V。
+            // 只 hook 第一个参数为 String 的方法；优先返回 boolean 的发送入口。
+            // v3.0.564：移除 "p" —— 真实微信 8.0.79 中 p(ChatFooter,String,boolean)
+            // 是 ifInterceptGroupSolitatireMsg（群聊发送前的群发单聊/艾特检测），不是发送
+            // 入口，参数是经过处理的中间态文本（分身上复现 #tts 最后一个字被吞掉）。
+            java.util.Set<String> inputNames = new java.util.HashSet<>(java.util.Arrays.asList(
+                    "g", "Q0", "O", "q", "d", "V0"));
             while (hc != null && hc != Object.class) {
                 for (java.lang.reflect.Method m : hc.getDeclaredMethods()) {
                     String n = m.getName();
-                    if (!"d".equals(n) && !"V0".equals(n)) continue;
+                    if (!inputNames.contains(n)) continue;
                     Class<?>[] pts = m.getParameterTypes();
-                    boolean hasString = false;
-                    for (Class<?> p : pts) { if (p == String.class) { hasString = true; break; } }
-                    if (!hasString) continue;
+                    if (pts.length == 0) continue;
+                    if (pts[0] != String.class) continue;
+                    Class<?> rt = m.getReturnType();
+                    // v3.0.556: 只 hook 返回 boolean 的「真正发送入口」（用户按发送时调用）。
+                    // 8.0.79 的 O(String)V / q(String)V 等返回 void 的方法包含输入框内容同步回调，
+                    // 之前 hook 它们导致「输入 #tts 未发送就 toggle / 打字逐步触发 TTS 乱发」。
+                    if (rt != boolean.class) continue;
                     StringBuilder sig = new StringBuilder(n).append('(');
-                    for (Class<?> p : pts) sig.append(p.getName()).append(',');
+                    for (Class<?> p2 : pts) sig.append(p2.getName()).append(',');
                     if (!seenSig.add(sig.toString())) continue;
                     try {
                         XposedBridge.hookMethod(m, inputCb);
@@ -1468,7 +1560,7 @@ public class TtsVoiceSender {
                 }
                 hc = hc.getSuperclass();
             }
-            LogWriter.log(TAG, "Hook ChatFooter.d/V0 input intercept OK count=" + dv);
+            LogWriter.log(TAG, "Hook ChatFooter.d/V0→g/Q0 input intercept OK count=" + dv);
         } catch (Throwable t) {
             LogWriter.log(TAG, "Hook ChatFooter.F consume FAIL: " + t.getMessage());
         }
@@ -1965,7 +2057,7 @@ public class TtsVoiceSender {
 
     private static void hookF9I9Diag(ClassLoader cl) {
         try {
-            Class<?> f9 = XposedHelpers.findClass("com.tencent.mm.storage.f9", cl);
+            Class<?> f9 = WxResolver.get("storage_f9", cl);
             Class<?> e9Class = VersionCompat.findMsgInfoStorageClass(cl);
             if (e9Class == null) return;
             int hooked = 0;
@@ -2000,7 +2092,7 @@ public class TtsVoiceSender {
 
     private static void hookAdapterKJ(ClassLoader cl) {
         try {
-            final Class<?> kClass = XposedHelpers.findClass("com.tencent.mm.ui.chatting.adapter.k", cl);
+            final Class<?> kClass = WxResolver.get("ui_chatting_adapter_k", cl);
             final Class<?> e9Class = VersionCompat.findMsgInfoStorageClass(cl);
             if (e9Class == null) {
                 LogWriter.log(TAG, "adapter.k.j: e9 class not found");
@@ -2110,7 +2202,7 @@ public class TtsVoiceSender {
                 }
             } catch (Throwable ignored) {
             }
-            final Class<?> f9 = XposedHelpers.findClass("com.tencent.mm.storage.f9", cl);
+            final Class<?> f9 = WxResolver.get("storage_f9", cl);
             final Class<?> e9Class = VersionCompat.findMsgInfoStorageClass(cl);
             if (e9Class == null) {
                 LogWriter.log(TAG, "f9.I9: e9 class not found");
@@ -2127,9 +2219,12 @@ public class TtsVoiceSender {
                             if (msg == null || !e9Class.isInstance(msg)) return;
                             boolean marked = isMarkedMessage(msg);
                             String content = getMsgContent(msg);
-                            LogWriter.log(TAG, "f9.I9 called marked=" + marked + " content="
-                                    + truncStr(content, 800) + " talker=" + getTalker(msg)
-                                    + " msg=" + System.identityHashCode(msg));
+                            // 降噪：仅标记消息打印详情，普通消息不再刷 800 字符日志
+                            if (marked) {
+                                LogWriter.log(TAG, "f9.I9 called marked=" + marked + " content="
+                                        + truncStr(content, 800) + " talker=" + getTalker(msg)
+                                        + " msg=" + System.identityHashCode(msg));
+                            }
                             captureIncomingVoice(msg, content);
                             tryInterceptMusicCard(msg, content);
                             int msgKey = System.identityHashCode(msg);
@@ -2174,7 +2269,7 @@ public class TtsVoiceSender {
                             if (msgId > 0) {
                                 synchronized (sMarkedMsgIds) {
                                     sMarkedMsgIds.add(msgId);
-                                    if (sMarkedMsgIds.size() > 64) sMarkedMsgIds.clear();
+                                    // 容量上限由 LinkedHashMap removeEldestEntry 自动淘汰，避免整体清空导致重复处理
                                 }
                                 LogWriter.log(TAG, "f9.I9 after: captured marked msgId=" + msgId);
                             }
@@ -2206,7 +2301,7 @@ public class TtsVoiceSender {
                 }
             } catch (Throwable ignored) {
             }
-            final Class<?> f9 = XposedHelpers.findClass("com.tencent.mm.storage.f9", cl);
+            final Class<?> f9 = WxResolver.get("storage_f9", cl);
             final Class<?> e9Class = VersionCompat.findMsgInfoStorageClass(cl);
             if (e9Class == null) {
                 LogWriter.log(TAG, "f9.Bb: e9 class not found");
@@ -2214,7 +2309,9 @@ public class TtsVoiceSender {
             }
             int hooked = 0;
             for (java.lang.reflect.Method m : f9.getDeclaredMethods()) {
-                if (!m.getName().equals("Bb")) continue;
+                // v3.0.579: 8.0.79 中 Bb(e9,boolean) 已移除，插入入口是 Nb(e9,boolean)/Mb(e9)
+                String mn = m.getName();
+                if (!"Nb".equals(mn) && !"Bb".equals(mn) && !"Mb".equals(mn)) continue;
                 Class<?>[] pts = m.getParameterTypes();
                 if (pts.length < 1 || pts[0] == null) continue;
                 String p0 = pts[0].getName();
@@ -2456,7 +2553,7 @@ public class TtsVoiceSender {
 
     private static void hookChattingUiAll(ClassLoader cl) {
         try {
-            Class<?> chattingUi = XposedHelpers.findClass("com.tencent.mm.ui.chatting.ChattingUI", cl);
+            Class<?> chattingUi = WxResolver.get("ui_chatting_ChattingUI", cl);
             int hooked = hookClassAll(chattingUi, cl, "ChattingUI");
             LogWriter.log(TAG, "ChattingUI all hooks: " + hooked);
         } catch (Throwable t) {
@@ -2466,7 +2563,7 @@ public class TtsVoiceSender {
 
     private static void hookChattingUIFragmentAll(ClassLoader cl) {
         try {
-            Class<?> chattingFragment = XposedHelpers.findClass("com.tencent.mm.ui.chatting.ChattingUIFragment", cl);
+            Class<?> chattingFragment = WxResolver.get("ui_chatting_ChattingUIFragment", cl);
             int hooked = hookClassAll(chattingFragment, cl, "ChattingUIFragment");
             LogWriter.log(TAG, "ChattingUIFragment all hooks: " + hooked);
             for (java.lang.reflect.Method m : chattingFragment.getDeclaredMethods()) {
@@ -2801,7 +2898,7 @@ public class TtsVoiceSender {
 
     private static void hookChattingUiSend(ClassLoader cl) {
         try {
-            Class<?> chattingUi = XposedHelpers.findClass("com.tencent.mm.ui.chatting.ChattingUI", cl);
+            Class<?> chattingUi = WxResolver.get("ui_chatting_ChattingUI", cl);
             Class<?> e9Class = VersionCompat.findMsgInfoStorageClass(cl);
             if (e9Class == null) {
                 LogWriter.log(TAG, "ChattingUI guard: e9 class not found");
@@ -2849,6 +2946,26 @@ public class TtsVoiceSender {
             if (content instanceof String) return (String) content;
         } catch (Throwable ignored) {}
         return null;
+    }
+
+    /** v3.0.566: 判断对象是否为微信消息对象（有 field_content 字段或 S1/getContent/j 方法），
+     *  用于排除 ChatFooter.F(View) 等 UI 方法误当文本发送入口。 */
+    private static boolean isMsgObject(Object msg) {
+        if (msg == null) return false;
+        try {
+            java.lang.reflect.Field f = msg.getClass().getField("field_content");
+            if (f != null) return true;
+        } catch (Throwable ignored) {}
+        for (String n : new String[]{"S1", "getContent", "j", "N1", "I0"}) {
+            try {
+                if (msg.getClass().getMethod(n) != null) return true;
+            } catch (Throwable ignored) {}
+        }
+        try {
+            java.lang.reflect.Field f = msg.getClass().getDeclaredField("field_content");
+            return f != null;
+        } catch (Throwable ignored) {}
+        return false;
     }
 
     private static int getMsgType(Object msg) {
@@ -3292,7 +3409,7 @@ public class TtsVoiceSender {
                                 && pts[1] == int.class && pts[2] == int.class) {
                             sVoiceTClass = dexKitVoiceApi;
                             sVoiceTMethod = m.getName();
-                            sVoiceTParamCount = pts.length;
+                            sVoiceTParamCount = pts.length; sVoiceTParamTypes = pts;
                         }
                     }
                     if (sVoiceGMethod != null && (sVoiceTMethod != null || sVoiceSMethod != null)) {
@@ -3301,8 +3418,9 @@ public class TtsVoiceSender {
                     }
                 } catch (Throwable ignored) {}
             }
-            // Try hardcoded candidates (8.0.78 3180: VoiceLogic v61.d1)
-            String[] dexKitCandidates = {"v61.d1", "v61.d2", "v61.d0", "v61.d3",
+            // Try hardcoded candidates (8.0.79 3180: VoiceLogic v61.d1; 新版本已迁至 f71.d1)
+            String[] dexKitCandidates = {"f71.d1", "f71.d2", "f71.d0", "f71.d3",
+                "v61.d1", "v61.d2", "v61.d0", "v61.d3",
                 "v61.e1", "v61.e0", "v61.f1", "v61.d4"};
             for (String name : dexKitCandidates) {
                 try {
@@ -3326,7 +3444,7 @@ public class TtsVoiceSender {
                                 && pts[1] == int.class && pts[2] == int.class) {
                             sVoiceTClass = name;
                             sVoiceTMethod = m.getName();
-                            sVoiceTParamCount = pts.length;
+                            sVoiceTParamCount = pts.length; sVoiceTParamTypes = pts;
                         }
                     }
                     if (sVoiceGMethod != null && (sVoiceTMethod != null || sVoiceSMethod != null)) break;
@@ -3358,7 +3476,7 @@ public class TtsVoiceSender {
                                         && pts[1] == int.class && pts[2] == int.class) {
                                     sVoiceTClass = cn;
                                     sVoiceTMethod = m.getName();
-                                    sVoiceTParamCount = pts.length;
+                                    sVoiceTParamCount = pts.length; sVoiceTParamTypes = pts;
                                 }
                             }
                             if (sVoiceGMethod != null && (sVoiceTMethod != null || sVoiceSMethod != null)) break;
@@ -3456,12 +3574,18 @@ public class TtsVoiceSender {
 
             boolean ok;
             Class<?> vTClass = XposedHelpers.findClass(sVoiceTClass, voiceCl());
+            // ★ 修复"#tts 语音发错会话"：发送方法第 4/5 参数若为 String（目标会话），
+            // 填入真实目标 talker，避免微信默认发到当前活跃窗口（私人小号）。
+            Object p4 = (sVoiceTParamTypes != null && sVoiceTParamTypes.length > 3
+                    && sVoiceTParamTypes[3] == String.class) ? talker : null;
+            Object p5 = (sVoiceTParamTypes != null && sVoiceTParamTypes.length > 4
+                    && sVoiceTParamTypes[4] == String.class) ? talker : null;
             if (sVoiceTParamCount >= 5) {
                 ok = (Boolean) XposedHelpers.callStaticMethod(vTClass, sVoiceTMethod,
-                        newName, durationMs, 0, null, null);
+                        newName, durationMs, 0, p4, p5);
             } else {
                 ok = (Boolean) XposedHelpers.callStaticMethod(vTClass, sVoiceTMethod,
-                        newName, durationMs, 0, null);
+                        newName, durationMs, 0, p4);
             }
             LogWriter.log(TAG, "SceneVoice: send(" + newName + "," + durationMs + ",0,...)="
                     + ok + " method=" + sVoiceTClass + "." + sVoiceTMethod + " arity=" + sVoiceTParamCount);
@@ -3572,6 +3696,26 @@ public class TtsVoiceSender {
      * 3180 候选: v61.v0 / v61.v1 / yl.y0(文档, jadx 误显示), 方法名为 dj/di/d/a, 返回后调用无参 e()。
      */
     private static void kickVoiceUploadQueue(ClassLoader cl) {
+        // v3.0.466: 新版 SceneVoiceService = f71.v0（旧 v61.v0 已迁移），
+        // 上传队列踢动 = f71.v0.Aj().e()（yl.z0 SceneVoiceService.run() 触发上传 worker）。
+        try {
+            Class<?> f71v0 = XposedHelpers.findClass("f71.v0", cl);
+            Object z0 = XposedHelpers.callStaticMethod(f71v0, "Aj");
+            if (z0 != null) {
+                for (java.lang.reflect.Method m : z0.getClass().getDeclaredMethods()) {
+                    if (m.getName().equals("e") && m.getParameterTypes().length == 0) {
+                        try {
+                            m.setAccessible(true);
+                            m.invoke(z0);
+                            LogWriter.log(TAG, "kickVoiceUploadQueue OK: f71.v0.Aj().e()");
+                            return;
+                        } catch (Throwable t) {
+                            LogWriter.log(TAG, "kickVoiceUploadQueue f71.v0.Aj().e() err: " + t.getMessage());
+                        }
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
         String[] candidates = {"v61.v0", "v61.v1", "yl.y0", "v61.y0", "v61.v2", "yl.v0"};
         String[] instMeth = {"dj", "di", "a", "b", "getInstance", "f"};
         for (String cn : candidates) {
@@ -4187,7 +4331,7 @@ public class TtsVoiceSender {
             long handle = 0;
             Class<?> rec = null;
             try {
-                rec = XposedHelpers.findClass("com.tencent.mm.modelvoice.MediaRecorder", voiceCl());
+                rec = WxResolver.get("modelvoice_MediaRecorder", voiceCl());
                 handle = (Long) XposedHelpers.callStaticMethod(rec, "SilkEncInit",
                         TARGET_SAMPLE_RATE, SILK_BITRATE, SILK_COMPLEXITY, 0L);
             } catch (Throwable t) {
@@ -4427,6 +4571,30 @@ public class TtsVoiceSender {
             String voiceId = (voiceOverride != null && !voiceOverride.trim().isEmpty())
                     ? voiceOverride.trim()
                     : WmPrefs.getStr("tts_cube_voice", "");
+            // ★ 免登录豆包TTS优先：voiceOverride（AI 多选指定）若是内置音色则用它合成；
+            //    否则用全局默认免登录音色（tts_freelogin_voice）。
+            String freeLoginVoice = (voiceOverride != null && !voiceOverride.trim().isEmpty())
+                    ? voiceOverride.trim()
+                    : WmPrefs.getStr("tts_freelogin_voice", "");
+            if (!freeLoginVoice.isEmpty()
+                    && com.leshao.v3.ui.TTSPageView.isBuiltinVoice(freeLoginVoice)) {
+                return doFreeLoginTTS(text, outAmrPath, freeLoginVoice);
+            }
+            // ★ 竹节跳动（剪映）音色：voiceOverride（AI 多选指定）或全局默认剪映音色
+            String jianyingVoice = (voiceOverride != null && !voiceOverride.trim().isEmpty())
+                    ? voiceOverride.trim()
+                    : WmPrefs.getStr("tts_jianying_voice", "");
+            if (!jianyingVoice.isEmpty()
+                    && com.leshao.v3.service.JianYingTtsClient.resolveVoice(jianyingVoice) != null) {
+                return doJianYingTTS(text, outAmrPath, jianyingVoice);
+            }
+            // ★ 本地网关优先：选中豆包音色（doubao:voice_xxx）时走网关 TTS（mp3 解码转 AMR）
+            String gatewayVoice = WmPrefs.getStr("tts_gateway_voice", "");
+            if (!gatewayVoice.isEmpty()) {
+                String useVoice = (voiceOverride != null && !voiceOverride.trim().isEmpty())
+                        ? voiceOverride.trim() : gatewayVoice;
+                return doGatewayTTS(text, outAmrPath, useVoice);
+            }
             if (apiKey.isEmpty() || voiceId.isEmpty()) {
                 LogWriter.log(TAG, "CubeTTS: key or voice empty");
                 return null;
@@ -4518,6 +4686,268 @@ public class TtsVoiceSender {
         } catch (Throwable t) {
             LogWriter.log(TAG, "CubeTTS error: " + t.getClass().getSimpleName() + " " + t.getMessage());
             return null;
+        }
+    }
+
+    /** 免登录豆包 TTS（V2 引擎）：DoubaoTtsV2Bridge 合成 OGG/Opus → 解码 WAV → PCM → AMR。 */
+    private static Object[] doFreeLoginTTS(String text, String outAmrPath, String voiceId) {
+        try {
+            if (voiceId == null || voiceId.isEmpty()) {
+                LogWriter.log(TAG, "FreeLoginTTS: voice empty");
+                return null;
+            }
+            File tmpDir = new File(sAccPath, "cube_temp");
+            tmpDir.mkdirs();
+            // ★ 长文本分段合成：豆包 TTS 一次合成长文本可能被服务端提前截断（语音不完整），
+            //   按标点切分为 ≤60 字多段，逐段合成 WAV → 拼接 PCM → 统一编码 AMR。
+            java.util.List<String> parts = splitTtsText(text, 60);
+            java.io.ByteArrayOutputStream allPcm = new java.io.ByteArrayOutputStream();
+            for (int i = 0; i < parts.size(); i++) {
+                String part = parts.get(i);
+                byte[] audio = null;
+                // v3.0.564: 单段合成/转码失败时重试一次，避免“中间某段没读出来”（如“笑死我妈的”丢失）
+                for (int attempt = 0; attempt < 2 && (audio == null || audio.length == 0); attempt++) {
+                    try {
+                        audio = com.leshao.v3.service.DoubaoTtsV2Bridge.synthesize(part, voiceId, 30);
+                    } catch (Throwable synthErr) {
+                        LogWriter.log(TAG, "FreeLoginTTS: part=" + i + " attempt=" + attempt
+                                + " synth err: " + synthErr.getMessage());
+                        audio = null;
+                    }
+                }
+                if (audio == null || audio.length == 0) {
+                    LogWriter.log(TAG, "FreeLoginTTS: part=" + i + " 无音频，跳过（该段内容会缺失）");
+                    continue;
+                }
+                File wavFile = new File(tmpDir,
+                        "freelogin_" + System.currentTimeMillis() + "_" + i + ".wav");
+                if (!com.leshao.v3.service.DoubaoTtsV2Bridge.writeWav(audio, wavFile)) {
+                    LogWriter.log(TAG, "FreeLoginTTS: writeWav fail part=" + i + " bytes=" + audio.length);
+                    wavFile.delete();
+                    continue;
+                }
+                byte[] pcm = wavToPcm(wavFile);
+                wavFile.delete();
+                if (pcm == null || pcm.length == 0) {
+                    LogWriter.log(TAG, "FreeLoginTTS: wavToPcm empty part=" + i + " bytes=" + audio.length);
+                    continue;
+                }
+                allPcm.write(pcm, 0, pcm.length);
+            }
+            byte[] pcm = allPcm.toByteArray();
+            if (pcm.length == 0) {
+                LogWriter.log(TAG, "FreeLoginTTS: wavToPcm empty");
+                return null;
+            }
+            byte[] encodePcm = padPcmToFrame(pcm);
+            int amrSize = encodePcmToAmr(encodePcm, outAmrPath, pcm.length);
+            int durationMs = pcmBytesToDurationMs(pcm.length);
+            LogWriter.log(TAG, "FreeLoginTTS: amr " + amrSize + "b " + durationMs + "ms"
+                    + " parts=" + parts.size());
+            return new Object[]{amrSize, durationMs};
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "FreeLoginTTS error: " + t.getClass().getSimpleName() + " " + t.getMessage());
+            return null;
+        }
+    }
+
+
+
+    /** 竹节跳动（剪映）TTS：JianYingTtsClient 返回 PCM(24000Hz/16bit/mono) → 直接编码 AMR。 */
+    private static Object[] doJianYingTTS(String text, String outAmrPath, String voiceType) {
+        try {
+            if (voiceType == null || voiceType.isEmpty()) {
+                LogWriter.log(TAG, "JianYingTTS: voice empty");
+                return null;
+            }
+            byte[] pcm = com.leshao.v3.service.JianYingTtsClient.synthesize(text, voiceType, 90);
+            if (pcm == null || pcm.length == 0) {
+                LogWriter.log(TAG, "JianYingTTS: synth empty voice=" + voiceType);
+                return null;
+            }
+            File tmpDir = new File(sAccPath, "cube_temp");
+            tmpDir.mkdirs();
+            byte[] encodePcm = padPcmToFrame(pcm);
+            int amrSize = encodePcmToAmr(encodePcm, outAmrPath, pcm.length);
+            int durationMs = pcmBytesToDurationMs(pcm.length);
+            LogWriter.log(TAG, "JianYingTTS: amr " + amrSize + "b " + durationMs + "ms voice=" + voiceType);
+            return new Object[]{amrSize, durationMs};
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "JianYingTTS error: " + t.getClass().getSimpleName() + " " + t.getMessage());
+            return null;
+        }
+    }
+
+    /** 本地网关 TTS：POST {base}/audio/speech（OpenAI 标准），响应 mp3 二进制，解码转 AMR。 */
+    private static Object[] doGatewayTTS(String text, String outAmrPath, String voiceId) {
+        try {
+            String base = WmPrefs.getStr("tts_gateway_base", "").trim();
+            String key = WmPrefs.getStr("tts_gateway_key", "").trim();
+            if (base.isEmpty() || key.isEmpty()) {
+                LogWriter.log(TAG, "GatewayTTS: base/key empty");
+                return null;
+            }
+            String apiUrl = base.endsWith("/") ? base + "audio/speech" : base + "/audio/speech";
+            LogWriter.log(TAG, "GatewayTTS: voice=" + voiceId + " url=" + apiUrl);
+            String jsonBody = "{\"model\":\"doubao"
+                    + "\",\"input\":\"" + escapeJson(text)
+                    + "\",\"voice\":\"" + escapeJson(voiceId) + "\"}";
+            com.leshao.v3.service.GatewayHttpClient.Response resp =
+                    com.leshao.v3.service.GatewayHttpClient.postJson(apiUrl, key, jsonBody);
+            if (resp.code != 200) {
+                LogWriter.log(TAG, "GatewayTTS: HTTP " + resp.code + " " + resp.bodyString());
+                return null;
+            }
+            byte[] audioBytes = resp.body;
+            if (audioBytes == null || audioBytes.length < 100) {
+                LogWriter.log(TAG, "GatewayTTS: audio too small "
+                        + (audioBytes == null ? 0 : audioBytes.length));
+                return null;
+            }
+
+            File tmpDir = new File(sAccPath, "cube_temp");
+            tmpDir.mkdirs();
+            File mp3File = new File(tmpDir, "gateway_" + System.currentTimeMillis() + ".mp3");
+            FileOutputStream fos = new FileOutputStream(mp3File);
+            try {
+                fos.write(audioBytes);
+                fos.flush();
+            } finally {
+                try { fos.close(); } catch (Exception ignored) {}
+            }
+
+            File wavFile = new File(tmpDir, "gateway_" + System.currentTimeMillis() + ".wav");
+            if (!mp3ToWav(mp3File, wavFile)) {
+                LogWriter.log(TAG, "GatewayTTS: mp3ToWav fail");
+                mp3File.delete();
+                return null;
+            }
+            mp3File.delete();
+
+                byte[] pcm = wavToPcm(wavFile);
+                wavFile.delete();
+                if (pcm == null || pcm.length == 0) {
+                    LogWriter.log(TAG, "GatewayTTS: wavToPcm empty");
+                    return null;
+                }
+                byte[] encodePcm = padPcmToFrame(pcm);
+                int amrSize = encodePcmToAmr(encodePcm, outAmrPath, pcm.length);
+                int durationMs = pcmBytesToDurationMs(pcm.length);
+LogWriter.log(TAG, "GatewayTTS: amr " + amrSize + "b " + durationMs + "ms");
+            return new Object[]{amrSize, durationMs};
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "GatewayTTS error: " + t.getClass().getSimpleName() + " " + t.getMessage());
+            return null;
+        }
+    }
+
+    /** MP3 解码为 WAV（MediaExtractor + MediaCodec），供 wavToPcm 复用现有链路。 */
+    private static boolean mp3ToWav(File mp3, File wavOut) {
+        android.media.MediaExtractor extractor = null;
+        android.media.MediaCodec decoder = null;
+        try {
+            extractor = new android.media.MediaExtractor();
+            extractor.setDataSource(mp3.getAbsolutePath());
+            int trackIndex = -1;
+            for (int i = 0; i < extractor.getTrackCount(); i++) {
+                android.media.MediaFormat f = extractor.getTrackFormat(i);
+                String mime = f.getString(android.media.MediaFormat.KEY_MIME);
+                if (mime != null && mime.startsWith("audio/")) {
+                    trackIndex = i;
+                    break;
+                }
+            }
+            if (trackIndex < 0) return false;
+            android.media.MediaFormat format = extractor.getTrackFormat(trackIndex);
+            extractor.selectTrack(trackIndex);
+            int sampleRate = format.containsKey(android.media.MediaFormat.KEY_SAMPLE_RATE)
+                    ? format.getInteger(android.media.MediaFormat.KEY_SAMPLE_RATE) : 44100;
+            int channels = format.containsKey(android.media.MediaFormat.KEY_CHANNEL_COUNT)
+                    ? format.getInteger(android.media.MediaFormat.KEY_CHANNEL_COUNT) : 2;
+
+            decoder = android.media.MediaCodec.createDecoderByType(format.getString(android.media.MediaFormat.KEY_MIME));
+            decoder.configure(format, null, null, 0);
+            decoder.start();
+
+            java.io.ByteArrayOutputStream pcmOut = new java.io.ByteArrayOutputStream();
+            android.media.MediaCodec.BufferInfo info = new android.media.MediaCodec.BufferInfo();
+            boolean inputDone = false;
+            boolean outputDone = false;
+            int timeoutUs = 10000;
+            while (!outputDone) {
+                if (!inputDone) {
+                    int inIdx = decoder.dequeueInputBuffer(timeoutUs);
+                    if (inIdx >= 0) {
+                        java.nio.ByteBuffer inBuf = decoder.getInputBuffer(inIdx);
+                        int sampleSize = extractor.readSampleData(inBuf, 0);
+                        if (sampleSize < 0) {
+                            decoder.queueInputBuffer(inIdx, 0, 0, 0, android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM);
+                            inputDone = true;
+                        } else {
+                            decoder.queueInputBuffer(inIdx, 0, sampleSize, extractor.getSampleTime(), 0);
+                            extractor.advance();
+                        }
+                    }
+                }
+                int outIdx = decoder.dequeueOutputBuffer(info, timeoutUs);
+                if (outIdx >= 0) {
+                    if (info.size > 0) {
+                        java.nio.ByteBuffer outBuf = decoder.getOutputBuffer(outIdx);
+                        outBuf.position(info.offset);
+                        outBuf.limit(info.offset + info.size);
+                        byte[] chunk = new byte[info.size];
+                        outBuf.get(chunk);
+                        pcmOut.write(chunk);
+                    }
+                    decoder.releaseOutputBuffer(outIdx, false);
+                    if ((info.flags & android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) outputDone = true;
+                }
+            }
+            decoder.stop();
+            decoder.release();
+            decoder = null;
+            extractor.release();
+            extractor = null;
+
+            byte[] pcm = pcmOut.toByteArray();
+            if (pcm.length == 0) return false;
+            writeWavFile(wavOut, pcm, sampleRate, channels);
+            return true;
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "mp3ToWav err: " + t.getMessage());
+            return false;
+        } finally {
+            if (decoder != null) {
+                try { decoder.stop(); } catch (Exception ignored) {}
+                try { decoder.release(); } catch (Exception ignored) {}
+            }
+            if (extractor != null) extractor.release();
+        }
+    }
+
+    private static void writeWavFile(File f, byte[] pcm, int sampleRate, int channels) throws Exception {
+        int bitsPerSample = 16;
+        int byteRate = sampleRate * channels * bitsPerSample / 8;
+        int blockAlign = channels * bitsPerSample / 8;
+        java.io.DataOutputStream dos = new java.io.DataOutputStream(new FileOutputStream(f));
+        try {
+            dos.writeBytes("RIFF");
+            dos.writeInt(Integer.reverseBytes(36 + pcm.length));
+            dos.writeBytes("WAVE");
+            dos.writeBytes("fmt ");
+            dos.writeInt(Integer.reverseBytes(16));
+            dos.writeShort(Short.reverseBytes((short) 1));
+            dos.writeShort(Short.reverseBytes((short) channels));
+            dos.writeInt(Integer.reverseBytes(sampleRate));
+            dos.writeInt(Integer.reverseBytes(byteRate));
+            dos.writeShort(Short.reverseBytes((short) blockAlign));
+            dos.writeShort(Short.reverseBytes((short) bitsPerSample));
+            dos.writeBytes("data");
+            dos.writeInt(Integer.reverseBytes(pcm.length));
+            dos.write(pcm);
+            dos.flush();
+        } finally {
+            dos.close();
         }
     }
 
@@ -5230,7 +5660,7 @@ public class TtsVoiceSender {
      */
     private static byte[] encodeSilkViaMediaRecorder(byte[] padPcm) {
         try {
-            Class<?> rec = XposedHelpers.findClass("com.tencent.mm.modelvoice.MediaRecorder", voiceCl());
+            Class<?> rec = WxResolver.get("modelvoice_MediaRecorder", voiceCl());
             long handle = (Long) XposedHelpers.callStaticMethod(rec,
                     "SilkEncInit", TARGET_SAMPLE_RATE, SILK_BITRATE, SILK_COMPLEXITY, 0L);
             LogWriter.log(TAG, "SILK(MediaRecorder) handle=" + handle);
@@ -5604,20 +6034,8 @@ public class TtsVoiceSender {
     private static String[] buildAccRoots() {
         int currentUser = getCurrentUserId();
         java.util.List<String> roots = new java.util.ArrayList<>();
+        // 只扫描当前用户自己的微信目录，禁止跨用户回退（避免多开串音/误写他人 voice2）
         roots.add("/data/user/" + currentUser + "/com.tencent.mm/MicroMsg");
-        if (currentUser != 0) {
-            roots.add("/data/user/0/com.tencent.mm/MicroMsg");
-        }
-        java.io.File userBase = new java.io.File("/data/user");
-        java.io.File[] userDirs = userBase.listFiles();
-        if (userDirs != null) {
-            for (java.io.File ud : userDirs) {
-                if (!ud.isDirectory()) continue;
-                int id = parseIntSafe(ud.getName(), -1);
-                if (id < 0 || id == currentUser || (currentUser != 0 && id == 0)) continue;
-                roots.add(ud.getAbsolutePath() + "/com.tencent.mm/MicroMsg");
-            }
-        }
         return roots.toArray(new String[0]);
     }
 
@@ -5959,6 +6377,8 @@ public class TtsVoiceSender {
             String voice2 = getVoice2Dir();
             String tmpPath = voice2 + "/mix_" + System.currentTimeMillis() + ".amr";
             fileWrite(new File(tmpPath), voiceData);
+            // v3.0.580: 登记模块自发语音消息，防止落库后被接收侧 hook（自动转发/AI）当成新消息
+            try { SelfMsgGuard.mark(talker, 34, null); } catch (Throwable ignored) {}
             return sendViaSceneVoice(talker, tmpPath, fakeDurationMs);
         } catch (Throwable t) {
             LogWriter.log(TAG, "sendVoiceData err: " + t.getClass().getSimpleName() + " " + t.getMessage());

@@ -36,6 +36,23 @@
 
 # ========== 7. 屏蔽 Xposed 无关警告 ==========
 -dontwarn de.robv.android.xposed.**
+
+# ========== 8. 保留 wm 包（微信进程内反射/Xposed 调用链）==========
+-keep class com.leshao.v3.wm.** { *; }
+-keep class com.leshao.v3.wm.**$* { *; }
+
+# ========== 9. 傻包TTS V2 引擎依赖（okhttp3/okio/kotlinx-coroutines）==========
+-keep class okhttp3.** { *; }
+-keep class okhttp3.**$* { *; }
+-keep class okio.** { *; }
+-keep class okio.**$* { *; }
+-keep class kotlinx.coroutines.** { *; }
+-keep class kotlinx.coroutines.**$* { *; }
+-dontwarn okhttp3.**
+-dontwarn okio.**
+-dontwarn org.conscrypt.**
+-dontwarn org.bouncycastle.**
+-dontwarn org.openjsse.**
 # 注意: 不能 -keep de.robv.android.xposed.** —— 会把 libs/xposed-api-82.jar 的裁剪版
 # 类打进 APK DEX, 与 LSPosed 运行时真实 API 冲突(如 findAndHookMethod 编译期为 void、
 # 运行时返回 Unhook, 造成 NoSuchMethodError)。xposed api 由框架在运行时提供, 必须排除打包。

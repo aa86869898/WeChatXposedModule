@@ -850,7 +850,7 @@ public final class MsgForgeHook {
             Class<?> f9 = VersionCompat.findMsgStorageClass(cl);
             if (f9 == null) {
                 try {
-                    f9 = XposedHelpers.findClass("com.tencent.mm.storage.f9", cl);
+                    f9 = WxResolver.get("storage_f9", cl);
                 } catch (Throwable ignored) {}
             }
             if (f9 == null) {

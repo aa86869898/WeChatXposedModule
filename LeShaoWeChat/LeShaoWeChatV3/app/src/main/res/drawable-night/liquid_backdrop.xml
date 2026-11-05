@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 玻璃风格 · 窗口底帘（v3.0.459 暗色模式：暖棕黑实底） -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#FF14120B" />
+</shape>

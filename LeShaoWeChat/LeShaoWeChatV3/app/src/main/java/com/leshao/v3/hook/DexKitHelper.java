@@ -10,6 +10,7 @@ import android.content.res.AssetManager;
 import android.os.Handler;
 import android.os.Looper;
 import androidx.recyclerview.widget.ItemTouchHelper;
+import com.leshao.ai.hook.HookEntry;
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.IconLoader;
 import com.leshao.v3.LogWriter;
@@ -25,6 +26,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -46,6 +48,7 @@ import org.luckypray.dexkit.query.enums.StringMatchType;
 import org.luckypray.dexkit.query.matchers.ClassMatcher;
 import org.luckypray.dexkit.query.matchers.MethodMatcher;
 import org.luckypray.dexkit.result.ClassData;
+import org.luckypray.dexkit.result.ClassDataList;
 import org.luckypray.dexkit.result.FieldData;
 import org.luckypray.dexkit.result.MethodData;
 
@@ -53,7 +56,7 @@ import org.luckypray.dexkit.result.MethodData;
 public class DexKitHelper {
     private static final String BASELINE_ASSET = "dexkit_baseline.json";
     private static final String BASELINE_FILE = "dexkit_baseline.json";
-    private static final int CURRENT_MODULE_VERSION = 30314;
+    private static final int CURRENT_MODULE_VERSION = 30581;
     private static final String KEY_A21_CLASS = "a21_class";
     private static final String KEY_A21_METHOD = "a21_method";
     private static final String KEY_ACTION_BAR_CLASS = "action_bar_custom_area";
@@ -660,9 +663,42 @@ public class DexKitHelper {
             LogWriter.log(TAG, "findClassesByString(" + keyword + "): cache hit after migrate " + cached.size() + " candidates");
             return new ArrayList<>(cached);
         }
-        // v3.0.283: 缓存未命中时一律不现场扫描（避免启动早期/主界面后的 DexKit 全量扫描
-        // 导致 native 内存峰值闪退）。依赖动态解析的模块请使用权威类名兜底。
-        LogWriter.log(TAG, "findClassesByString(" + keyword + "): cache MISS, return empty (avoid startup scan)");
+        // v3.0.463: 缓存未命中时先等待全量扫描完成再重试一次（waitForFullScanIfScheduled
+        // 在主线程直接返回、后台线程最多等 30s），避免启动早期字符串锚点全部失效。
+        // 原先 v3.0.283 的“一律不现场扫描”在权威类名兜底仍存在时安全，但 8.0.79 大量
+        // 旧类名已删除（v61.d1/eu5.s0/gp0.j1…），必须靠扫描结果兜底。
+        waitForFullScanIfScheduled();
+        cached = readFindCache(cacheKey);
+        if (cached != null) {
+            LogWriter.log(TAG, "findClassesByString(" + keyword + "): cache hit after wait " + cached.size() + " candidates");
+            return new ArrayList<>(cached);
+        }
+        // v3.0.466: 缓存可能从未被写入（writeFindCache 历史无调用方），等待后仍 MISS。
+        // 此时执行实时 DexKit 查询并回写缓存，恢复全部字符串锚点（广告/朋友圈菜单/语音转发等）。
+        try {
+            final String kw = keyword;
+            final List<String> live = withWechatBridge(cl, new BridgeAction<List<String>>() {
+                @Override
+                public List<String> run(DexKitBridge b) {
+                    List<String> out = new ArrayList<>();
+                    ClassDataList list = b.findClass(FindClass.create().excludePackages("com.leshao")
+                            .matcher(ClassMatcher.create().usingStrings(kw)));
+                    if (list != null) {
+                        for (ClassData cd : list) {
+                            String n = cd.getName();
+                            if (n != null) out.add(n);
+                        }
+                    }
+                    return out;
+                }
+            });
+            if (live != null && !live.isEmpty()) {
+                LogWriter.log(TAG, "findClassesByString(" + keyword + "): live hit " + live.size() + " candidates");
+                writeFindCache(cacheKey, live);
+                return new ArrayList<>(live);
+            }
+        } catch (Throwable ignored) {}
+        LogWriter.log(TAG, "findClassesByString(" + keyword + "): cache MISS after wait, return empty");
         return new ArrayList<>();
     }
 
@@ -684,9 +720,49 @@ public class DexKitHelper {
             LogWriter.log(TAG, "findMethodsByString(" + className + "," + keyword + "): cache hit after migrate " + cached.size());
             return new ArrayList<>(cached);
         }
-        // v3.0.283: 缓存未命中时一律不现场扫描（避免启动早期/主界面后的 DexKit 全量扫描
-        // 导致 native 内存峰值闪退）。依赖动态解析的模块请使用权威类名兜底。
-        LogWriter.log(TAG, "findMethodsByString(" + className + "," + keyword + "): cache MISS, return empty (avoid startup scan)");
+        // v3.0.463: 缓存未命中时先等待全量扫描完成再重试一次（同 findClassesByString）。
+        waitForFullScanIfScheduled();
+        cached = readFindCache(cacheKey);
+        if (cached != null) {
+            LogWriter.log(TAG, "findMethodsByString(" + className + "," + keyword + "): cache hit after wait " + cached.size());
+            return new ArrayList<>(cached);
+        }
+        // v3.0.466: 实时查询兜底并回写缓存（返回 类名.方法名(参数类型) 签名串，AdBlocker parseSig 直接解析）。
+        try {
+            final String kw = keyword;
+            final List<String> live = withWechatBridge(cl, new BridgeAction<List<String>>() {
+                @Override
+                public List<String> run(DexKitBridge b) {
+                    List<String> out = new ArrayList<>();
+                    org.luckypray.dexkit.result.MethodDataList list = b.findMethod(FindMethod.create()
+                            .excludePackages("com.leshao").matcher(MethodMatcher.create().usingStrings(kw)));
+                    if (list != null) {
+                        for (org.luckypray.dexkit.result.MethodData md : list) {
+                            String cn = md.getClassName();
+                            String mn = md.getName();
+                            if (cn == null || mn == null) continue;
+                            StringBuilder sb = new StringBuilder(cn).append('.').append(mn).append('(');
+                            List<String> pts = md.getParamTypeNames();
+                            if (pts != null) {
+                                for (int i = 0; i < pts.size(); i++) {
+                                    if (i > 0) sb.append(',');
+                                    sb.append(pts.get(i));
+                                }
+                            }
+                            sb.append(')');
+                            out.add(sb.toString());
+                        }
+                    }
+                    return out;
+                }
+            });
+            if (live != null && !live.isEmpty()) {
+                LogWriter.log(TAG, "findMethodsByString(" + className + "," + keyword + "): live hit " + live.size());
+                writeFindCache(cacheKey, live);
+                return new ArrayList<>(live);
+            }
+        } catch (Throwable ignored) {}
+        LogWriter.log(TAG, "findMethodsByString(" + className + "," + keyword + "): cache MISS after wait, return empty");
         return new ArrayList<>();
     }
 
@@ -703,9 +779,38 @@ public class DexKitHelper {
             LogWriter.log(TAG, "findMethodDeclClassByString(" + keyword + "): cache hit " + cached.size() + " classes");
             return new ArrayList<>(cached);
         }
-        // v3.0.283: 缓存未命中时一律不现场扫描（避免启动早期/主界面后的 DexKit 全量扫描
-        // 导致 native 内存峰值闪退）。依赖动态解析的模块请使用权威类名兜底。
-        LogWriter.log(TAG, "findMethodDeclClassByString(" + keyword + "): cache MISS, return empty (avoid startup scan)");
+        // v3.0.463: 缓存未命中时先等待全量扫描完成再重试一次（同 findClassesByString）。
+        waitForFullScanIfScheduled();
+        cached = readFindCache(cacheKey);
+        if (cached != null) {
+            LogWriter.log(TAG, "findMethodDeclClassByString(" + keyword + "): cache hit after wait " + cached.size() + " classes");
+            return new ArrayList<>(cached);
+        }
+        // v3.0.466: 实时查询兜底并回写缓存（返回包含该字符串的方法的声明类名，去重）。
+        try {
+            final String kw = keyword;
+            final List<String> live = withWechatBridge(cl, new BridgeAction<List<String>>() {
+                @Override
+                public List<String> run(DexKitBridge b) {
+                    LinkedHashSet<String> set = new LinkedHashSet<>();
+                    org.luckypray.dexkit.result.MethodDataList list = b.findMethod(FindMethod.create()
+                            .excludePackages("com.leshao").matcher(MethodMatcher.create().usingStrings(kw)));
+                    if (list != null) {
+                        for (org.luckypray.dexkit.result.MethodData md : list) {
+                            String cn = md.getDeclaredClassName();
+                            if (cn != null) set.add(cn);
+                        }
+                    }
+                    return new ArrayList<>(set);
+                }
+            });
+            if (live != null && !live.isEmpty()) {
+                LogWriter.log(TAG, "findMethodDeclClassByString(" + keyword + "): live hit " + live.size() + " classes");
+                writeFindCache(cacheKey, live);
+                return new ArrayList<>(live);
+            }
+        } catch (Throwable ignored) {}
+        LogWriter.log(TAG, "findMethodDeclClassByString(" + keyword + "): cache MISS after wait, return empty");
         return new ArrayList<>();
     }
 
@@ -2007,7 +2112,13 @@ public class DexKitHelper {
     }
 
     public static String getJ1ServiceClass() {
-        return sJ1ServiceClass;
+        if (sJ1ServiceClass != null && !sJ1ServiceClass.isEmpty()) return sJ1ServiceClass;
+        // v3.0.464: 8.0.79 中旧 gp0.j1 服务定位类已删除，新的核心服务管理器为 pp0.i1
+        // （已反编译确认：pp0.i1.j() 单例，静态 v(Class)→up0.a 服务中转，含 "MicroMsg.ServiceManager" 字符串）。
+        // 注意 ni5.n0 是 FeatureService 注册表（ServiceLoader 模式），不是核心存储服务入口，
+        // 用它取不到 MsgInfoStorage/RContactStorage（StorageHub 绑定失败的根因）。
+        if (sServiceLocatorClass != null && !sServiceLocatorClass.isEmpty()) return sServiceLocatorClass;
+        return "pp0.i1";
     }
 
     public static String getVoiceApiClass() {
@@ -2265,39 +2376,100 @@ public class DexKitHelper {
 
     /* JADX INFO: Access modifiers changed from: private */
     public static void findVoiceApi(DexKitBridge bridge) {
-        // v3.0.171（核心数据审计）：3180 反编译证实字符串 "voicemsg" 不在 e9 中，
-        // 真正持有者是 VoiceContent 相关类：dl.f0 / ks1.h / sp3.i / t44.x5 / v61.f1 / x95.a / x95.b。
-        // 因此用 "voicemsg" 定位语音 API 类比 amr_/voice2 更精确，优先使用。
-        List<MethodData> methods = new ArrayList<>();
+        // v3.0.465：新版本语音发送 API 已从 v61.d1 迁移到 f71.d1（MicroMsg.VoiceLogic）：
+        //   h(String,String)→String   = G（生成 amr 路径）
+        //   s(String,String,int)→String = S
+        //   u(String,int,int,...)→boolean = T
+        // 该类方法体内不含 voicemsg/voice2/amr_ 字符串，旧 DexKit 关键词搜不到，先权威验证。
+        if (trySetVoiceApi("f71.d1")) return;
+        // v3.0.464（核心修正）：8.0.79 语音发送 API 已重构，旧 v61.d1 的 G/T 方法名不复存在。
+        // 主循环仍按 (String,String)→String + voicemsg/voice2/amr_ 精确匹配；
+        // 若命中类上没有可用的 G/S/T 签名（discoverVoiceApi 实际会用到的），视为无效并继续，
+        // 避免误判到 console.j1/az1.b0 等仅含 voice2 字符串的调试/工具类。
         try {
             String[] keywords = {"voicemsg", "voice2", "amr_"};
             for (String kw : keywords) {
                 try {
-                    MethodMatcher mMatcher = MethodMatcher.create().usingStrings(kw).paramCount(2).paramTypes("java.lang.String", "java.lang.String").returnType("java.lang.String");
-                    methods = bridge.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(mMatcher));
-                } catch (Throwable th) {
-                }
-                if (methods.isEmpty()) {
-                    continue;
-                } else {
-                    sVoiceApiClass = methods.get(0).getClassName();
-                    LogWriter.log(TAG, "findVoiceApi (" + kw + "): " + sVoiceApiClass);
-                    return;
-                }
+                    MethodMatcher mMatcher = MethodMatcher.create().usingStrings(kw)
+                            .paramCount(2).paramTypes("java.lang.String", "java.lang.String")
+                            .returnType("java.lang.String");
+                    List<MethodData> methods = bridge.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(mMatcher));
+                    if (!methods.isEmpty()) {
+                        for (MethodData md : methods) {
+                            String cn = md.getClassName();
+                            if (cn != null && hasVoiceApiSignatures(cn)) {
+                                sVoiceApiClass = cn;
+                                LogWriter.log(TAG, "findVoiceApi (" + kw + "): " + cn);
+                                return;
+                            }
+                        }
+                    }
+                } catch (Throwable ignored) {}
             }
-            MethodMatcher m2 = MethodMatcher.create().usingStrings("voice2");
-            List<MethodData> m2s = bridge.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(m2));
-            for (MethodData m : m2s) {
-                String cn = m.getClassName();
-                if (cn != null && !cn.equals(sVoiceApiClass)) {
+            // 宽松 fallback：任何含 voicemsg/voice2 字符串的类，只要其上有可用的
+            // (String,String)→String 或 (String,int,int,...)→boolean 静态方法，即作为语音 API。
+            List<ClassData> classes = bridge.findClass(FindClass.create().excludePackages("com.leshao")
+                    .matcher(ClassMatcher.create().usingStrings("voicemsg")));
+            for (ClassData cd : classes) {
+                String cn = cd.getName();
+                if (cn != null && hasVoiceApiSignatures(cn)) {
                     sVoiceApiClass = cn;
-                    LogWriter.log(TAG, "findVoiceApi (fallback): " + cn);
+                    LogWriter.log(TAG, "findVoiceApi (class-voicemsg): " + cn);
                     return;
                 }
             }
+            List<ClassData> classes2 = bridge.findClass(FindClass.create().excludePackages("com.leshao")
+                    .matcher(ClassMatcher.create().usingStrings("voice2")));
+            for (ClassData cd : classes2) {
+                String cn = cd.getName();
+                if (cn != null && hasVoiceApiSignatures(cn)) {
+                    sVoiceApiClass = cn;
+                    LogWriter.log(TAG, "findVoiceApi (class-voice2): " + cn);
+                    return;
+                }
+            }
+            LogWriter.log(TAG, "findVoiceApi: 无可用语音 API 类");
         } catch (Throwable e) {
             LogWriter.log(TAG, "findVoiceApi error: " + e.getMessage());
         }
+    }
+
+    /** 权威验证候选语音 API 类（f71.d1 等），通过 G/S/T 签名校验则设为语音 API。 */
+    private static boolean trySetVoiceApi(String cn) {
+        try {
+            if (hasVoiceApiSignatures(cn)) {
+                sVoiceApiClass = cn;
+                LogWriter.log(TAG, "findVoiceApi (authoritative): " + cn);
+                return true;
+            }
+        } catch (Throwable ignored) {}
+        return false;
+    }
+
+    /** 验证候选类是否真的有 discoverVoiceApi 需要的 G/S/T 方法签名，防止误判。 */
+    private static boolean hasVoiceApiSignatures(String className) {
+        try {
+            Class<?> cls = XposedHelpers.findClass(className, HookEntry.appClassLoader);
+            boolean g = false, s = false, t = false;
+            for (Method m : cls.getDeclaredMethods()) {
+                if (!Modifier.isStatic(m.getModifiers())) continue;
+                Class<?>[] pts = m.getParameterTypes();
+                if (m.getReturnType() == String.class && pts.length == 2
+                        && pts[0] == String.class && pts[1] == String.class) g = true;
+                if (m.getReturnType() == String.class && pts.length == 3
+                        && pts[0] == String.class && pts[1] == String.class
+                        && pts[2] == int.class) s = true;
+                if (m.getReturnType() == boolean.class && pts.length >= 4
+                        && pts[0] == String.class && pts[1] == int.class
+                        && pts[2] == int.class) t = true;
+                if (g && (t || s)) return true;
+            }
+            // 兼容：至少有一个 G 或 S 方法（TTS 生成语音文件路径）也算候选
+            return g || s;
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "hasVoiceApiSignatures err: " + className + " -> " + e.getMessage());
+        }
+        return false;
     }
 
     /* JADX INFO: Access modifiers changed from: private */
@@ -2373,8 +2545,20 @@ public class DexKitHelper {
 
     /* JADX INFO: Access modifiers changed from: private */
     public static void findJ1Service(DexKitBridge bridge) {
+        // v3.0.465: 新版本核心服务管理器为 pp0.i1（MicroMsg.ServiceManager，静态 v(Class)→up0.a），
+        // 类名不含 "j1"，旧「类名含 j1」循环必然漏；findServiceLocator 已权威验证过 pp0.i1。
+        // 先复用已确认的 sServiceLocatorClass，再直接验证权威类名 pp0.i1。
+        if (sServiceLocatorClass != null) {
+            sJ1ServiceClass = sServiceLocatorClass;
+            LogWriter.log(TAG, "findJ1Service (reuse serviceLocator): " + sServiceLocatorClass);
+            return;
+        }
+        if (trySetJ1Service("pp0.i1")) {
+            return;
+        }
         Iterator<MethodData> it;
         List<MethodData> methods = null;
+        List<MethodData> vMethods = null;
         int i = 2;
         try {
             int i2 = 1;
@@ -2384,6 +2568,9 @@ public class DexKitHelper {
                 String mn = strArr[i3];
                 MethodMatcher mMatcher = MethodMatcher.create().name(mn).paramCount(i2);
                 methods = bridge.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(mMatcher));
+                if (i3 == 0) {
+                    vMethods = methods;
+                }
                 LogWriter.log(TAG, "findJ1Service: " + methods.size() + " " + mn + "(*) methods found");
                 Iterator<MethodData> it2 = methods.iterator();
                 while (it2.hasNext()) {
@@ -2430,13 +2617,16 @@ public class DexKitHelper {
                 }
             }
             LogWriter.log(TAG, "findJ1Service (Kernel): no v/s(Class) candidate");
-            for (MethodData m3 : methods) {
+            List<MethodData> allCandidates = new ArrayList<>();
+            if (vMethods != null) allCandidates.addAll(vMethods);
+            if (methods != null) allCandidates.addAll(methods);
+            for (MethodData m3 : allCandidates) {
                 String clsName3 = m3.getClassName();
                 if (!isExcludedCandidate(clsName3)) {
                     List<String> pts2 = m3.getParamTypeNames();
                     if (pts2.size() == 1 && "java.lang.Class".equals(pts2.get(0))) {
                         sJ1ServiceClass = clsName3;
-                        LogWriter.log(TAG, "findJ1Service (any s(Class)): " + clsName3);
+                        LogWriter.log(TAG, "findJ1Service (any v/s(Class)): " + clsName3);
                         return;
                     }
                 }
@@ -2444,6 +2634,23 @@ public class DexKitHelper {
         } catch (Throwable e) {
             LogWriter.log(TAG, "findJ1Service error: " + e.getMessage());
         }
+    }
+
+    /** 验证候选类是否有静态 v(Class) 方法（服务定位器特征），有则设为 J1。 */
+    private static boolean trySetJ1Service(String cn) {
+        try {
+            Class<?> cls = XposedHelpers.findClass(cn, HookEntry.appClassLoader);
+            for (Method m : cls.getDeclaredMethods()) {
+                if (Modifier.isStatic(m.getModifiers()) && "v".equals(m.getName())
+                        && m.getParameterTypes().length == 1
+                        && m.getParameterTypes()[0] == Class.class) {
+                    sJ1ServiceClass = cn;
+                    LogWriter.log(TAG, "findJ1Service (authoritative): " + cn + ".v(Class)");
+                    return true;
+                }
+            }
+        } catch (Throwable ignored) {}
+        return false;
     }
 
     /* JADX INFO: Access modifiers changed from: private */
@@ -2899,21 +3106,37 @@ public class DexKitHelper {
 
     private static void findServiceLocator(DexKitBridge bridge) {
         try {
+            // v3.0.464: 8.0.79 的核心服务管理器 pp0.i1 已反编译确认（含 "MicroMsg.ServiceManager" 字符串
+            // + 静态 v(Class)→up0.a 方法）。先直接验证权威类名，再走 DexKit 扫描兜底，
+            // 避免误判到 ni5.n0（FeatureService 注册表，取不到核心存储）。
+            if (trySetServiceLocator("pp0.i1")) return;
             List<ClassData> classes = bridge.findClass(FindClass.create().excludePackages("com.leshao").matcher(ClassMatcher.create().usingStrings("MicroMsg.ServiceManager")));
             for (ClassData c : classes) {
                 String cn = c.getName();
-                if (cn != null) {
-                    List<MethodData> cms = bridge.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(MethodMatcher.create().modifiers(8).name("c").paramCount(1).paramTypes("java.lang.Class").declaredClass(cn)));
-                    if (!cms.isEmpty()) {
-                        sServiceLocatorClass = cn;
-                        LogWriter.log(TAG, "findServiceLocator: " + cn + ".c(Class)");
-                        return;
-                    }
-                }
+                if (cn == null || cn.equals("pp0.i1")) continue;
+                if (trySetServiceLocator(cn)) return;
             }
+            LogWriter.log(TAG, "findServiceLocator: 无候选");
         } catch (Throwable e) {
             LogWriter.log(TAG, "findServiceLocator err: " + e.getMessage());
         }
+    }
+
+    /** 验证候选类是否有静态 v(Class) 方法（8.0.79 服务获取），有则设为 j1。 */
+    private static boolean trySetServiceLocator(String cn) {
+        try {
+            Class<?> cls = XposedHelpers.findClass(cn, HookEntry.appClassLoader);
+            for (Method m : cls.getDeclaredMethods()) {
+                if (Modifier.isStatic(m.getModifiers()) && "v".equals(m.getName())
+                        && m.getParameterTypes().length == 1
+                        && m.getParameterTypes()[0] == Class.class) {
+                    sServiceLocatorClass = cn;
+                    LogWriter.log(TAG, "findServiceLocator: " + cn + ".v(Class)");
+                    return true;
+                }
+            }
+        } catch (Throwable ignored) {}
+        return false;
     }
 
     private static void findMediaPathService(DexKitBridge bridge) {
