@@ -258,6 +258,12 @@ public final class MsgReceiveHook {
             StorageHub.get().cacheSelfWxidFrom(fromUser);
             return;
         }
+        // ②.5 v3.0.583: 分身/多设备同步回来的自身消息 isSend 同为 0，
+        // 发送者就是自己 → 归属自己，不再送 AI / 点歌 / 转发。
+        if (com.leshao.v3.hook.SelfMsgGuard.isSelfSender(msg)) {
+            LogWriter.log(TAG, "跳过自身发送(同步副本) talker=" + talker);
+            return;
+        }
         // ③ 图片消息：走豆包图片识别（带图对话）并回复原会话（须通过会话名单门控）
         if (type != null && type == TYPE_IMAGE) {
             if (com.leshao.ai.hook.wechat.TriggerEngine.isConversationEnabled(talker)) {

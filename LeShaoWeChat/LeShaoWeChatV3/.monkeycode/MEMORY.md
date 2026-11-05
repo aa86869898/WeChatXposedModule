@@ -232,3 +232,15 @@
   - `normOutput` 必须剥离零宽水印与群发送者前缀，保证同步副本能对上
   - 产品口径：点歌产物永不被自动转发；普通消息的自动转发逻辑不变
 - 版本 v3.0.582 / 30582；`assembleRelease` 通过；公网 200 / Range 206
+
+### 自身发送消息的跨分身身份识别（v3.0.583 关键规则）
+- Date: 2026-11-05
+- Context: 580-582 只用「isSend==0 才算收到」，但分身/多设备同步副本 isSend 同样是 0，且正文可能无水印（手打、历史、语音无正文），会在对端分身二次触发
+- Category: 消息接收域 / 排错调试
+- Instructions:
+  - 接收归属必须看**发送者身份**，不能只看 isSend：`s0`（回退 `field_fromUsername`）与 `StorageHub.selfWxid()` 相等即归属自己
+  - `SelfMsgGuard.isSelfSender(e9)` 拆成公共+包内纯函数，纯函数接收 `self` 参数便于离线用例
+  - 三条接收链统一前置拦截：`MessageHook`、`MsgReceiveHook`、`AutoForwardHook`，位置在 isSend==0 之后、业务判定之前
+  - 取不到自己 wxid 返回 false，退回水印/账本，宁可多处理也不误杀真实消息
+  - 白名单复核口径：`inWhitelist` 在 `maybeHandle` 里先于产物账本，空白名单固定 false；非白名单指令被吞掉，不送 AI
+- 版本 v3.0.583 / 30583；`assembleRelease` 通过；公网 200 / Range 206

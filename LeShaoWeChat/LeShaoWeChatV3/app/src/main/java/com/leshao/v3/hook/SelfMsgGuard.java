@@ -198,6 +198,52 @@ public final class SelfMsgGuard {
         return false;
     }
 
+    /**
+     * 这条消息的发送者是不是自己（同一账号的其它设备/分身发来的同步副本）。
+     *
+     * <p>分身同步回来的自发消息 isSend=0、无本地账本，直接看 {@code fromUsername} 是否等于
+     * 自己的 wxid 就能认定归属，且不依赖消息正文。取不到自己的 wxid 时返回 false。</p>
+     */
+    public static boolean isSelfSender(Object e9) {
+        try {
+            return isSelfSender(e9, com.leshao.ai.hook.wechat.StorageHub.get().selfWxid());
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    static boolean isSelfSender(Object e9, String self) {
+        if (e9 == null || self == null || self.isEmpty()) return false;
+        try {
+            String from = null;
+            try {
+                Object v = de.robv.android.xposed.XposedHelpers.callMethod(e9, "s0");
+                if (v instanceof String) from = (String) v;
+            } catch (Throwable ignored) {
+            }
+            if (from == null || from.isEmpty()) {
+                for (Class<?> k = e9.getClass(); k != null && k != Object.class; k = k.getSuperclass()) {
+                    try {
+                        java.lang.reflect.Field f = k.getDeclaredField("field_fromUsername");
+                        f.setAccessible(true);
+                        Object v = f.get(e9);
+                        if (v instanceof String) {
+                            from = (String) v;
+                            break;
+                        }
+                    } catch (NoSuchFieldException ignored) {
+                    } catch (Throwable ignored) {
+                        break;
+                    }
+                }
+            }
+            if (from == null || from.isEmpty()) return false;
+            return self.equalsIgnoreCase(from);
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
     // ==================== 零宽水印 ====================
 
     /** 零宽空格 + 零宽非连接符。肉眼不可见，接收方阅读无感。 */

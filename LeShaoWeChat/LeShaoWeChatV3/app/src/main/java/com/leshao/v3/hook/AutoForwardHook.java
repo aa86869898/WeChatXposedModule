@@ -191,6 +191,12 @@ public class AutoForwardHook {
                 return;
             }
             if (isSend != 0) return; // 自己发送的不转发
+            // v3.0.583: 分身/多设备同步副本 isSend=0 且发送者是自己 —— 归属自己，不转发。
+            // 判定只看发送者身份，语音等无正文消息同样生效。
+            if (SelfMsgGuard.isSelfSender(e9)) {
+                LogWriter.log(TAG, "skip: 自身发送(同步副本) talker=" + talker + " type=" + type);
+                return;
+            }
 
             if (talker == null || talker.isEmpty()) return;
             // 来源过滤: v3.0.273 起来源名单为空 = 不转发任何来源（必须显式选择才工作）
