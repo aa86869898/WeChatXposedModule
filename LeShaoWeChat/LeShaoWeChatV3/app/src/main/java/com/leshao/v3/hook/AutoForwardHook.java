@@ -207,6 +207,19 @@ public class AutoForwardHook {
                 LogWriter.log(TAG, "skip: 模块自发消息(msgId=" + msgId + ") talker=" + talker);
                 return;
             }
+            // v3.0.582: 点歌产物（指令/受理提示/失败提示/点歌语音）只留在发起会话，
+            // 自动转发开启时也不外发 —— 用户「发给谁就是谁」，避免一句提示刷到几百个群。
+            if (com.leshao.v3.music.DianGeService.isSongOutput(talker, type, content)) {
+                LogWriter.log(TAG, "skip: 点歌产物 talker=" + talker + " type=" + type
+                        + " content=" + trunc(content, 30));
+                return;
+            }
+            // 指令本身也跳过：分身同步回来的指令在点歌登记前就可能到达这里
+            if (com.leshao.v3.music.DianGeService.isSongRequest(talker, content)) {
+                LogWriter.log(TAG, "skip: 点歌指令 talker=" + talker
+                        + " content=" + trunc(content, 30));
+                return;
+            }
             if (SelfMsgGuard.isSelf(talker, type, content)) {
                 LogWriter.log(TAG, "skip: 模块自发消息(内容命中) talker=" + talker
                         + " content=" + trunc(content, 30));

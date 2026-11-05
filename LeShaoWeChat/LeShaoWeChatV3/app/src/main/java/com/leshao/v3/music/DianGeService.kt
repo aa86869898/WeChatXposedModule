@@ -68,6 +68,11 @@ final class DianGeService private constructor() {
         private val sQueues: MutableMap<String, SessionQueue> = ConcurrentHashMap()
         private val sRecent: MutableMap<String, Long> = ConcurrentHashMap()
 
+        /** 点歌产物账本 TTL: 指令、受理提示、失败提示、点歌语音都登记, 自动转发见到即跳过。 */
+        private const val SONG_OUTPUT_TTL_MS = 180_000L
+        private val sSongOutputs: MutableMap<String, Long> = ConcurrentHashMap()
+        private val sSongOutputTypes: MutableMap<String, Long> = ConcurrentHashMap()
+
         /** 兼容旧调用: 不带被引用原消息, 受理提示回退普通文本。 */
         @JvmStatic
         fun maybeHandle(cl: ClassLoader?, talker: String?, content: String?): Boolean {
@@ -103,6 +108,11 @@ final class DianGeService private constructor() {
             if (!OnlineMusicPrefs.inWhitelist(talker)) {
                 LogWriter.log(TAG, "非白名单会话,忽略点歌 talker=" + talker + " kw=" + keyword)
                 return false
+            }
+            // 同一条指令从其它分身/设备同步回来时, 本机不再重复接管(也不会被自动转发)
+            if (isSongOutput(talker, 1, content)) {
+                LogWriter.log(TAG, "指令已由其它分身接管,跳过重复处理 talker=" + talker)
+                return true
             }
 
             val key = talker + "|" + keyword
@@ -147,6 +157,8 @@ final class DianGeService private constructor() {
                 }
             }
             if (rejected) return true
+            // 指令本身也登记: 同步到其它分身时不再重复触发, 自动转发也不会把指令刷到别处
+            markSongOutput(talker, 1, content)
             LogWriter.log(TAG, "接管点歌: talker=" + talker + " kw=" + keyword
                     + " 前面=" + ahead + " 队列=" + q.queue.size)
 
@@ -295,7 +307,7 @@ final class DianGeService private constructor() {
                 var ok = 0
                 for (t in talkers) {
                     try {
-                        if (TtsVoiceSender.sendVoiceData(t, voiceData, fakeMs, null)) ok++
+                        if (sendSongVoice(t, voiceData, fakeMs)) ok++
                     } catch (e: Throwable) {
                         LogWriter.log(TAG, "发送失败 talker=" + t + " " + e.message)
                     }
@@ -335,7 +347,7 @@ final class DianGeService private constructor() {
                 val cached = readAllBytes(cachedVoice)
                 if (cached != null && cached.isNotEmpty()) {
                     val fakeMs0 = OnlineMusicPrefs.falseDurSec() * 1000
-                    val ok = TtsVoiceSender.sendVoiceData(talker, cached, fakeMs0, null)
+                    val ok = sendSongVoice(talker, cached, fakeMs0)
                     LogWriter.log(TAG, "语音缓存命中直接发送 sent=" + ok + " 耗时="
                             + (System.currentTimeMillis() - t0) + "ms song=" + song.title)
                     if (!ok) reply(cl, talker, "点歌失败:语音发送失败")
@@ -391,8 +403,7 @@ final class DianGeService private constructor() {
                 writeCache(voiceCacheFile(song, fetched.level), voiceData)
                 pruneCache(voiceDir(), MAX_VOICE_CACHE_FILES)
             }
-            val sent = voiceData != null
-                    && TtsVoiceSender.sendVoiceData(talker, voiceData, fakeMs, null)
+            val sent = voiceData != null && sendSongVoice(talker, voiceData, fakeMs)
             LogWriter.log(TAG, "点歌完成 sent=" + sent + " 耗时="
                     + (System.currentTimeMillis() - t0) + "ms")
             if (!sent) {
@@ -588,6 +599,7 @@ final class DianGeService private constructor() {
         }
 
         private fun reply(cl: ClassLoader?, talker: String, text: String): Boolean {
+            markSongOutput(talker, 1, text)
             return try {
                 val ok = GroupFeatures.sendTextMessage(cl, talker, text)
                 LogWriter.log(TAG, "回复(" + (if (ok) "OK" else "FAIL") + "): " + text)
@@ -596,6 +608,75 @@ final class DianGeService private constructor() {
                 LogWriter.log(TAG, "回复失败: " + t.message)
                 false
             }
+        }
+
+        /** 发送点歌语音: 先登记为点歌产物(自动转发跳过), 再交给发送器。 */
+        private fun sendSongVoice(talker: String, data: ByteArray, fakeMs: Int): Boolean {
+            markSongOutput(talker, 34, null)
+            return try {
+                TtsVoiceSender.sendVoiceData(talker, data, fakeMs, null)
+            } catch (t: Throwable) {
+                LogWriter.log(TAG, "语音发送异常 talker=" + talker + " " + t.message)
+                false
+            }
+        }
+
+        /** 登记点歌产物。无正文(语音)时按「会话+类型」登记。 */
+        @JvmStatic
+        fun markSongOutput(talker: String?, type: Int, content: String?) {
+            if (talker == null || talker.isEmpty()) return
+            try {
+                val now = System.currentTimeMillis()
+                val n = normOutput(content)
+                if (n.isEmpty()) {
+                    sSongOutputTypes[talker + "|" + type] = now + SONG_OUTPUT_TTL_MS
+                } else {
+                    sSongOutputs[talker + "|" + type + "|" + outHash(n)] = now + SONG_OUTPUT_TTL_MS
+                }
+                if (sSongOutputs.size + sSongOutputTypes.size > 400) trimOutputs(now)
+            } catch (ignored: Throwable) {
+            }
+        }
+
+        /** 是否点歌产物(指令/提示/语音)。供自动转发、接收链只读判断, 不消费。 */
+        @JvmStatic
+        fun isSongOutput(talker: String?, type: Int, content: String?): Boolean {
+            if (talker == null || talker.isEmpty()) return false
+            try {
+                val now = System.currentTimeMillis()
+                val texp = sSongOutputTypes[talker + "|" + type]
+                if (texp != null && texp >= now) return true
+                val n = normOutput(content)
+                if (n.isEmpty()) return false
+                val exp = sSongOutputs[talker + "|" + type + "|" + outHash(n)]
+                return exp != null && exp >= now
+            } catch (ignored: Throwable) {
+                return false
+            }
+        }
+
+        private fun normOutput(content: String?): String {
+            if (content == null) return ""
+            var s = content.replace("\u200B", "").replace("\u200C", "").replace("\uFEFF", "").trim()
+            val nl = s.indexOf('\n')
+            if (nl in 1..64) {
+                val head = s.substring(0, nl)
+                if (head.endsWith(":") && !head.contains(" ") && head.indexOf('<') < 0) {
+                    s = s.substring(nl + 1).trim()
+                }
+            }
+            return s
+        }
+
+        private fun outHash(s: String): String = s.length.toString() + ":" + Integer.toHexString(s.hashCode())
+
+        private fun trimOutputs(now: Long) {
+            val i1 = sSongOutputs.entries.iterator()
+            while (i1.hasNext()) if (i1.next().value < now) i1.remove()
+            val i2 = sSongOutputTypes.entries.iterator()
+            while (i2.hasNext()) if (i2.next().value < now) i2.remove()
+            if (sSongOutputs.size > 400) sSongOutputs.clear()
+            if (sSongOutputTypes.size > 400) sSongOutputTypes.clear()
         }
 
         // ==================== 工具 ====================
