@@ -55,6 +55,14 @@ public class AutoForwardHook {
     private static volatile Set<String> sTypes = ConcurrentHashMap.newKeySet(); // "1","3","49"...
     private static final Set<String> sForwarded = ConcurrentHashMap.newKeySet();
     private static volatile boolean sHooked = false;
+    /**
+     * v3.0.587: 最近一次判定的可读结论（面板展示 + 日志共用）。
+     * 用来回答「配置好了为什么没转发」——每个丢弃分支都会留下原因，触发成功也会留痕。
+     */
+    private static volatile String sLastDecision = "尚未收到消息";
+    /** 来源不匹配的群聊日志限频（talker → 上次打印时间）。 */
+    private static final java.util.Map<String, Long> sMismatchLogAt = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final long MISMATCH_LOG_GAP_MS = 60_000L;
 
     /** v3.0.580: 转发在独立单线程执行，避免在微信 insert 回调线程里长时间阻塞。 */
     private static final java.util.concurrent.ExecutorService POOL =
@@ -179,10 +187,30 @@ public class AutoForwardHook {
         }
     }
 
+    /** v3.0.587: 记录最近一次判定结论（面板可读，避免只在日志里找原因）。 */
+    private static void note(String reason) {
+        try {
+            sLastDecision = new java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US)
+                    .format(new java.util.Date()) + " " + reason;
+        } catch (Throwable ignored) {
+            sLastDecision = reason;
+        }
+    }
+
+    /** 群聊来源不匹配日志限频，60 秒内同一会话只打一条。 */
+    private static boolean shouldLogMismatch(String talker) {
+        long now = System.currentTimeMillis();
+        Long last = sMismatchLogAt.get(talker);
+        if (last != null && now - last < MISMATCH_LOG_GAP_MS) return false;
+        sMismatchLogAt.put(talker, now);
+        if (sMismatchLogAt.size() > 1000) sMismatchLogAt.clear();
+        return true;
+    }
+
     static void onMsgInsert(Object e9) {
         try {
             if (e9 == null) return;
-            if (!sEnabled) return;
+            if (!sEnabled) { note("未开启"); return; }
 
             String talker = callStr(e9, "N0");
             int type = 0;
@@ -193,27 +221,45 @@ public class AutoForwardHook {
             // 于是模块自己插入的消息（点歌提示等）会被当成收到的新消息全量群发。
             int isSend = readIsSend(e9);
             if (isSend < 0) {
+                note("isSend 读取失败");
                 LogWriter.log(TAG, "skip: isSend 读取失败(不转发) talker=" + talker + " type=" + type);
                 return;
             }
-            if (isSend != 0) return; // 自己发送的不转发
+            if (isSend != 0) { note("自己发送 isSend=" + isSend + " " + talker); return; } // 自己发送的不转发
             // v3.0.583: 分身/多设备同步副本 isSend=0 且发送者是自己 —— 归属自己，不转发。
             // 判定只看发送者身份，语音等无正文消息同样生效。
             if (SelfMsgGuard.isSelfSender(e9)) {
+                note("自身发送(同步副本) " + talker);
                 LogWriter.log(TAG, "skip: 自身发送(同步副本) talker=" + talker + " type=" + type);
                 return;
             }
 
-            if (talker == null || talker.isEmpty()) return;
+            if (talker == null || talker.isEmpty()) { note("talker 为空"); return; }
             // 来源过滤: v3.0.273 起来源名单为空 = 不转发任何来源（必须显式选择才工作）
-            if (sSources.isEmpty() || !sSources.contains(talker)) return;
+            if (sSources.isEmpty() || !sSources.contains(talker)) {
+                note("来源不匹配 " + talker + "（已选 " + sSources.size() + " 个来源）");
+                // 私聊逐条记；群聊按会话 60 秒限频，避免刷屏
+                if (talker != null && !talker.endsWith("@chatroom")) {
+                    LogWriter.log(TAG, "skip: 来源不匹配 talker=" + talker
+                        + " sources=" + sSources.size() + " type=" + type);
+                } else if (shouldLogMismatch(talker)) {
+                    LogWriter.log(TAG, "skip: 来源不匹配 talker=" + talker + " type=" + type);
+                }
+                return;
+            }
 
-            if (!typeAllowed(type)) return;
+            if (!typeAllowed(type)) {
+                note("类型过滤 type=" + type + " 已选类型=" + sTypes);
+                LogWriter.log(TAG, "skip: 类型不在勾选范围 type=" + type + " types=" + sTypes
+                    + " talker=" + talker);
+                return;
+            }
 
             String content = readContent(e9);
             // v3.0.583: 首次落库回调的 content 还是 msgsource XML 占位，正文在紧随其后的
             // 第二次回调里。此处先跳过，避免把整段 XML 转发出去；不占用 svrId 去重键。
             if (SelfMsgGuard.isMsgsourceXml(content)) {
+                note("正文尚未回填(msgsource) " + talker);
                 LogWriter.log(TAG, "skip: content 尚未回填(msgsource) talker=" + talker + " type=" + type);
                 return;
             }
@@ -222,23 +268,27 @@ public class AutoForwardHook {
             long msgId = 0;
             try { msgId = (Long) XposedHelpers.callMethod(e9, "getMsgId"); } catch (Throwable ignored) {}
             if (msgId != 0 && SelfMsgGuard.isSelfMsgId(msgId)) {
+                note("模块自发消息 msgId=" + msgId + " " + talker);
                 LogWriter.log(TAG, "skip: 模块自发消息(msgId=" + msgId + ") talker=" + talker);
                 return;
             }
             // v3.0.582: 点歌产物（指令/受理提示/失败提示/点歌语音）只留在发起会话，
             // 自动转发开启时也不外发 —— 用户「发给谁就是谁」，避免一句提示刷到几百个群。
             if (com.leshao.v3.music.DianGeService.isSongOutput(talker, type, content)) {
+                note("点歌产物 " + talker);
                 LogWriter.log(TAG, "skip: 点歌产物 talker=" + talker + " type=" + type
                         + " content=" + trunc(content, 30));
                 return;
             }
             // 指令本身也跳过：分身同步回来的指令在点歌登记前就可能到达这里
             if (com.leshao.v3.music.DianGeService.isSongRequest(talker, content)) {
+                note("点歌指令 " + talker);
                 LogWriter.log(TAG, "skip: 点歌指令 talker=" + talker
                         + " content=" + trunc(content, 30));
                 return;
             }
             if (SelfMsgGuard.isSelf(talker, type, content)) {
+                note("模块自发消息(内容命中) " + talker);
                 LogWriter.log(TAG, "skip: 模块自发消息(内容命中) talker=" + talker
                         + " content=" + trunc(content, 30));
                 return;
@@ -255,6 +305,7 @@ public class AutoForwardHook {
                     : ("c:" + talker + "|" + type + "|" + (content == null ? "" : content.hashCode())
                         + "|" + (createTime / 10));
             if (!sForwarded.add(dedupKey)) {
+                note("重复消息 key=" + dedupKey);
                 LogWriter.log(TAG, "skip: 重复消息 key=" + dedupKey);
                 return;
             }
@@ -262,10 +313,12 @@ public class AutoForwardHook {
 
             // ---- v3.0.580: 群发熔断 ----
             if (!SelfMsgGuard.allowBroadcast(TAG, sTargets.size())) {
+                note("群发熔断，目标 " + sTargets.size());
                 LogWriter.log(TAG, "skip: 群发熔断生效，本批目标 " + sTargets.size() + " 未执行");
                 return;
             }
 
+            note("已转发 -> " + sTargets.size() + " 个目标，来源 " + talker);
             LogWriter.log(TAG, "fwd trigger: type=" + type + " talker=" + talker
                 + " targets=" + sTargets.size() + " content=" + trunc(content, 30));
             forwardAll(type, talker, content, e9);
@@ -797,6 +850,14 @@ public class AutoForwardHook {
         cardTgt.addView(tgtDiag);
         cardTgt.addView(com.leshao.v3.ui.widgets.M3Page.clickRow(ctx, "📝", "自动转发记录",
                 "查看转发历史(头像/昵称/内容/时间)", () -> showRecordsDialog(ctx)));
+        // v3.0.587: 最近一次判定结论 —— 配置对了却「不转发」时，先看这里是被哪一步拦下的。
+        final TextView tgtLast = new TextView(ctx);
+        tgtLast.setTextSize(11);
+        tgtLast.setPadding((int) (12 * d), (int) (6 * d), (int) (12 * d), (int) (6 * d));
+        tgtLast.setTextColor(com.leshao.v3.ui.AppColors.onSurfaceVariant());
+        tgtLast.setOnClickListener(v -> tgtLast.setText("最近判定：" + sLastDecision + "（点击刷新）"));
+        tgtLast.setText("最近判定：" + sLastDecision + "（点击刷新）");
+        cardTgt.addView(tgtLast);
         content.addView(cardTgt);
 
         // ===== 类型（多选按钮组, 仅保留按钮） =====
